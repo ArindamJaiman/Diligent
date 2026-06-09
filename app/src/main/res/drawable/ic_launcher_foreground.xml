@@ -1,0 +1,22 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Dot-matrix inspired "D" letterform centered in safe zone -->
+    <group
+        android:translateX="24"
+        android:translateY="24">
+        <!-- Stylized D -->
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M12,8h16c8.8,0 16,7.2 16,16s-7.2,16 -16,16H12V8zM20,16v16h8c4.4,0 8,-3.6 8,-8s-3.6,-8 -8,-8H20z" />
+        <!-- Dot matrix accent dots -->
+        <path android:fillColor="#FFFFFF" android:pathData="M50,8 L52,8 L52,10 L50,10 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M50,14 L52,14 L52,16 L50,16 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M50,20 L52,20 L52,22 L50,22 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M50,26 L52,26 L52,28 L50,28 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M50,32 L52,32 L52,34 L50,34 Z" />
+        <path android:fillColor="#FFFFFF" android:pathData="M50,38 L52,38 L52,40 L50,40 Z" />
+    </group>
+</vector>

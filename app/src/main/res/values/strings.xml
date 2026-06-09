@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Diligent</string>
+    <string name="widget_name">Diligent Tracker</string>
+    <string name="widget_description">Track your daily activities directly from your home screen</string>
+</resources>
