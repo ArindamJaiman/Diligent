@@ -18,7 +18,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.diligent.app.ui.theme.CloisterBlack
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.viewmodel.ActivityEditViewModel
@@ -57,7 +57,7 @@ fun ActivityEditScreen(
                     Text(
                         text = if (viewModel.isEditing) "Edit Activity" else "New Activity",
                         style = MaterialTheme.typography.headlineMedium.copy(
-                            fontFamily = CloisterBlack,
+                            fontFamily = Cinzel,
                             letterSpacing = 1.sp
                         ),
                         color = DiligentColors.White
@@ -237,7 +237,7 @@ fun ActivityEditScreen(
                         Text(
                             text = (name.ifBlank { "Activity" }).uppercase(),
                             style = MaterialTheme.typography.titleSmall.copy(
-                                fontFamily = CloisterBlack,
+                                fontFamily = Cinzel,
                                 fontSize = 16.sp,
                                 letterSpacing = 1.5.sp
                             ),

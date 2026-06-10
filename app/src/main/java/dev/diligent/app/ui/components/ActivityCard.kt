@@ -22,7 +22,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import dev.diligent.app.ui.theme.CloisterBlack
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.viewmodel.DashboardViewModel.ActivityWithProgress
@@ -89,7 +89,7 @@ fun ActivityCard(
                 Text(
                     text = item.activity.name.uppercase(),
                     style = MaterialTheme.typography.titleSmall.copy(
-                        fontFamily = CloisterBlack,
+                        fontFamily = Cinzel,
                         fontSize = 16.sp,
                         letterSpacing = 1.5.sp
                     ),

@@ -19,7 +19,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
-import dev.diligent.app.ui.theme.CloisterBlack
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.viewmodel.StatisticsViewModel
@@ -43,7 +43,7 @@ fun StatisticsScreen(
                     Text(
                         text = "Statistics",
                         style = MaterialTheme.typography.headlineLarge.copy(
-                            fontFamily = CloisterBlack,
+                            fontFamily = Cinzel,
                             letterSpacing = 1.sp
                         ),
                         color = DiligentColors.White

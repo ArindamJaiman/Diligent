@@ -12,14 +12,14 @@ import dev.diligent.app.R
  * Typography system for Diligent.
  *
  * Uses a dot-matrix / monospace inspired approach:
- * - Display/Headline: Cloister Black loaded from local font file
+ * - Display/Headline: Cinzel loaded from local font file
  * - Body/Label: System monospace as a dot-matrix substitute for data display
  * - Fallback: Default sans-serif for readability in dense UI
  *
- * The Cloister Black font gives the app a premium, distinctive identity.
+ * The Cinzel font gives the app a classier, premium, and clean identity.
  */
-val CloisterBlack = FontFamily(
-    Font(R.font.cloister_black, FontWeight.Normal)
+val Cinzel = FontFamily(
+    Font(R.font.cinzel, FontWeight.Normal)
 )
 
 val DotMatrix = FontFamily.Monospace
@@ -27,21 +27,21 @@ val DotMatrix = FontFamily.Monospace
 val DiligentTypography = Typography(
     // Display — App title, hero text
     displayLarge = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 40.sp,
         lineHeight = 48.sp,
         letterSpacing = 0.sp
     ),
     displayMedium = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 32.sp,
         lineHeight = 40.sp,
         letterSpacing = 0.sp
     ),
     displaySmall = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 28.sp,
         lineHeight = 36.sp,
@@ -50,21 +50,21 @@ val DiligentTypography = Typography(
 
     // Headline — Section headers
     headlineLarge = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 24.sp,
         lineHeight = 32.sp,
         letterSpacing = 0.sp
     ),
     headlineMedium = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 20.sp,
         lineHeight = 28.sp,
         letterSpacing = 0.sp
     ),
     headlineSmall = TextStyle(
-        fontFamily = CloisterBlack,
+        fontFamily = Cinzel,
         fontWeight = FontWeight.Normal,
         fontSize = 18.sp,
         lineHeight = 24.sp,

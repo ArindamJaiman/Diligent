@@ -21,7 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.ui.components.ActivityCard
-import dev.diligent.app.ui.theme.CloisterBlack
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.viewmodel.DashboardViewModel
@@ -70,7 +70,7 @@ fun DashboardScreen(
                     Text(
                         text = "Diligent",
                         style = MaterialTheme.typography.displayMedium.copy(
-                            fontFamily = CloisterBlack,
+                            fontFamily = Cinzel,
                             letterSpacing = 2.sp
                         ),
                         color = DiligentColors.White

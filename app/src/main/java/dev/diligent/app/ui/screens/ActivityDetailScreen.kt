@@ -28,7 +28,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
-import dev.diligent.app.ui.theme.CloisterBlack
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import kotlinx.coroutines.flow.*
@@ -136,7 +136,7 @@ fun ActivityDetailScreen(
             title = {
                 Text(
                     "Delete Activity",
-                    fontFamily = CloisterBlack,
+                    fontFamily = Cinzel,
                     color = DiligentColors.White
                 )
             },
@@ -201,7 +201,7 @@ fun ActivityDetailScreen(
                 Text(
                     text = act.name,
                     style = MaterialTheme.typography.displaySmall.copy(
-                        fontFamily = CloisterBlack,
+                        fontFamily = Cinzel,
                         letterSpacing = 1.sp
                     ),
                     color = DiligentColors.White
