@@ -18,9 +18,7 @@ import dev.diligent.app.R
  *
  * The Cinzel font gives the app a classier, premium, and clean identity.
  */
-val Cinzel = FontFamily(
-    Font(R.font.cinzel, FontWeight.Normal)
-)
+val Cinzel = FontFamily.Serif
 
 val DotMatrix = FontFamily.Monospace
 

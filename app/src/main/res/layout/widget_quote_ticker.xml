@@ -1,0 +1,72 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Animated ticker-tape panel for the Diligent widget.
+     Uses native marquee scrolling for a Wall Street news ticker effect. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/ticker_container"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical"
+    android:background="#FF000000"
+    android:paddingTop="6dp"
+    android:paddingBottom="6dp"
+    android:paddingStart="2dp"
+    android:paddingEnd="2dp">
+
+    <!-- Hero ticker: THE WORLD IS YOURS + short phrases scrolling endlessly -->
+    <TextView
+        android:id="@+id/ticker_hero"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit="marquee_forever"
+        android:scrollHorizontally="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:freezesText="true"
+        android:textColor="#FF4ADE80"
+        android:textSize="10sp"
+        android:fontFamily="monospace"
+        android:letterSpacing="0.1"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp" />
+
+    <!-- Ticker-tape separator line -->
+    <View
+        android:layout_width="match_parent"
+        android:layout_height="1dp"
+        android:background="#FF1E1E1E"
+        android:layout_marginTop="4dp"
+        android:layout_marginBottom="4dp" />
+
+    <!-- Quote ticker: current quote scrolling horizontally -->
+    <TextView
+        android:id="@+id/ticker_quote"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:singleLine="true"
+        android:ellipsize="marquee"
+        android:marqueeRepeatLimit="marquee_forever"
+        android:scrollHorizontally="true"
+        android:focusable="true"
+        android:focusableInTouchMode="true"
+        android:freezesText="true"
+        android:textColor="#FFB0B0B0"
+        android:textSize="11sp"
+        android:fontFamily="monospace"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp" />
+
+    <!-- Author attribution (static, right-aligned) -->
+    <TextView
+        android:id="@+id/ticker_author"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:textColor="#FF5A5A5A"
+        android:textSize="9sp"
+        android:fontFamily="monospace"
+        android:gravity="end"
+        android:paddingEnd="6dp"
+        android:layout_marginTop="2dp" />
+
+</LinearLayout>
