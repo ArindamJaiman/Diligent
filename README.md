@@ -122,6 +122,15 @@ The Cloister Black font (`cloister_black.ttf`) is included in `app/src/main/res/
 | Reading | hrs | 1 |
 | Coding | hrs | 3 |
 
+## ✦ Author & Connect
+
+Developed with dedication by **Arindam Jaiman**. Let's connect!
+
+- 💻 **Portfolio:** [aj-the-dev.vercel.app](https://aj-the-dev.vercel.app/)
+- 🐙 **GitHub:** [@ArindamJaiman](https://github.com/ArindamJaiman)
+- 💼 **LinkedIn:** [Arindam Jaiman](https://www.linkedin.com/in/arindam-jaiman-6149a82ab/)
+- 📸 **Instagram:** [@thearindamjaiman](https://www.instagram.com/thearindamjaiman)
+
 ## ✦ License
 
 MIT License — Free to use and modify.
