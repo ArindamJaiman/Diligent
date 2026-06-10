@@ -1,6 +1,7 @@
 package dev.diligent.app.widget
 
 import android.content.Context
+import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -24,6 +25,7 @@ import androidx.glance.text.TextStyle
 import androidx.glance.text.TextAlign
 import androidx.glance.unit.ColorProvider
 import dagger.hilt.android.EntryPointAccessors
+import dev.diligent.app.R
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.di.WidgetEntryPoint
@@ -67,17 +69,23 @@ class DiligentWidget : GlanceAppWidget() {
         val todayProgress = repository.getTodayProgressSnapshot()
         val progressMap = todayProgress.associateBy { it.activityId }
 
-        // Get current quotes (changes every minute)
-        val (quoteText, quoteAuthor) = WallStreetQuotes.getQuoteForMinute()
-        val heroPhrase = WallStreetQuotes.getHeroPhrase()
+        // Fetch multiple hero catchphrases and quotes for ViewFlipper animation slides
+        val baseHeroIndex = ((System.currentTimeMillis() / 30_000) % 15).toInt()
+        val heroPhrases = List(4) { i ->
+            WallStreetQuotes.getHeroPhraseForIndex(baseHeroIndex + i)
+        }
+
+        val baseQuoteIndex = ((System.currentTimeMillis() / 60_000) % 30).toInt()
+        val quotes = List(3) { i ->
+            WallStreetQuotes.getQuoteForIndex(baseQuoteIndex + i)
+        }
 
         provideContent {
             DiligentWidgetContent(
                 activities = activities,
                 progressMap = progressMap,
-                heroPhrase = heroPhrase,
-                quoteText = quoteText,
-                quoteAuthor = quoteAuthor
+                heroPhrases = heroPhrases,
+                quotes = quotes
             )
         }
     }
@@ -99,9 +107,8 @@ private val WidgetGrayText = Color(0xFFA0A0A0)
 private fun DiligentWidgetContent(
     activities: List<Activity>,
     progressMap: Map<Long, DailyProgress>,
-    heroPhrase: String,
-    quoteText: String,
-    quoteAuthor: String
+    heroPhrases: List<String>,
+    quotes: List<Pair<String, String>>
 ) {
     Box(
         modifier = GlanceModifier
@@ -138,9 +145,8 @@ private fun DiligentWidgetContent(
             // ─── 🎬 QUOTE TICKER PANEL ──────────────────────
             // Tap to shuffle quote · Changes every minute automatically
             QuoteTickerPanel(
-                heroPhrase = heroPhrase,
-                quoteText = quoteText,
-                quoteAuthor = quoteAuthor
+                heroPhrases = heroPhrases,
+                quotes = quotes
             )
 
             // ─── Mid Divider ────────────────────────────────
@@ -221,87 +227,34 @@ private fun DiligentWidgetContent(
  */
 @Composable
 private fun QuoteTickerPanel(
-    heroPhrase: String,
-    quoteText: String,
-    quoteAuthor: String
+    heroPhrases: List<String>,
+    quotes: List<Pair<String, String>>
 ) {
+    val context = LocalContext.current
+    val remoteViews = RemoteViews(context.packageName, R.layout.widget_quote_ticker).apply {
+        // Populate the 4 hero views in the ViewFlipper
+        val heroTextIds = listOf(R.id.hero_text_1, R.id.hero_text_2, R.id.hero_text_3, R.id.hero_text_4)
+        heroTextIds.forEachIndexed { idx, viewId ->
+            val phrase = heroPhrases.getOrElse(idx) { "◈ THE WORLD IS YOURS ◈" }
+            setTextViewText(viewId, "◆  $phrase  ◆")
+        }
+
+        // Populate the 3 quote views in the ViewFlipper
+        val quoteTextIds = listOf(R.id.quote_text_1, R.id.quote_text_2, R.id.quote_text_3)
+        val quoteAuthorIds = listOf(R.id.quote_author_1, R.id.quote_author_2, R.id.quote_author_3)
+        quoteTextIds.forEachIndexed { idx, viewId ->
+            val (text, author) = quotes.getOrElse(idx) { "Money never sleeps." to "Gordon Gekko" }
+            setTextViewText(viewId, "\"$text\"")
+            setTextViewText(quoteAuthorIds[idx], "— $author")
+        }
+    }
+
     Box(
         modifier = GlanceModifier
             .fillMaxWidth()
-            .padding(vertical = 6.dp, horizontal = 2.dp)
             .clickable(actionRunCallback<RefreshQuoteAction>())
     ) {
-        Column(modifier = GlanceModifier.fillMaxWidth()) {
-            // ── Hero phrase (centered, green, bold) ──
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Horizontal.CenterHorizontally
-            ) {
-                Text(
-                    text = "◆  $heroPhrase  ◆",
-                    style = TextStyle(
-                        color = ColorProvider(WidgetGreen),
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold
-                    ),
-                    maxLines = 1
-                )
-            }
-
-            Spacer(modifier = GlanceModifier.height(3.dp))
-
-            // ── Ticker-tape separator ──
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Horizontal.CenterHorizontally
-            ) {
-                Text(
-                    text = "·· ─── ·· ─── ·· ─── ·· ─── ··",
-                    style = TextStyle(
-                        color = ColorProvider(WidgetGrayDark),
-                        fontSize = 7.sp
-                    )
-                )
-            }
-
-            Spacer(modifier = GlanceModifier.height(3.dp))
-
-            // ── Quote text ──
-            Text(
-                text = "\"$quoteText\"",
-                style = TextStyle(
-                    color = ColorProvider(WidgetGrayText),
-                    fontSize = 10.sp
-                ),
-                maxLines = 2
-            )
-
-            Spacer(modifier = GlanceModifier.height(2.dp))
-
-            // ── Author + refresh icon ──
-            Row(
-                modifier = GlanceModifier.fillMaxWidth(),
-                horizontalAlignment = Alignment.Horizontal.End,
-                verticalAlignment = Alignment.Vertical.CenterVertically
-            ) {
-                Text(
-                    text = "— $quoteAuthor",
-                    style = TextStyle(
-                        color = ColorProvider(WidgetGrayMid),
-                        fontSize = 9.sp
-                    )
-                )
-                Spacer(modifier = GlanceModifier.width(6.dp))
-                Text(
-                    text = "↻",
-                    style = TextStyle(
-                        color = ColorProvider(WidgetGold),
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold
-                    )
-                )
-            }
-        }
+        AndroidRemoteViews(remoteViews)
     }
 }
 

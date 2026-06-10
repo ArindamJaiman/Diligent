@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Animated ticker-tape panel for the Diligent widget.
-     Uses native marquee scrolling for a Wall Street news ticker effect. -->
+<!-- Animated ticker-tape panel for the Diligent widget using ViewFlipper.
+     Provides smooth sliding text animations fully supported in RemoteViews. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ticker_container"
     android:layout_width="match_parent"
@@ -12,61 +12,149 @@
     android:paddingStart="2dp"
     android:paddingEnd="2dp">
 
-    <!-- Hero ticker: THE WORLD IS YOURS + short phrases scrolling endlessly -->
-    <TextView
-        android:id="@+id/ticker_hero"
+    <!-- Hero ViewFlipper: slides between punchy phrases -->
+    <ViewFlipper
+        android:id="@+id/hero_flipper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:singleLine="true"
-        android:ellipsize="marquee"
-        android:marqueeRepeatLimit="marquee_forever"
-        android:scrollHorizontally="true"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:freezesText="true"
-        android:textColor="#FF4ADE80"
-        android:textSize="10sp"
-        android:fontFamily="monospace"
-        android:letterSpacing="0.1"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp" />
+        android:autoStart="true"
+        android:flipInterval="3000"
+        android:inAnimation="@android:anim/slide_in_left"
+        android:outAnimation="@android:anim/slide_out_right">
+
+        <TextView
+            android:id="@+id/hero_text_1"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="#FF4ADE80"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/hero_text_2"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="#FF4ADE80"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/hero_text_3"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="#FF4ADE80"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+
+        <TextView
+            android:id="@+id/hero_text_4"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:textColor="#FF4ADE80"
+            android:textSize="9sp"
+            android:textStyle="bold"
+            android:fontFamily="monospace" />
+    </ViewFlipper>
 
     <!-- Ticker-tape separator line -->
-    <View
+    <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="1dp"
         android:background="#FF1E1E1E"
         android:layout_marginTop="4dp"
         android:layout_marginBottom="4dp" />
 
-    <!-- Quote ticker: current quote scrolling horizontally -->
-    <TextView
-        android:id="@+id/ticker_quote"
+    <!-- Quotes ViewFlipper: slides between quotes + author attribution -->
+    <ViewFlipper
+        android:id="@+id/quote_flipper"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:singleLine="true"
-        android:ellipsize="marquee"
-        android:marqueeRepeatLimit="marquee_forever"
-        android:scrollHorizontally="true"
-        android:focusable="true"
-        android:focusableInTouchMode="true"
-        android:freezesText="true"
-        android:textColor="#FFB0B0B0"
-        android:textSize="11sp"
-        android:fontFamily="monospace"
-        android:paddingStart="4dp"
-        android:paddingEnd="4dp" />
+        android:autoStart="true"
+        android:flipInterval="6000"
+        android:inAnimation="@android:anim/slide_in_left"
+        android:outAnimation="@android:anim/slide_out_right">
 
-    <!-- Author attribution (static, right-aligned) -->
-    <TextView
-        android:id="@+id/ticker_author"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textColor="#FF5A5A5A"
-        android:textSize="9sp"
-        android:fontFamily="monospace"
-        android:gravity="end"
-        android:paddingEnd="6dp"
-        android:layout_marginTop="2dp" />
+        <!-- Slide 1 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/quote_text_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFB0B0B0"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxLines="2" />
+            <TextView
+                android:id="@+id/quote_author_1"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF5A5A5A"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:gravity="end"
+                android:paddingEnd="6dp"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Slide 2 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/quote_text_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFB0B0B0"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxLines="2" />
+            <TextView
+                android:id="@+id/quote_author_2"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF5A5A5A"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:gravity="end"
+                android:paddingEnd="6dp"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Slide 3 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/quote_text_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFB0B0B0"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxLines="2" />
+            <TextView
+                android:id="@+id/quote_author_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF5A5A5A"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:gravity="end"
+                android:paddingEnd="6dp"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+    </ViewFlipper>
 
 </LinearLayout>

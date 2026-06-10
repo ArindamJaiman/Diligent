@@ -96,6 +96,20 @@ object WallStreetQuotes {
     fun getRandomQuote(): Pair<String, String> = quotes.random()
 
     /**
+     * Returns a hero phrase for a specific index, wrapped cleanly.
+     */
+    fun getHeroPhraseForIndex(index: Int): String {
+        return heroSnippets[index % heroSnippets.size]
+    }
+
+    /**
+     * Returns a quote and author for a specific index, wrapped cleanly.
+     */
+    fun getQuoteForIndex(index: Int): Pair<String, String> {
+        return quotes[index % quotes.size]
+    }
+
+    /**
      * Returns the total number of quotes available.
      */
     fun count(): Int = quotes.size
