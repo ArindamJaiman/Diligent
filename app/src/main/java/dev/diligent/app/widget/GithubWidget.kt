@@ -39,6 +39,8 @@ import kotlinx.coroutines.launch
  */
 class GithubWidget : GlanceAppWidget() {
 
+    override val sizeMode = SizeMode.Exact
+
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val entryPoint = EntryPointAccessors.fromApplication(
             context.applicationContext,
@@ -219,14 +221,48 @@ private fun GithubWidgetContent(
     themeColor: String,
     cached: GithubContribution?
 ) {
+    val size = LocalSize.current
     val accentColor = WidgetTextColors[themeColor] ?: Color(0xFF4ADE80)
+    
+    // Dynamically calculate padding and text sizes based on widget width
+    val paddingValue = if (size.width < 150.dp) 6.dp else 8.dp
+    val headerTextSize = if (size.width < 150.dp) 8.5.sp else 10.sp
+    val streakTextSize = if (size.width < 150.dp) 8.5.sp else 10.sp
+    val arrowTextSize = if (size.width < 150.dp) 9.5.sp else 11.sp
+    
+    // Choose optimal grid block spacing
+    val cellSpacing = when {
+        size.width > 250.dp -> 2.5.dp
+        else -> 2.dp
+    }
+    
+    // Calculate available dimensions for the grid
+    val availableWidth = size.width - (paddingValue * 2) - 6.dp
+    val availableHeight = size.height - 40.dp // Exclude space for header, divider, and footer
+    
+    // Compute max cell size allowed by vertical constraints (7 rows + 6 gaps)
+    val maxVerticalCellSize = ((availableHeight - (cellSpacing * 6)).value / 7f).dp
+    
+    // Choose optimal horizontal cell size based on width
+    val optimalCellSize = when {
+        size.width > 250.dp -> 14.dp
+        size.width > 180.dp -> 12.dp
+        else -> 10.dp
+    }
+    
+    // Restrict cell size to vertical bounds, coerced between 5.5.dp and 16.dp
+    val cellSize = minOf(optimalCellSize.value, maxVerticalCellSize.value).coerceIn(5.5f, 16f).dp
+    
+    // Calculate how many weeks fit horizontally
+    val maxFitWeeks = ((availableWidth + cellSpacing).value / (cellSize + cellSpacing).value).toInt()
+    val numWeeks = maxFitWeeks.coerceIn(5, 24)
 
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
             .background(Color(0xE00A0A0A)) // Transparent glassmorphism black
             .cornerRadius(16.dp)
-            .padding(12.dp)
+            .padding(paddingValue)
     ) {
         Column(modifier = GlanceModifier.fillMaxSize()) {
             // ─── Header ─────────────────────────────────────
@@ -243,7 +279,7 @@ private fun GithubWidgetContent(
                         text = if (username.isNotBlank()) "◆  ${username.uppercase()}  ($currentIndex/3)" else "◆  GITHUB DEV ($currentIndex/3)",
                         style = TextStyle(
                             color = ColorProvider(accentColor),
-                            fontSize = 9.sp,
+                            fontSize = headerTextSize,
                             fontWeight = FontWeight.Bold
                         ),
                         maxLines = 1
@@ -253,7 +289,7 @@ private fun GithubWidgetContent(
                         text = "↺",
                         style = TextStyle(
                             color = ColorProvider(accentColor),
-                            fontSize = 10.sp,
+                            fontSize = arrowTextSize,
                             fontWeight = FontWeight.Bold
                         )
                     )
@@ -264,7 +300,7 @@ private fun GithubWidgetContent(
                         text = "STREAK: ${cached.currentStreak}d",
                         style = TextStyle(
                             color = ColorProvider(Color.White),
-                            fontSize = 9.sp,
+                            fontSize = streakTextSize,
                             fontWeight = FontWeight.Medium
                         )
                     )
@@ -277,10 +313,9 @@ private fun GithubWidgetContent(
                     .fillMaxWidth()
                     .height(1.dp)
                     .background(Color(0xFF222222))
-                    .padding(vertical = 4.dp)
             ) {}
 
-            Spacer(modifier = GlanceModifier.height(4.dp))
+            Spacer(modifier = GlanceModifier.height(2.dp))
 
             // ─── Body: Grid & Stats (Clickable to open Main App) ───
             Column(
@@ -314,29 +349,29 @@ private fun GithubWidgetContent(
                         )
                     }
                 } else {
-                    // Renders the contribution calendar grid (24 weeks x 7 days)
+                    // Renders the contribution calendar grid (dynamic weeks x 7 days)
                     Row(
                         modifier = GlanceModifier.fillMaxWidth().defaultWeight(),
                         horizontalAlignment = Alignment.Horizontal.CenterHorizontally,
                         verticalAlignment = Alignment.Vertical.CenterVertically
                     ) {
-                        val gridColumns = generateGridData(cached.contributionsJson)
+                        val gridColumns = generateGridData(cached.contributionsJson, numWeeks)
                         val colors = ThemeGridColors[themeColor] ?: ThemeGridColors["emerald"]!!
 
-                        Row {
+                        Row(verticalAlignment = Alignment.Vertical.CenterVertically) {
                             gridColumns.forEachIndexed { colIndex, columnDays ->
                                 if (colIndex > 0) {
-                                    Spacer(modifier = GlanceModifier.width(2.dp))
+                                    Spacer(modifier = GlanceModifier.width(cellSpacing))
                                 }
-                                Column {
+                                Column(horizontalAlignment = Alignment.Horizontal.CenterHorizontally) {
                                     columnDays.forEachIndexed { rowIndex, level ->
                                         if (rowIndex > 0) {
-                                            Spacer(modifier = GlanceModifier.height(2.dp))
+                                            Spacer(modifier = GlanceModifier.height(cellSpacing))
                                         }
                                         val cellColor = colors.getOrElse(level) { colors[0] }
                                         Box(
                                             modifier = GlanceModifier
-                                                .size(6.dp)
+                                                .size(cellSize)
                                                 .cornerRadius(1.dp)
                                                 .background(cellColor)
                                         ) {}
@@ -379,7 +414,7 @@ private fun GithubWidgetContent(
 /**
  * Generates a 24-week x 7-day contribution grid levels from the cached JSON map.
  */
-private fun generateGridData(json: String): List<List<Int>> {
+private fun generateGridData(json: String, numWeeks: Int): List<List<Int>> {
     val listType = object : TypeToken<List<GithubContributionFetcher.ParsedContribution>>() {}.type
     val parsedList = try {
         Gson().fromJson<List<GithubContributionFetcher.ParsedContribution>>(json, listType)
@@ -388,17 +423,17 @@ private fun generateGridData(json: String): List<List<Int>> {
     }
     val levelMap = parsedList.associate { it.date to it.level }
 
-    // Start with the Sunday of 23 weeks ago (24 weeks total)
+    // Start with the Sunday of (numWeeks - 1) weeks ago
     val today = LocalDate.now()
     val dayOfWeekVal = today.dayOfWeek.value // Mon=1, Sun=7
     val offsetToSunday = dayOfWeekVal % 7 // Mon=1, Sat=6, Sun=0
     val currentSunday = today.minusDays(offsetToSunday.toLong())
-    val startSunday = currentSunday.minusWeeks(23)
+    val startSunday = currentSunday.minusWeeks((numWeeks - 1).toLong())
 
     val weeks = mutableListOf<List<Int>>()
     val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
 
-    for (w in 0 until 24) {
+    for (w in 0 until numWeeks) {
         val days = mutableListOf<Int>()
         for (d in 0 until 7) {
             val date = startSunday.plusWeeks(w.toLong()).plusDays(d.toLong())
