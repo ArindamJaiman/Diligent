@@ -130,6 +130,36 @@ fun SettingsScreen(
                 )
             }
 
+            // ─── GitHub Section ─────────────────────────────
+            SettingsSectionHeader("GITHUB VERSUS CONTROLS")
+
+            GithubUserConfigCard(
+                index = 1,
+                label = "Developer 1 (Main User)",
+                username = settings.githubUser1,
+                selectedColor = settings.githubUser1Color,
+                onUsernameChange = { viewModel.updateGithubUser(1, it) },
+                onColorChange = { viewModel.updateGithubColor(1, it) }
+            )
+
+            GithubUserConfigCard(
+                index = 2,
+                label = "Developer 2 (Competitor 1)",
+                username = settings.githubUser2,
+                selectedColor = settings.githubUser2Color,
+                onUsernameChange = { viewModel.updateGithubUser(2, it) },
+                onColorChange = { viewModel.updateGithubColor(2, it) }
+            )
+
+            GithubUserConfigCard(
+                index = 3,
+                label = "Developer 3 (Competitor 2)",
+                username = settings.githubUser3,
+                selectedColor = settings.githubUser3Color,
+                onUsernameChange = { viewModel.updateGithubUser(3, it) },
+                onColorChange = { viewModel.updateGithubColor(3, it) }
+            )
+
             // ─── Data Section ───────────────────────────────
             SettingsSectionHeader("DATA")
 
@@ -315,5 +345,96 @@ private fun formatBackupTime(millis: Long): String {
         diff < 3_600_000 -> "${diff / 60_000}m ago"
         diff < 86_400_000 -> "${diff / 3_600_000}h ago"
         else -> "${diff / 86_400_000}d ago"
+    }
+}
+
+@Composable
+private fun GithubUserConfigCard(
+    index: Int,
+    label: String,
+    username: String,
+    selectedColor: String,
+    onUsernameChange: (String) -> Unit,
+    onColorChange: (String) -> Unit
+) {
+    var textState by remember(username) { mutableStateOf(username) }
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
+            .background(DiligentColors.Surface)
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            Text(
+                text = label,
+                style = MaterialTheme.typography.bodyMedium.copy(
+                    fontFamily = DotMatrix,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                ),
+                color = DiligentColors.White
+            )
+
+            OutlinedTextField(
+                value = textState,
+                onValueChange = { textState = it },
+                placeholder = { Text("Enter GitHub username", color = DiligentColors.Gray600) },
+                singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
+                colors = OutlinedTextFieldDefaults.colors(
+                    focusedBorderColor = DiligentColors.White,
+                    unfocusedBorderColor = DiligentColors.Border,
+                    focusedTextColor = DiligentColors.White,
+                    unfocusedTextColor = DiligentColors.White,
+                    focusedContainerColor = DiligentColors.Black,
+                    unfocusedContainerColor = DiligentColors.Black
+                ),
+                modifier = Modifier.fillMaxWidth(),
+                trailingIcon = {
+                    if (textState.trim() != username) {
+                        IconButton(onClick = { onUsernameChange(textState.trim()) }) {
+                            Icon(Icons.Default.Check, contentDescription = "Save", tint = DiligentColors.White)
+                        }
+                    }
+                }
+            )
+
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Text(
+                    text = "Glow Theme:",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                    color = DiligentColors.Gray500
+                )
+
+                val colorsMap = listOf(
+                    "emerald" to androidx.compose.ui.graphics.Color(0xFF4ADE80),
+                    "crimson" to androidx.compose.ui.graphics.Color(0xFFF43F5E),
+                    "blue" to androidx.compose.ui.graphics.Color(0xFF3B82F6),
+                    "gold" to androidx.compose.ui.graphics.Color(0xFFFBBF24),
+                    "purple" to androidx.compose.ui.graphics.Color(0xFFA855F7)
+                )
+
+                colorsMap.forEach { (colorName, colorVal) ->
+                    val isSelected = selectedColor == colorName
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .background(colorVal)
+                            .border(
+                                width = if (isSelected) 2.dp else 0.dp,
+                                color = if (isSelected) DiligentColors.White else androidx.compose.ui.graphics.Color.Transparent,
+                                shape = androidx.compose.foundation.shape.CircleShape
+                            )
+                            .clickable { onColorChange(colorName) }
+                    )
+                }
+            }
+        }
     }
 }

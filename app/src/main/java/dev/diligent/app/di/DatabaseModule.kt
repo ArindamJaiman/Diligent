@@ -11,6 +11,7 @@ import dev.diligent.app.data.local.DiligentDatabase
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import javax.inject.Singleton
 
@@ -44,4 +45,7 @@ object DatabaseModule {
 
     @Provides
     fun provideActivityReminderDao(db: DiligentDatabase): ActivityReminderDao = db.activityReminderDao()
+
+    @Provides
+    fun provideGithubContributionDao(db: DiligentDatabase): GithubContributionDao = db.githubContributionDao()
 }

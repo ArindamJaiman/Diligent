@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools">
 
     <!-- Permissions -->
+    <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
     <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
@@ -41,6 +42,32 @@
             <meta-data
                 android:name="android.appwidget.provider"
                 android:resource="@xml/diligent_widget_info" />
+        </receiver>
+
+        <!-- GitHub Slideshow Widget -->
+        <receiver
+            android:name=".widget.GithubWidgetReceiver"
+            android:exported="true"
+            android:label="GitHub Dev Tracker">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/github_widget_info" />
+        </receiver>
+
+        <!-- GitHub Versus Mode Widget -->
+        <receiver
+            android:name=".widget.GithubVsWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_github_vs_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/github_vs_widget_info" />
         </receiver>
 
         <!-- Boot Receiver for rescheduling notifications -->

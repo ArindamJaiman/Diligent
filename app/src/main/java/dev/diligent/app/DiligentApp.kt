@@ -36,8 +36,17 @@ class DiligentApp : Application(), Configuration.Provider {
             seeder.seedIfEmpty()
         }
 
-        // Schedule reminders
+        // Schedule reminders & GitHub Sync
         dev.diligent.app.notifications.ReminderWorker.scheduleDailyReminder(this)
         dev.diligent.app.notifications.ReminderWorker.scheduleMissedGoalCheck(this)
+        dev.diligent.app.notifications.GithubSyncWorker.schedulePeriodicSync(this)
+
+        // Restart widget slideshow scheduler if widgets are present on home screen
+        val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
+        val componentName = android.content.ComponentName(this, dev.diligent.app.widget.GithubWidgetReceiver::class.java)
+        val ids = appWidgetManager.getAppWidgetIds(componentName)
+        if (ids != null && ids.isNotEmpty()) {
+            dev.diligent.app.widget.SlideshowScheduler.start(this)
+        }
     }
 }

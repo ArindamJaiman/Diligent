@@ -16,6 +16,7 @@ import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import androidx.glance.appwidget.updateAll
 
 /**
  * ViewModel for the Settings screen.
@@ -62,6 +63,63 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = repository.getSettingsSnapshot()
             repository.updateSettings(current.copy(dynamicColor = enabled))
+        }
+    }
+
+    fun updateGithubUser(index: Int, username: String) {
+        viewModelScope.launch {
+            val current = repository.getSettingsSnapshot()
+            val updated = when (index) {
+                1 -> current.copy(githubUser1 = username)
+                2 -> current.copy(githubUser2 = username)
+                3 -> current.copy(githubUser3 = username)
+                else -> current
+            }
+            repository.updateSettings(updated)
+            
+            val userToSync = username.ifBlank {
+                when (index) {
+                    1 -> "LennyDany-03"
+                    2 -> "Quadr1on"
+                    3 -> "SidhanthBibi"
+                    else -> ""
+                }
+            }
+            
+            if (userToSync.isNotBlank()) {
+                _message.emit("Syncing $userToSync contributions...")
+                val success = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+                    repository.syncGithubContributions(userToSync)
+                }
+                if (success) {
+                    _message.emit("Sync completed for $userToSync!")
+                } else {
+                    _message.emit("Failed to sync $userToSync. Check connection.")
+                }
+                try {
+                    dev.diligent.app.widget.GithubWidget().updateAll(context)
+                    dev.diligent.app.widget.GithubVsWidget().updateAll(context)
+                } catch (e: Exception) { }
+            }
+            
+            dev.diligent.app.notifications.GithubSyncWorker.enqueueOneTimeSync(context)
+        }
+    }
+
+    fun updateGithubColor(index: Int, colorName: String) {
+        viewModelScope.launch {
+            val current = repository.getSettingsSnapshot()
+            val updated = when (index) {
+                1 -> current.copy(githubUser1Color = colorName)
+                2 -> current.copy(githubUser2Color = colorName)
+                3 -> current.copy(githubUser3Color = colorName)
+                else -> current
+            }
+            repository.updateSettings(updated)
+            try {
+                dev.diligent.app.widget.GithubWidget().updateAll(context)
+                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
+            } catch (e: Exception) { }
         }
     }
 

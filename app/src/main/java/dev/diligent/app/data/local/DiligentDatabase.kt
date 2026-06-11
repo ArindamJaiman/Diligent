@@ -5,10 +5,12 @@ import androidx.room.RoomDatabase
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
 
 /**
@@ -20,9 +22,10 @@ import dev.diligent.app.data.local.entity.Settings
         Activity::class,
         DailyProgress::class,
         Settings::class,
-        ActivityReminder::class
+        ActivityReminder::class,
+        GithubContribution::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 abstract class DiligentDatabase : RoomDatabase() {
@@ -30,6 +33,7 @@ abstract class DiligentDatabase : RoomDatabase() {
     abstract fun dailyProgressDao(): DailyProgressDao
     abstract fun settingsDao(): SettingsDao
     abstract fun activityReminderDao(): ActivityReminderDao
+    abstract fun githubContributionDao(): GithubContributionDao
 
     companion object {
         const val DATABASE_NAME = "diligent_db"

@@ -3,4 +3,8 @@
     <string name="app_name">Diligent</string>
     <string name="widget_name">Diligent Tracker</string>
     <string name="widget_description">Track your daily activities directly from your home screen</string>
+    <string name="widget_github_name">GitHub Dev Tracker</string>
+    <string name="widget_github_description">Displays a developer\'s GitHub contribution grid and streak</string>
+    <string name="widget_github_vs_name">GitHub Versus Mode</string>
+    <string name="widget_github_vs_description">Compare side-by-side streaks and contribution grids of two developers</string>
 </resources>

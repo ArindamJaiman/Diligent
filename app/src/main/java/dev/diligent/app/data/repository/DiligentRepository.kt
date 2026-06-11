@@ -3,10 +3,12 @@ package dev.diligent.app.data.repository
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -25,7 +27,8 @@ class DiligentRepository @Inject constructor(
     private val activityDao: ActivityDao,
     private val dailyProgressDao: DailyProgressDao,
     private val settingsDao: SettingsDao,
-    private val activityReminderDao: ActivityReminderDao
+    private val activityReminderDao: ActivityReminderDao,
+    private val githubContributionDao: GithubContributionDao
 ) {
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -256,6 +259,35 @@ class DiligentRepository @Inject constructor(
 
     suspend fun insertAllReminders(reminders: List<ActivityReminder>) {
         reminders.forEach { activityReminderDao.insert(it) }
+    }
+
+    // ─── GitHub Contributions ───────────────────────────────────
+
+    fun getGithubContribution(username: String): Flow<GithubContribution?> =
+        githubContributionDao.getContribution(username)
+
+    suspend fun getGithubContributionSnapshot(username: String): GithubContribution? =
+        githubContributionDao.getContributionSnapshot(username)
+
+    suspend fun saveGithubContribution(contribution: GithubContribution) =
+        githubContributionDao.insert(contribution)
+
+    suspend fun syncGithubContributions(username: String): Boolean {
+        if (username.isBlank()) return false
+        val result = GithubContributionFetcher.fetchContributions(username) ?: return false
+
+        val gson = com.google.gson.Gson()
+        val json = gson.toJson(result.contributions)
+
+        val cached = GithubContribution(
+            username = username,
+            contributionsJson = json,
+            lastUpdated = System.currentTimeMillis(),
+            totalAnnual = result.totalAnnual,
+            currentStreak = result.currentStreak
+        )
+        saveGithubContribution(cached)
+        return true
     }
 
     // ─── Helpers ────────────────────────────────────────────────

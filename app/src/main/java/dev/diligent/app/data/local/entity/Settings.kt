@@ -28,5 +28,11 @@ data class Settings(
     val dailyReminderMinute: Int = 0,
     val missedGoalNotification: Boolean = true,
     val dynamicColor: Boolean = false,
-    val lastBackupTime: Long = 0L
+    val lastBackupTime: Long = 0L,
+    val githubUser1: String = "LennyDany-03",
+    val githubUser1Color: String = "emerald",
+    val githubUser2: String = "Quadr1on",
+    val githubUser2Color: String = "crimson",
+    val githubUser3: String = "SidhanthBibi",
+    val githubUser3Color: String = "blue"
 )
