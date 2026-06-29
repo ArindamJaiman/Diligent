@@ -12,6 +12,10 @@ import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -76,33 +80,49 @@ class SettingsViewModel @Inject constructor(
                 else -> current
             }
             repository.updateSettings(updated)
-            
-            val userToSync = username.ifBlank {
-                when (index) {
-                    1 -> "LennyDany-03"
-                    2 -> "Quadr1on"
-                    3 -> "SidhanthBibi"
-                    else -> ""
+            _message.emit("Username saved.")
+            try {
+                dev.diligent.app.widget.GithubWidget().updateAll(context)
+                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
+            } catch (e: Exception) { }
+        }
+    }
+
+    /**
+     * Manually sync all configured GitHub contribution graphs.
+     * Triggered only by the user pressing "Update Contribution Graphs" in Settings.
+     */
+    fun syncAllGithubContributions() {
+        viewModelScope.launch {
+            val settings = repository.getSettingsSnapshot()
+            val user1 = settings.githubUser1.ifBlank { "LennyDany-03" }
+            val user2 = settings.githubUser2.ifBlank { "Quadr1on" }
+            val user3 = settings.githubUser3.ifBlank { "SidhanthBibi" }
+            val users = listOf(user1, user2, user3).filter { it.isNotBlank() }
+
+            _message.emit("Syncing ${users.size} contribution graphs...")
+
+            var successCount = 0
+            withContext(Dispatchers.IO) {
+                users.map { username ->
+                    async {
+                        repository.syncGithubContributions(username)
+                    }
+                }.awaitAll().forEach { success ->
+                    if (success) successCount++
                 }
             }
-            
-            if (userToSync.isNotBlank()) {
-                _message.emit("Syncing $userToSync contributions...")
-                val success = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
-                    repository.syncGithubContributions(userToSync)
-                }
-                if (success) {
-                    _message.emit("Sync completed for $userToSync!")
-                } else {
-                    _message.emit("Failed to sync $userToSync. Check connection.")
-                }
-                try {
-                    dev.diligent.app.widget.GithubWidget().updateAll(context)
-                    dev.diligent.app.widget.GithubVsWidget().updateAll(context)
-                } catch (e: Exception) { }
+
+            if (successCount == users.size) {
+                _message.emit("All $successCount graphs updated successfully!")
+            } else {
+                _message.emit("$successCount/${users.size} synced. Check connection for failures.")
             }
-            
-            dev.diligent.app.notifications.GithubSyncWorker.enqueueOneTimeSync(context)
+
+            try {
+                dev.diligent.app.widget.GithubWidget().updateAll(context)
+                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
+            } catch (e: Exception) { }
         }
     }
 

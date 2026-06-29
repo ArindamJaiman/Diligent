@@ -67,13 +67,9 @@ class GithubWidget : GlanceAppWidget() {
             else -> "emerald"
         }
 
-        // Get cached contributions
+        // Get cached contributions (no auto-sync — user must tap Update in Settings)
         val cached = if (username.isNotBlank()) {
-            val data = repository.getGithubContributionSnapshot(username)
-            if (data == null) {
-                dev.diligent.app.notifications.GithubSyncWorker.enqueueOneTimeSync(context)
-            }
-            data
+            repository.getGithubContributionSnapshot(username)
         } else {
             null
         }
@@ -260,7 +256,7 @@ private fun GithubWidgetContent(
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Color(0xE00A0A0A)) // Transparent glassmorphism black
+            .background(Color(0x1A0A0A0A)) // 10% opacity background
             .cornerRadius(16.dp)
             .padding(paddingValue)
     ) {
@@ -341,7 +337,7 @@ private fun GithubWidgetContent(
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
-                            text = "syncing contribution grid...",
+                            text = "tap update in settings",
                             style = TextStyle(
                                 color = ColorProvider(Color(0xFF888888)),
                                 fontSize = 11.sp

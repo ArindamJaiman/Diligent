@@ -160,6 +160,13 @@ fun SettingsScreen(
                 onColorChange = { viewModel.updateGithubColor(3, it) }
             )
 
+            SettingsActionItem(
+                icon = Icons.Default.Refresh,
+                title = "Update Contribution Graphs",
+                subtitle = "Scrape latest data for all configured devs",
+                onClick = { viewModel.syncAllGithubContributions() }
+            )
+
             // ─── Data Section ───────────────────────────────
             SettingsSectionHeader("DATA")
 

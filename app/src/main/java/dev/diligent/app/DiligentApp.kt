@@ -36,10 +36,9 @@ class DiligentApp : Application(), Configuration.Provider {
             seeder.seedIfEmpty()
         }
 
-        // Schedule reminders & GitHub Sync
+        // Schedule reminders
         dev.diligent.app.notifications.ReminderWorker.scheduleDailyReminder(this)
         dev.diligent.app.notifications.ReminderWorker.scheduleMissedGoalCheck(this)
-        dev.diligent.app.notifications.GithubSyncWorker.schedulePeriodicSync(this)
 
         // Restart widget slideshow scheduler if widgets are present on home screen
         val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)

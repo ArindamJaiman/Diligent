@@ -13,7 +13,6 @@ class BootReceiver : BroadcastReceiver() {
         if (intent.action == Intent.ACTION_BOOT_COMPLETED) {
             ReminderWorker.scheduleDailyReminder(context)
             ReminderWorker.scheduleMissedGoalCheck(context)
-            GithubSyncWorker.schedulePeriodicSync(context)
         }
     }
 }
