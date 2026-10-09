@@ -30,7 +30,9 @@ object DatabaseModule {
             DiligentDatabase::class.java,
             DiligentDatabase.DATABASE_NAME
         )
-            .fallbackToDestructiveMigration()
+            // Real migrations keep user data across upgrades; only a downgrade may wipe it.
+            .addMigrations(*DiligentDatabase.ALL_MIGRATIONS)
+            .fallbackToDestructiveMigrationOnDowngrade()
             .build()
     }
 

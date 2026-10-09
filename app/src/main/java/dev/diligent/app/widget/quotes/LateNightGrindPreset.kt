@@ -117,6 +117,7 @@ val LateNightGrindPreset = signedPreset(
         "Stay up with purpose or go to bed with peace.",
         "Night owls don't need permission to fly.",
         "The night rewards those who show up for it.",
+        "Night owls finish what early birds only plan.",
         "Set the alarm. Shut the laptop. Win again tomorrow."
     )
 )

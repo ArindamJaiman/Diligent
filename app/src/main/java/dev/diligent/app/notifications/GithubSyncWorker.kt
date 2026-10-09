@@ -6,16 +6,19 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
+import dev.diligent.app.data.local.entity.githubSlots
 import dev.diligent.app.data.repository.DiligentRepository
-import androidx.glance.appwidget.updateAll
-import dev.diligent.app.widget.GithubWidget
-import dev.diligent.app.widget.GithubVsWidget
+import dev.diligent.app.widget.WidgetUpdater
 import java.util.concurrent.TimeUnit
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+/**
+ * Background GitHub contribution sync. Contribution graphs are synced manually from
+ * Settings by default; this worker only runs if explicitly scheduled.
+ */
 @HiltWorker
 class GithubSyncWorker @AssistedInject constructor(
     @Assisted appContext: Context,
@@ -25,12 +28,7 @@ class GithubSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting GitHub contribution sync...")
-        val settings = repository.getSettingsSnapshot()
-        
-        val user1 = settings.githubUser1.ifBlank { "LennyDany-03" }
-        val user2 = settings.githubUser2.ifBlank { "Quadr1on" }
-        val user3 = settings.githubUser3.ifBlank { "SidhanthBibi" }
-        val users = listOf(user1, user2, user3).filter { it.isNotBlank() }
+        val users = repository.getSettingsSnapshot().githubSlots().map { it.username }
 
         var success = true
         if (users.isNotEmpty()) {
@@ -48,20 +46,20 @@ class GithubSyncWorker @AssistedInject constructor(
             }
         }
 
-        try {
-            GithubWidget().updateAll(applicationContext)
-            GithubVsWidget().updateAll(applicationContext)
-            Log.d(TAG, "Widgets triggered for recomposition")
-        } catch (e: Exception) {
-            Log.e(TAG, "Error updating widgets after sync", e)
-        }
+        WidgetUpdater.refreshGithub(applicationContext)
 
-        return if (success) Result.success() else Result.retry()
+        // A misspelled username fails every time; don't keep retrying it forever.
+        return when {
+            success -> Result.success()
+            runAttemptCount < MAX_ATTEMPTS -> Result.retry()
+            else -> Result.failure()
+        }
     }
 
     companion object {
         private const val TAG = "GithubSyncWorker"
         private const val WORK_NAME = "github_sync_work"
+        private const val MAX_ATTEMPTS = 3
 
         /**
          * Schedules the periodic GitHub sync (runs every 4 hours).
@@ -103,7 +101,7 @@ class GithubSyncWorker @AssistedInject constructor(
             WorkManager.getInstance(context)
                 .enqueueUniqueWork(
                     "github_sync_one_time_work",
-                    ExistingWorkPolicy.REPLACE,
+                    ExistingWorkPolicy.KEEP,
                     request
                 )
         }

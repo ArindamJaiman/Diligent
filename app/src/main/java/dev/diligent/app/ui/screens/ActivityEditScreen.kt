@@ -5,6 +5,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -14,6 +15,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -37,6 +39,7 @@ fun ActivityEditScreen(
     val unit by viewModel.unit.collectAsStateWithLifecycle()
     val dailyGoal by viewModel.dailyGoal.collectAsStateWithLifecycle()
     val nameError by viewModel.nameError.collectAsStateWithLifecycle()
+    val goalError by viewModel.goalError.collectAsStateWithLifecycle()
     val isSaving by viewModel.isSaving.collectAsStateWithLifecycle()
 
     // Navigate back on save success
@@ -147,6 +150,11 @@ fun ActivityEditScreen(
                         onValueChange = { viewModel.setDailyGoal(it) },
                         modifier = Modifier.weight(1f),
                         singleLine = true,
+                        isError = goalError != null,
+                        supportingText = goalError?.let {
+                            { Text(it, color = MaterialTheme.colorScheme.error, fontFamily = DotMatrix) }
+                        },
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                         textStyle = MaterialTheme.typography.bodyLarge.copy(
                             fontFamily = DotMatrix,
                             color = DiligentColors.White,

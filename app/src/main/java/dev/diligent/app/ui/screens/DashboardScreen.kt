@@ -45,7 +45,6 @@ fun DashboardScreen(
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val activities by viewModel.activitiesWithProgress.collectAsStateWithLifecycle()
-    val streaks by viewModel.streaks.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
 
@@ -272,7 +271,7 @@ fun DashboardScreen(
                 ) { item ->
                     ActivityCard(
                         item = item,
-                        streak = streaks[item.activity.id] ?: 0,
+                        streak = item.streak,
                         onIncrement = { viewModel.incrementProgress(item.activity.id) },
                         onDecrement = { viewModel.decrementProgress(item.activity.id) },
                         onToggleComplete = { viewModel.toggleComplete(item.activity.id) },

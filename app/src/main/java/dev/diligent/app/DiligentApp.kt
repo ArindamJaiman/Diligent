@@ -4,9 +4,14 @@ import android.app.Application
 import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
+import dev.diligent.app.data.local.SampleDataSeeder
+import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.widget.DayChangeRefresh
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 
 /**
@@ -20,7 +25,10 @@ class DiligentApp : Application(), Configuration.Provider {
     lateinit var workerFactory: HiltWorkerFactory
 
     @Inject
-    lateinit var seeder: dev.diligent.app.data.local.SampleDataSeeder
+    lateinit var seeder: SampleDataSeeder
+
+    @Inject
+    lateinit var repository: DiligentRepository
 
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
@@ -31,21 +39,15 @@ class DiligentApp : Application(), Configuration.Provider {
     override fun onCreate() {
         super.onCreate()
 
-        // Seed default activities on first launch
-        kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO).launch {
+        CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
+            // Seed default activities on first launch
             seeder.seedIfEmpty()
+
+            // Make reminder jobs match the user's settings (keeps already-queued jobs)
+            ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)
         }
 
-        // Schedule reminders
-        dev.diligent.app.notifications.ReminderWorker.scheduleDailyReminder(this)
-        dev.diligent.app.notifications.ReminderWorker.scheduleMissedGoalCheck(this)
-
-        // Restart widget slideshow scheduler if widgets are present on home screen
-        val appWidgetManager = android.appwidget.AppWidgetManager.getInstance(this)
-        val componentName = android.content.ComponentName(this, dev.diligent.app.widget.GithubWidgetReceiver::class.java)
-        val ids = appWidgetManager.getAppWidgetIds(componentName)
-        if (ids != null && ids.isNotEmpty()) {
-            dev.diligent.app.widget.SlideshowScheduler.start(this)
-        }
+        // Re-arm the midnight widget refresh if any widget is on the home screen
+        DayChangeRefresh.scheduleIfWidgetsExist(this)
     }
 }

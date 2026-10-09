@@ -30,17 +30,20 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.di.WidgetEntryPoint
 import dev.diligent.app.ui.MainActivity
+import dev.diligent.app.widget.quotes.Quote
+import dev.diligent.app.widget.quotes.QuotePresets
+import kotlin.random.Random
 
 /**
  * Diligent Home Screen Widget — Nothing-inspired dot-matrix design
- * with a Wall Street quote ticker panel.
+ * with a quote ticker panel.
  *
  * Features:
- * - "THE WORLD IS YOURS" hero line with rotating short phrases
- * - Wall Street quotes that change every minute & on every tap
+ * - Hero line with rotating short phrases from the selected quote pack
+ * - Random quotes from the pack chosen in Settings (Wall Street, Street Wisdom, …)
  * - Displays all active activities with progress
  * - Inline increment/decrement via action callbacks
- * - Tap quote panel to shuffle to next quote
+ * - Tap quote panel to shuffle to new quotes
  * - [+] button to create new activity
  *
  * Design: Pure monochrome, black background, green ticker accent,
@@ -68,25 +71,42 @@ class DiligentWidget : GlanceAppWidget() {
         val activities = repository.getAllActiveSnapshot()
         val todayProgress = repository.getTodayProgressSnapshot()
         val progressMap = todayProgress.associateBy { it.activityId }
+        val preset = QuotePresets.byId(repository.getSettingsSnapshot().quotePreset)
 
-        // Fetch multiple hero catchphrases and quotes for ViewFlipper animation slides
-        val baseHeroIndex = ((System.currentTimeMillis() / 30_000) % 15).toInt()
-        val heroPhrases = List(4) { i ->
-            WallStreetQuotes.getHeroPhraseForIndex(baseHeroIndex + i)
-        }
-
-        val baseQuoteIndex = ((System.currentTimeMillis() / 60_000) % 30).toInt()
-        val quotes = List(3) { i ->
-            WallStreetQuotes.getQuoteForIndex(baseQuoteIndex + i)
-        }
+        // Quotes stay put while you tap +/−; they reshuffle when the quote panel is
+        // tapped or a new rotation window starts.
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val window = System.currentTimeMillis() / QUOTE_ROTATION_MILLIS
+        val seed = prefs.getLong(KEY_QUOTE_SEED, 0L) * 31 + window
+        val (heroPhrases, quotes) = QuotePresets.pick(
+            id = preset.id,
+            quoteCount = QUOTE_SLIDES,
+            heroCount = HERO_SLIDES,
+            random = Random(seed)
+        )
 
         provideContent {
             DiligentWidgetContent(
                 activities = activities,
                 progressMap = progressMap,
+                presetName = preset.name,
                 heroPhrases = heroPhrases,
                 quotes = quotes
             )
+        }
+    }
+
+    companion object {
+        private const val PREFS_NAME = "diligent_widget_prefs"
+        private const val KEY_QUOTE_SEED = "quote_seed"
+        private const val QUOTE_ROTATION_MILLIS = 3 * 60 * 60 * 1000L
+        private const val HERO_SLIDES = 4
+        private const val QUOTE_SLIDES = 5
+
+        /** Forces a fresh set of random quotes on the next render. */
+        internal fun reshuffleQuotes(context: Context) {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            prefs.edit().putLong(KEY_QUOTE_SEED, prefs.getLong(KEY_QUOTE_SEED, 0L) + 1).apply()
         }
     }
 }
@@ -107,8 +127,9 @@ private val WidgetGrayText = Color(0xFFA0A0A0)
 private fun DiligentWidgetContent(
     activities: List<Activity>,
     progressMap: Map<Long, DailyProgress>,
+    presetName: String,
     heroPhrases: List<String>,
-    quotes: List<Pair<String, String>>
+    quotes: List<Quote>
 ) {
     Box(
         modifier = GlanceModifier
@@ -130,7 +151,16 @@ private fun DiligentWidgetContent(
                         color = ColorProvider(WidgetWhite),
                         fontSize = 11.sp,
                         fontWeight = FontWeight.Bold
-                    )
+                    ),
+                    modifier = GlanceModifier.defaultWeight()
+                )
+                Text(
+                    text = presetName.uppercase(),
+                    style = TextStyle(
+                        color = ColorProvider(WidgetGrayMid),
+                        fontSize = 8.sp
+                    ),
+                    maxLines = 1
                 )
             }
 
@@ -220,32 +250,35 @@ private fun DiligentWidgetContent(
 
 /**
  * Premium quote ticker panel.
- * - Hero phrase rotates every 30 seconds (MONEY NEVER SLEEPS, GREED IS GOOD, etc.)
- * - Wall Street quote rotates every 60 seconds
- * - Tap anywhere on the panel to shuffle to a new quote
- * - Decorative ticker-tape separators for Wall Street terminal aesthetic
+ * - Hero phrases and quotes slide inside launcher-side ViewFlippers (no app wakeups)
+ * - Tap anywhere on the panel to shuffle to new random quotes
+ * - Decorative ticker-tape separators for a terminal aesthetic
  */
 @Composable
 private fun QuoteTickerPanel(
     heroPhrases: List<String>,
-    quotes: List<Pair<String, String>>
+    quotes: List<Quote>
 ) {
     val context = LocalContext.current
     val remoteViews = RemoteViews(context.packageName, R.layout.widget_quote_ticker).apply {
         // Populate the 4 hero views in the ViewFlipper
         val heroTextIds = listOf(R.id.hero_text_1, R.id.hero_text_2, R.id.hero_text_3, R.id.hero_text_4)
         heroTextIds.forEachIndexed { idx, viewId ->
-            val phrase = heroPhrases.getOrElse(idx) { "◈ THE WORLD IS YOURS ◈" }
+            val phrase = heroPhrases.getOrElse(idx) { "THE WORLD IS YOURS" }
             setTextViewText(viewId, "◆  $phrase  ◆")
         }
 
-        // Populate the 3 quote views in the ViewFlipper
-        val quoteTextIds = listOf(R.id.quote_text_1, R.id.quote_text_2, R.id.quote_text_3)
-        val quoteAuthorIds = listOf(R.id.quote_author_1, R.id.quote_author_2, R.id.quote_author_3)
+        // Populate the quote views in the ViewFlipper
+        val quoteTextIds = listOf(
+            R.id.quote_text_1, R.id.quote_text_2, R.id.quote_text_3, R.id.quote_text_4, R.id.quote_text_5
+        )
+        val quoteAuthorIds = listOf(
+            R.id.quote_author_1, R.id.quote_author_2, R.id.quote_author_3, R.id.quote_author_4, R.id.quote_author_5
+        )
         quoteTextIds.forEachIndexed { idx, viewId ->
-            val (text, author) = quotes.getOrElse(idx) { "Money never sleeps." to "Gordon Gekko" }
-            setTextViewText(viewId, "\"$text\"")
-            setTextViewText(quoteAuthorIds[idx], "— $author")
+            val quote = quotes.getOrElse(idx) { Quote("Money never sleeps.", "Gordon Gekko") }
+            setTextViewText(viewId, "\"${quote.text}\"")
+            setTextViewText(quoteAuthorIds[idx], "— ${quote.author}")
         }
     }
 
@@ -362,8 +395,7 @@ val ActivityIdKey = ActionParameters.Key<Long>("activityId")
 // ─── Action Callbacks ───────────────────────────────────────────
 
 /**
- * Refresh quote action — tapping the quote panel re-renders the widget,
- * which picks up the current minute's quote (effectively cycling quotes).
+ * Refresh quote action — tapping the quote panel reshuffles the random quotes.
  */
 class RefreshQuoteAction : ActionCallback {
     override suspend fun onAction(
@@ -371,12 +403,14 @@ class RefreshQuoteAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
+        DiligentWidget.reshuffleQuotes(context)
         DiligentWidget().update(context, glanceId)
     }
 }
 
 /**
  * Increment action — runs directly from the widget.
+ * The repository redraws every tracker widget after the change.
  */
 class IncrementAction : ActionCallback {
     override suspend fun onAction(
@@ -389,14 +423,13 @@ class IncrementAction : ActionCallback {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        val repository = entryPoint.repository()
-        repository.incrementProgress(activityId)
-        DiligentWidget().update(context, glanceId)
+        entryPoint.repository().incrementProgress(activityId)
     }
 }
 
 /**
  * Decrement action — runs directly from the widget.
+ * The repository redraws every tracker widget after the change.
  */
 class DecrementAction : ActionCallback {
     override suspend fun onAction(
@@ -409,9 +442,7 @@ class DecrementAction : ActionCallback {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        val repository = entryPoint.repository()
-        repository.decrementProgress(activityId)
-        DiligentWidget().update(context, glanceId)
+        entryPoint.repository().decrementProgress(activityId)
     }
 }
 

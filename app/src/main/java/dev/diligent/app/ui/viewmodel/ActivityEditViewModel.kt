@@ -50,6 +50,9 @@ class ActivityEditViewModel @Inject constructor(
     private val _nameError = MutableStateFlow<String?>(null)
     val nameError: StateFlow<String?> = _nameError.asStateFlow()
 
+    private val _goalError = MutableStateFlow<String?>(null)
+    val goalError: StateFlow<String?> = _goalError.asStateFlow()
+
     // Reminders for this activity
     val reminders: StateFlow<List<ActivityReminder>> =
         activityId?.let { id ->
@@ -64,7 +67,9 @@ class ActivityEditViewModel @Inject constructor(
                 repository.getActivityById(id)?.let { activity ->
                     _name.value = activity.name
                     _unit.value = activity.unit
-                    _dailyGoal.value = activity.dailyGoal.toString()
+                    _dailyGoal.value = activity.dailyGoal.let {
+                        if (it == it.toInt().toFloat()) it.toInt().toString() else it.toString()
+                    }
                     _icon.value = activity.icon
                 }
             }
@@ -79,7 +84,10 @@ class ActivityEditViewModel @Inject constructor(
     }
 
     fun setUnit(value: String) { _unit.value = value }
-    fun setDailyGoal(value: String) { _dailyGoal.value = value }
+    fun setDailyGoal(value: String) {
+        _dailyGoal.value = value
+        _goalError.value = null
+    }
     fun setIcon(value: String) { _icon.value = value }
 
     // ─── Save ───────────────────────────────────────────────────
@@ -92,7 +100,12 @@ class ActivityEditViewModel @Inject constructor(
                 return@launch
             }
 
-            val goal = _dailyGoal.value.toFloatOrNull() ?: 1f
+            // A zero/negative goal would mark the activity complete before any work.
+            val goal = _dailyGoal.value.trim().replace(',', '.').toFloatOrNull()
+            if (goal == null || goal <= 0f || goal.isNaN() || goal.isInfinite()) {
+                _goalError.value = "Enter a goal greater than 0"
+                return@launch
+            }
 
             _isSaving.value = true
 

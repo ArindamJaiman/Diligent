@@ -26,8 +26,25 @@ android {
         }
     }
 
+    // CI (.github/workflows/release.yml) decodes the keystore into app/release-keystore.jks
+    // and passes the passwords as environment variables. Local builds without it stay unsigned.
+    val releaseKeystore = file("release-keystore.jks")
+    signingConfigs {
+        create("release") {
+            if (releaseKeystore.exists()) {
+                storeFile = releaseKeystore
+                storePassword = System.getenv("KEYSTORE_PASSWORD")
+                keyAlias = System.getenv("KEY_ALIAS")
+                keyPassword = System.getenv("KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            if (releaseKeystore.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -101,8 +118,7 @@ dependencies {
     // DataStore
     implementation(libs.androidx.datastore.preferences)
 
-    // Serialization
-    implementation(libs.gson)
+    // Serialization (kotlinx only: generated serializers survive R8 obfuscation)
     implementation(libs.kotlinx.serialization.json)
 
     // Charts

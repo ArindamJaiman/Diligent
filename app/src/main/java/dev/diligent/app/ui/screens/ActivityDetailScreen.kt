@@ -31,6 +31,7 @@ import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -54,43 +55,52 @@ class ActivityDetailViewModel @Inject constructor(
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
     val todayProgress: StateFlow<DailyProgress?> =
-        repository.getProgressForDate(repository.today())
+        repository.getTodayProgress()
             .map { list -> list.find { it.activityId == activityId } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private val _streak = MutableStateFlow(0)
-    val streak: StateFlow<Int> = _streak.asStateFlow()
+    private data class History(
+        val streak: Int,
+        val weekly: List<Pair<String, Float>>,
+        val totalCompleted: Int
+    )
 
-    private val _weeklyData = MutableStateFlow<List<Pair<String, Float>>>(emptyList())
-    val weeklyData: StateFlow<List<Pair<String, Float>>> = _weeklyData.asStateFlow()
-
-    private val _totalCompleted = MutableStateFlow(0)
-    val totalCompleted: StateFlow<Int> = _totalCompleted.asStateFlow()
-
-    init {
-        viewModelScope.launch {
-            _streak.value = repository.calculateStreak(activityId)
-
-            // Weekly data
-            val today = LocalDate.now()
-            val weekData = (6 downTo 0).map { daysAgo ->
-                val date = today.minusDays(daysAgo.toLong())
-                val dateStr = date.format(dateFormatter)
-                val progress = repository.getAllProgressRangeSnapshot(dateStr, dateStr)
-                    .find { it.activityId == activityId }
-                val label = date.dayOfWeek.name.take(3)
-                label to (progress?.progress ?: 0f)
+    /**
+     * Last year of progress for this activity, re-derived whenever a row changes, so the
+     * streak, chart, and completed count update right after +1 / DONE.
+     */
+    @OptIn(ExperimentalCoroutinesApi::class)
+    private val history: StateFlow<History> =
+        repository.todayFlow()
+            .flatMapLatest { todayStr ->
+                val today = LocalDate.parse(todayStr, dateFormatter)
+                repository.getProgressRange(
+                    activityId,
+                    today.minusDays(365).format(dateFormatter),
+                    todayStr
+                ).mapLatest { rows ->
+                    val byDate = rows.associateBy { it.date }
+                    val weekly = (6 downTo 0).map { daysAgo ->
+                        val date = today.minusDays(daysAgo.toLong())
+                        date.dayOfWeek.name.take(3) to (byDate[date.format(dateFormatter)]?.progress ?: 0f)
+                    }
+                    History(
+                        streak = repository.calculateStreak(activityId),
+                        weekly = weekly,
+                        totalCompleted = rows.count { it.isCompleted }
+                    )
+                }
             }
-            _weeklyData.value = weekData
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), History(0, emptyList(), 0))
 
-            // Total completed days
-            val allDates = repository.getAllProgressRangeSnapshot(
-                today.minusDays(365).format(dateFormatter),
-                today.format(dateFormatter)
-            )
-            _totalCompleted.value = allDates.count { it.activityId == activityId && it.isCompleted }
-        }
-    }
+    val streak: StateFlow<Int> = history.map { it.streak }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+
+    val weeklyData: StateFlow<List<Pair<String, Float>>> = history.map { it.weekly }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+
+    val totalCompleted: StateFlow<Int> = history.map { it.totalCompleted }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
 
     fun increment() {
         viewModelScope.launch { repository.incrementProgress(activityId) }

@@ -14,7 +14,6 @@ import dagger.assisted.AssistedInject
 import dev.diligent.app.R
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.ui.MainActivity
-import java.util.concurrent.TimeUnit
 
 /**
  * WorkManager worker for sending daily reminder notifications.
@@ -32,11 +31,17 @@ class ReminderWorker @AssistedInject constructor(
 
         val type = inputData.getString(KEY_REMINDER_TYPE) ?: TYPE_DAILY
         val activityName = inputData.getString(KEY_ACTIVITY_NAME)
+        val settings = repository.getSettingsSnapshot()
 
-        when (type) {
-            TYPE_DAILY -> sendDailyReminder()
-            TYPE_ACTIVITY -> sendActivityReminder(activityName ?: "Activity")
-            TYPE_MISSED_GOAL -> sendMissedGoalNotification()
+        try {
+            when (type) {
+                TYPE_DAILY -> if (settings.dailyReminderEnabled) sendDailyReminder()
+                TYPE_ACTIVITY -> sendActivityReminder(activityName ?: "Activity")
+                TYPE_MISSED_GOAL -> if (settings.missedGoalNotification) sendMissedGoalNotification()
+            }
+        } finally {
+            // Queue tomorrow's run even if this notification failed to post.
+            ReminderScheduler.scheduleNext(applicationContext, type, settings)
         }
 
         return Result.success()
@@ -162,65 +167,5 @@ class ReminderWorker @AssistedInject constructor(
         const val TYPE_DAILY = "daily"
         const val TYPE_ACTIVITY = "activity"
         const val TYPE_MISSED_GOAL = "missed_goal"
-
-        /**
-         * Schedules the daily reminder as a periodic WorkManager task.
-         */
-        fun scheduleDailyReminder(context: Context) {
-            val request = PeriodicWorkRequestBuilder<ReminderWorker>(
-                1, TimeUnit.DAYS
-            )
-                .setInputData(
-                    workDataOf(KEY_REMINDER_TYPE to TYPE_DAILY)
-                )
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiresBatteryNotLow(true)
-                        .build()
-                )
-                .addTag("daily_reminder")
-                .build()
-
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(
-                    "diligent_daily_reminder",
-                    ExistingPeriodicWorkPolicy.KEEP,
-                    request
-                )
-        }
-
-        /**
-         * Schedules the missed goal check to run at end of day.
-         */
-        fun scheduleMissedGoalCheck(context: Context) {
-            val request = PeriodicWorkRequestBuilder<ReminderWorker>(
-                1, TimeUnit.DAYS
-            )
-                .setInputData(
-                    workDataOf(KEY_REMINDER_TYPE to TYPE_MISSED_GOAL)
-                )
-                .setConstraints(
-                    Constraints.Builder()
-                        .setRequiresBatteryNotLow(true)
-                        .build()
-                )
-                .addTag("missed_goal_check")
-                .build()
-
-            WorkManager.getInstance(context)
-                .enqueueUniquePeriodicWork(
-                    "diligent_missed_goal",
-                    ExistingPeriodicWorkPolicy.KEEP,
-                    request
-                )
-        }
-
-        /**
-         * Cancels all scheduled reminders.
-         */
-        fun cancelAll(context: Context) {
-            WorkManager.getInstance(context).cancelAllWorkByTag("daily_reminder")
-            WorkManager.getInstance(context).cancelAllWorkByTag("missed_goal_check")
-        }
     }
 }

@@ -16,6 +16,7 @@ import kotlinx.serialization.Serializable
  * @param missedGoalNotification Whether to notify when a goal is missed at end of day.
  * @param dynamicColor Whether to use Material You dynamic color (false = strict monochrome).
  * @param lastBackupTime Epoch millis of the last JSON backup.
+ * @param quotePreset Id of the quote pack shown on the Diligent widget (see QuotePresets).
  */
 @Serializable
 @Entity(tableName = "settings")
@@ -34,5 +35,16 @@ data class Settings(
     val githubUser2: String = "Quadr1on",
     val githubUser2Color: String = "crimson",
     val githubUser3: String = "SidhanthBibi",
-    val githubUser3Color: String = "blue"
+    val githubUser3Color: String = "blue",
+    val quotePreset: String = "wall_street"
 )
+
+/** One configured developer slot shown by the GitHub widgets. */
+data class GithubSlot(val index: Int, val username: String, val color: String)
+
+/** Developer slots that have a username; a cleared field means the slot is unused. */
+fun Settings.githubSlots(): List<GithubSlot> = listOf(
+    GithubSlot(1, githubUser1.trim(), githubUser1Color),
+    GithubSlot(2, githubUser2.trim(), githubUser2Color),
+    GithubSlot(3, githubUser3.trim(), githubUser3Color)
+).filter { it.username.isNotBlank() }

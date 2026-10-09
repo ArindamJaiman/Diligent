@@ -1,5 +1,7 @@
 package dev.diligent.app.data.repository
 
+import android.content.Context
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
@@ -10,9 +12,16 @@ import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.widget.WidgetUpdater
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
-import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flow
+import java.time.Duration
 import java.time.LocalDate
+import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import java.time.temporal.ChronoUnit
 import javax.inject.Inject
@@ -24,6 +33,7 @@ import javax.inject.Singleton
  */
 @Singleton
 class DiligentRepository @Inject constructor(
+    @ApplicationContext private val context: Context,
     private val activityDao: ActivityDao,
     private val dailyProgressDao: DailyProgressDao,
     private val settingsDao: SettingsDao,
@@ -37,24 +47,56 @@ class DiligentRepository @Inject constructor(
     fun getAllActiveActivities(): Flow<List<Activity>> = activityDao.getAllActive()
     fun getAllActivities(): Flow<List<Activity>> = activityDao.getAll()
     suspend fun getAllActiveSnapshot(): List<Activity> = activityDao.getAllActiveSnapshot()
+    suspend fun getAllActivitiesSnapshot(): List<Activity> = activityDao.getAllSnapshot()
     suspend fun getActivityById(id: Long): Activity? = activityDao.getById(id)
     fun getActivityByIdFlow(id: Long): Flow<Activity?> = activityDao.getByIdFlow(id)
     fun searchActivities(query: String): Flow<List<Activity>> = activityDao.search(query)
 
     suspend fun createActivity(activity: Activity): Long {
         val sortOrder = activityDao.getNextSortOrder()
-        return activityDao.insert(activity.copy(sortOrder = sortOrder))
+        val id = activityDao.insert(activity.copy(sortOrder = sortOrder))
+        trackerChanged()
+        return id
     }
 
-    suspend fun updateActivity(activity: Activity) = activityDao.update(activity)
-    suspend fun deleteActivity(activity: Activity) = activityDao.delete(activity)
-    suspend fun archiveActivity(id: Long) = activityDao.archive(id)
-    suspend fun insertAllActivities(activities: List<Activity>) = activityDao.insertAll(activities)
+    /**
+     * Updates an activity. When the daily goal changes, today's completion flag is
+     * recalculated so the dashboard and widget don't show a stale checkmark.
+     */
+    suspend fun updateActivity(activity: Activity) {
+        val previous = activityDao.getById(activity.id)
+        activityDao.update(activity)
+        if (previous != null && previous.dailyGoal != activity.dailyGoal) {
+            dailyProgressDao.getProgressForActivityOnDate(activity.id, today())?.let { progress ->
+                dailyProgressDao.update(
+                    progress.copy(isCompleted = progress.progress >= activity.dailyGoal)
+                )
+            }
+        }
+        trackerChanged()
+    }
+
+    suspend fun deleteActivity(activity: Activity) {
+        activityDao.delete(activity)
+        trackerChanged()
+    }
+
+    suspend fun archiveActivity(id: Long) {
+        activityDao.archive(id)
+        trackerChanged()
+    }
+
+    suspend fun insertAllActivities(activities: List<Activity>) {
+        activityDao.insertAll(activities)
+        trackerChanged()
+    }
 
     // ─── Daily Progress ─────────────────────────────────────────
 
+    /** Today's progress; switches to the new day at midnight while observed. */
+    @OptIn(ExperimentalCoroutinesApi::class)
     fun getTodayProgress(): Flow<List<DailyProgress>> =
-        dailyProgressDao.getProgressForDate(today())
+        todayFlow().flatMapLatest { dailyProgressDao.getProgressForDate(it) }
 
     suspend fun getTodayProgressSnapshot(): List<DailyProgress> =
         dailyProgressDao.getProgressForDateSnapshot(today())
@@ -101,6 +143,7 @@ class DiligentRepository @Inject constructor(
                 )
             )
         }
+        trackerChanged()
     }
 
     /**
@@ -120,6 +163,7 @@ class DiligentRepository @Inject constructor(
                 lastUpdated = System.currentTimeMillis()
             )
         )
+        trackerChanged()
     }
 
     /**
@@ -149,13 +193,16 @@ class DiligentRepository @Inject constructor(
                 )
             )
         }
+        trackerChanged()
     }
 
     suspend fun getAllDailyProgressSnapshot(): List<DailyProgress> =
         dailyProgressDao.getAllSnapshot()
 
-    suspend fun insertAllProgress(progressList: List<DailyProgress>) =
+    suspend fun insertAllProgress(progressList: List<DailyProgress>) {
         dailyProgressDao.insertAll(progressList)
+        trackerChanged()
+    }
 
     // ─── Streaks ────────────────────────────────────────────────
 
@@ -215,19 +262,28 @@ class DiligentRepository @Inject constructor(
 
         if (totalPossible == 0L) return 0f
 
-        val completed = progress.count { it.isCompleted }
+        // Only count completions of activities that are still active, so archived
+        // history can't push the rate past what the denominator allows.
+        val activeIds = activities.mapTo(HashSet()) { it.id }
+        val completed = progress.count { it.isCompleted && it.activityId in activeIds }
         return (completed.toFloat() / totalPossible.toFloat()).coerceIn(0f, 1f)
     }
 
     /**
      * Calculate total hours tracked across all activities in a date range.
+     * Activities tracked in minutes are converted to hours.
      */
     suspend fun getTotalHoursTracked(startDate: String, endDate: String): Float {
         val progress = dailyProgressDao.getAllProgressRangeSnapshot(startDate, endDate)
         val activities = activityDao.getAllActiveSnapshot().associateBy { it.id }
         return progress
-            .filter { activities[it.activityId]?.unit == "hrs" }
-            .sumOf { it.progress.toDouble() }
+            .sumOf { p ->
+                when (activities[p.activityId]?.unit) {
+                    "hrs" -> p.progress.toDouble()
+                    "mins" -> p.progress / 60.0
+                    else -> 0.0
+                }
+            }
             .toFloat()
     }
 
@@ -235,6 +291,7 @@ class DiligentRepository @Inject constructor(
 
     fun getSettings(): Flow<Settings?> = settingsDao.getSettings()
     suspend fun getSettingsSnapshot(): Settings = settingsDao.getSettingsSnapshot() ?: Settings()
+    suspend fun hasSettings(): Boolean = settingsDao.getSettingsSnapshot() != null
     suspend fun updateSettings(settings: Settings) = settingsDao.insert(settings)
 
     // ─── Reminders ──────────────────────────────────────────────
@@ -276,12 +333,9 @@ class DiligentRepository @Inject constructor(
         if (username.isBlank()) return false
         val result = GithubContributionFetcher.fetchContributions(username) ?: return false
 
-        val gson = com.google.gson.Gson()
-        val json = gson.toJson(result.contributions)
-
         val cached = GithubContribution(
             username = username,
-            contributionsJson = json,
+            contributionsJson = GithubContributionFetcher.encode(result.contributions),
             lastUpdated = System.currentTimeMillis(),
             totalAnnual = result.totalAnnual,
             currentStreak = result.currentStreak
@@ -294,6 +348,19 @@ class DiligentRepository @Inject constructor(
 
     fun today(): String = LocalDate.now().format(dateFormatter)
 
+    /**
+     * Emits today's date, then again just after each local midnight.
+     * Only one suspended delay per day — no polling.
+     */
+    fun todayFlow(): Flow<String> = flow {
+        while (true) {
+            val now = LocalDateTime.now()
+            emit(now.toLocalDate().format(dateFormatter))
+            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay()
+            delay(Duration.between(now, nextMidnight).toMillis() + 1_000)
+        }
+    }.distinctUntilChanged()
+
     fun daysAgo(days: Long): String =
         LocalDate.now().minusDays(days).format(dateFormatter)
 
@@ -302,4 +369,9 @@ class DiligentRepository @Inject constructor(
 
     fun startOfMonth(): String =
         LocalDate.now().withDayOfMonth(1).format(dateFormatter)
+
+    /** Keeps the home-screen tracker widget in sync with in-app changes. */
+    private suspend fun trackerChanged() {
+        WidgetUpdater.refreshTracker(context)
+    }
 }

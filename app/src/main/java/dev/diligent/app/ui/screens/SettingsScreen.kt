@@ -1,5 +1,7 @@
 package dev.diligent.app.ui.screens
 
+import android.Manifest
+import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -22,12 +24,15 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
+import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.ui.viewmodel.SettingsViewModel
+import dev.diligent.app.widget.quotes.QuotePresets
 
 /**
  * Settings screen with reminder controls, backup/restore, and export.
@@ -46,6 +51,46 @@ fun SettingsScreen(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.restoreFromJson(it) }
+    }
+
+    val context = LocalContext.current
+    var showTimePicker by remember { mutableStateOf(false) }
+    var showPresetPicker by remember { mutableStateOf(false) }
+
+    // Android 13+ needs runtime permission before any reminder can be shown
+    val notificationPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { }
+    val ensureNotificationPermission = {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) !=
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            notificationPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+        }
+    }
+
+    if (showTimePicker) {
+        ReminderTimeDialog(
+            initialHour = settings.dailyReminderHour,
+            initialMinute = settings.dailyReminderMinute,
+            onDismiss = { showTimePicker = false },
+            onConfirm = { hour, minute ->
+                viewModel.updateReminderTime(hour, minute)
+                showTimePicker = false
+            }
+        )
+    }
+
+    if (showPresetPicker) {
+        QuotePresetDialog(
+            selectedId = settings.quotePreset,
+            onDismiss = { showPresetPicker = false },
+            onSelect = { id ->
+                viewModel.updateQuotePreset(id)
+                showPresetPicker = false
+            }
+        )
     }
 
     // Collect messages for snackbar
@@ -104,17 +149,24 @@ fun SettingsScreen(
             SettingsToggleItem(
                 icon = Icons.Default.Notifications,
                 title = "Daily Reminder",
-                subtitle = "Remind at ${String.format("%02d:%02d", settings.dailyReminderHour, settings.dailyReminderMinute)}",
+                subtitle = "Remind at ${String.format("%02d:%02d", settings.dailyReminderHour, settings.dailyReminderMinute)} · tap to change",
                 checked = settings.dailyReminderEnabled,
-                onCheckedChange = { viewModel.updateDailyReminder(it) }
+                onCheckedChange = {
+                    if (it) ensureNotificationPermission()
+                    viewModel.updateDailyReminder(it)
+                },
+                onClick = { showTimePicker = true }
             )
 
             SettingsToggleItem(
                 icon = Icons.Default.Warning,
                 title = "Missed Goal Alert",
-                subtitle = "Notify when daily goals are incomplete",
+                subtitle = "At ${String.format("%02d:%02d", ReminderScheduler.MISSED_GOAL_HOUR, ReminderScheduler.MISSED_GOAL_MINUTE)} if daily goals are incomplete",
                 checked = settings.missedGoalNotification,
-                onCheckedChange = { viewModel.updateMissedGoalNotification(it) }
+                onCheckedChange = {
+                    if (it) ensureNotificationPermission()
+                    viewModel.updateMissedGoalNotification(it)
+                }
             )
 
             // ─── Appearance Section ─────────────────────────
@@ -129,6 +181,17 @@ fun SettingsScreen(
                     onCheckedChange = { viewModel.updateDynamicColor(it) }
                 )
             }
+
+            // ─── Widget Quotes Section ──────────────────────
+            SettingsSectionHeader("WIDGET QUOTES")
+
+            val selectedPreset = QuotePresets.byId(settings.quotePreset)
+            SettingsActionItem(
+                icon = Icons.Default.FormatQuote,
+                title = "Quote Pack · ${selectedPreset.name}",
+                subtitle = "${selectedPreset.quotes.size} quotes · ${selectedPreset.description}",
+                onClick = { showPresetPicker = true }
+            )
 
             // ─── GitHub Section ─────────────────────────────
             SettingsSectionHeader("GITHUB VERSUS CONTROLS")
@@ -250,7 +313,8 @@ private fun SettingsToggleItem(
     title: String,
     subtitle: String,
     checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit
+    onCheckedChange: (Boolean) -> Unit,
+    onClick: (() -> Unit)? = null
 ) {
     Box(
         modifier = Modifier
@@ -258,6 +322,7 @@ private fun SettingsToggleItem(
             .clip(RoundedCornerShape(12.dp))
             .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
             .background(DiligentColors.Surface)
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(horizontal = 16.dp, vertical = 14.dp)
     ) {
         Row(
@@ -444,4 +509,114 @@ private fun GithubUserConfigCard(
             }
         }
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun ReminderTimeDialog(
+    initialHour: Int,
+    initialMinute: Int,
+    onDismiss: () -> Unit,
+    onConfirm: (Int, Int) -> Unit
+) {
+    val state = rememberTimePickerState(
+        initialHour = initialHour,
+        initialMinute = initialMinute,
+        is24Hour = true
+    )
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DiligentColors.SurfaceElevated,
+        title = { Text("Daily Reminder", fontFamily = Cinzel, color = DiligentColors.White) },
+        text = {
+            TimePicker(
+                state = state,
+                colors = TimePickerDefaults.colors(
+                    clockDialColor = DiligentColors.Surface,
+                    selectorColor = DiligentColors.White,
+                    clockDialSelectedContentColor = DiligentColors.Black,
+                    clockDialUnselectedContentColor = DiligentColors.Gray700,
+                    timeSelectorSelectedContainerColor = DiligentColors.White,
+                    timeSelectorSelectedContentColor = DiligentColors.Black,
+                    timeSelectorUnselectedContainerColor = DiligentColors.Surface,
+                    timeSelectorUnselectedContentColor = DiligentColors.White
+                )
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(state.hour, state.minute) }) {
+                Text("SAVE", color = DiligentColors.White, fontFamily = DotMatrix)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = DiligentColors.Gray600, fontFamily = DotMatrix)
+            }
+        }
+    )
+}
+
+@Composable
+private fun QuotePresetDialog(
+    selectedId: String,
+    onDismiss: () -> Unit,
+    onSelect: (String) -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DiligentColors.SurfaceElevated,
+        title = { Text("Quote Pack", fontFamily = Cinzel, color = DiligentColors.White) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                QuotePresets.selectable.forEach { preset ->
+                    val selected = preset.id == selectedId
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .border(
+                                1.dp,
+                                if (selected) DiligentColors.White else DiligentColors.Border,
+                                RoundedCornerShape(10.dp)
+                            )
+                            .clickable { onSelect(preset.id) }
+                            .padding(horizontal = 12.dp, vertical = 10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = preset.name,
+                                style = MaterialTheme.typography.bodyMedium.copy(
+                                    fontFamily = DotMatrix,
+                                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
+                                ),
+                                color = DiligentColors.White
+                            )
+                            Text(
+                                text = "${preset.quotes.size} quotes · ${preset.description}",
+                                style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                                color = DiligentColors.Gray600
+                            )
+                        }
+                        if (selected) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Selected",
+                                tint = DiligentColors.White,
+                                modifier = Modifier.size(18.dp)
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CLOSE", color = DiligentColors.Gray600, fontFamily = DotMatrix)
+            }
+        }
+    )
 }

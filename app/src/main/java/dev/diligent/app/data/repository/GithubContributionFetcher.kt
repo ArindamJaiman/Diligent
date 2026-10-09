@@ -1,8 +1,9 @@
 package dev.diligent.app.data.repository
 
 import android.util.Log
-import java.io.BufferedReader
-import java.io.InputStreamReader
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.net.HttpURLConnection
 import java.net.URL
 import java.time.LocalDate
@@ -18,6 +19,14 @@ object GithubContributionFetcher {
     private val DATE_PATTERN = Pattern.compile("data-date=\"([^\"]+)\"")
     private val LEVEL_PATTERN = Pattern.compile("data-level=\"([^\"]+)\"")
 
+    // "1,234 contributions in the last year" heading above the calendar
+    private val TOTAL_PATTERN = Pattern.compile("([\\d,]+)\\s+contributions?\\s+in the last year")
+    // Per-day tooltips: "5 contributions on June 3rd."
+    private val TOOLTIP_COUNT_PATTERN = Pattern.compile(">\\s*(\\d+)\\s+contributions?\\s+on\\b")
+
+    private val json = Json { ignoreUnknownKeys = true }
+
+    @Serializable
     data class ParsedContribution(
         val date: String,
         val level: Int
@@ -78,13 +87,45 @@ object GithubContributionFetcher {
         // Sort chronologically by date
         contributions.sortBy { it.date }
 
-        val totalAnnual = contributions.count { it.level > 0 }
+        val totalAnnual = parseTotalContributions(html) ?: contributions.count { it.level > 0 }
         val currentStreak = calculateStreak(contributions)
 
         return FetchResult(contributions, totalAnnual, currentStreak)
     }
 
-    private fun calculateStreak(contributions: List<ParsedContribution>): Int {
+    /**
+     * Reads the real contribution count from the calendar heading, falling back to
+     * summing the per-day tooltips. Returns null when neither is present.
+     */
+    private fun parseTotalContributions(html: String): Int? {
+        val heading = TOTAL_PATTERN.matcher(html)
+        if (heading.find()) {
+            heading.group(1)?.replace(",", "")?.toIntOrNull()?.let { return it }
+        }
+        val tooltips = TOOLTIP_COUNT_PATTERN.matcher(html)
+        var sum = 0
+        var found = false
+        while (tooltips.find()) {
+            sum += tooltips.group(1)?.toIntOrNull() ?: 0
+            found = true
+        }
+        return if (found) sum else null
+    }
+
+    fun encode(contributions: List<ParsedContribution>): String = json.encodeToString(contributions)
+
+    /** Decodes the cached JSON; returns an empty list for unreadable or legacy-obfuscated caches. */
+    fun decode(contributionsJson: String): List<ParsedContribution> =
+        try {
+            json.decodeFromString<List<ParsedContribution>>(contributionsJson)
+        } catch (e: Exception) {
+            emptyList()
+        }
+
+    /**
+     * Current streak of active days ending today, or yesterday if today has no activity yet.
+     */
+    fun calculateStreak(contributions: List<ParsedContribution>, today: LocalDate = LocalDate.now()): Int {
         if (contributions.isEmpty()) return 0
 
         val activeDates = contributions
@@ -101,7 +142,7 @@ object GithubContributionFetcher {
         if (activeDates.isEmpty()) return 0
 
         var streak = 0
-        var checkDate = LocalDate.now()
+        var checkDate = today
 
         // If not active today, check if active yesterday (meaning the streak is still alive)
         if (!activeDates.contains(checkDate)) {

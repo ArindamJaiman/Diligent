@@ -20,6 +20,9 @@ interface ActivityDao {
     @Query("SELECT * FROM activities WHERE isArchived = 0 ORDER BY sortOrder ASC")
     suspend fun getAllActiveSnapshot(): List<Activity>
 
+    @Query("SELECT * FROM activities ORDER BY sortOrder ASC")
+    suspend fun getAllSnapshot(): List<Activity>
+
     @Query("SELECT * FROM activities WHERE id = :id")
     suspend fun getById(id: Long): Activity?
 

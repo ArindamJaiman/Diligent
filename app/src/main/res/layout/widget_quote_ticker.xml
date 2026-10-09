@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Animated ticker-tape panel for the Diligent widget using ViewFlipper.
-     Provides smooth sliding text animations fully supported in RemoteViews. -->
+     Provides smooth sliding text animations fully supported in RemoteViews.
+     Flipping runs in the launcher and pauses while the home screen is hidden;
+     intervals are kept relaxed to minimise redraws. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:id="@+id/ticker_container"
     android:layout_width="match_parent"
@@ -18,7 +20,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:autoStart="true"
-        android:flipInterval="3000"
+        android:flipInterval="6000"
         android:inAnimation="@android:anim/slide_in_left"
         android:outAnimation="@android:anim/slide_out_right">
 
@@ -77,7 +79,7 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:autoStart="true"
-        android:flipInterval="6000"
+        android:flipInterval="12000"
         android:inAnimation="@android:anim/slide_in_left"
         android:outAnimation="@android:anim/slide_out_right">
 
@@ -146,6 +148,55 @@
                 android:maxLines="4" />
             <TextView
                 android:id="@+id/quote_author_3"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF5A5A5A"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:gravity="end"
+                android:paddingEnd="6dp"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+
+        <!-- Slide 4 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/quote_text_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFB0B0B0"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxLines="4" />
+            <TextView
+                android:id="@+id/quote_author_4"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FF5A5A5A"
+                android:textSize="9sp"
+                android:fontFamily="monospace"
+                android:gravity="end"
+                android:paddingEnd="6dp"
+                android:layout_marginTop="1dp" />
+        </LinearLayout>
+        <!-- Slide 5 -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical">
+            <TextView
+                android:id="@+id/quote_text_5"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:textColor="#FFB0B0B0"
+                android:textSize="11sp"
+                android:fontFamily="monospace"
+                android:maxLines="4" />
+            <TextView
+                android:id="@+id/quote_author_5"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:textColor="#FF5A5A5A"

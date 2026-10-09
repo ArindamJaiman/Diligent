@@ -4,23 +4,29 @@ import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.google.gson.Gson
-import com.google.gson.GsonBuilder
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.diligent.app.data.local.entity.Activity
+import dev.diligent.app.data.local.entity.ActivityReminder
+import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.data.local.entity.githubSlots
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.Serializable
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
-import androidx.glance.appwidget.updateAll
 
 /**
  * ViewModel for the Settings screen.
@@ -43,23 +49,23 @@ class SettingsViewModel @Inject constructor(
     // ─── Settings Updates ───────────────────────────────────────
 
     fun updateDailyReminder(enabled: Boolean) {
-        viewModelScope.launch {
-            val current = repository.getSettingsSnapshot()
-            repository.updateSettings(current.copy(dailyReminderEnabled = enabled))
-        }
+        updateRemindersWith { it.copy(dailyReminderEnabled = enabled) }
     }
 
     fun updateReminderTime(hour: Int, minute: Int) {
-        viewModelScope.launch {
-            val current = repository.getSettingsSnapshot()
-            repository.updateSettings(current.copy(dailyReminderHour = hour, dailyReminderMinute = minute))
-        }
+        updateRemindersWith { it.copy(dailyReminderHour = hour, dailyReminderMinute = minute) }
     }
 
     fun updateMissedGoalNotification(enabled: Boolean) {
+        updateRemindersWith { it.copy(missedGoalNotification = enabled) }
+    }
+
+    /** Saves a reminder-related change and reschedules the jobs to match it. */
+    private fun updateRemindersWith(change: (Settings) -> Settings) {
         viewModelScope.launch {
-            val current = repository.getSettingsSnapshot()
-            repository.updateSettings(current.copy(missedGoalNotification = enabled))
+            val updated = change(repository.getSettingsSnapshot())
+            repository.updateSettings(updated)
+            ReminderScheduler.sync(context, updated, replaceExisting = true)
         }
     }
 
@@ -67,6 +73,15 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = repository.getSettingsSnapshot()
             repository.updateSettings(current.copy(dynamicColor = enabled))
+        }
+    }
+
+    fun updateQuotePreset(presetId: String) {
+        viewModelScope.launch {
+            val current = repository.getSettingsSnapshot()
+            if (current.quotePreset == presetId) return@launch
+            repository.updateSettings(current.copy(quotePreset = presetId))
+            WidgetUpdater.refreshTracker(context)
         }
     }
 
@@ -80,11 +95,8 @@ class SettingsViewModel @Inject constructor(
                 else -> current
             }
             repository.updateSettings(updated)
-            _message.emit("Username saved.")
-            try {
-                dev.diligent.app.widget.GithubWidget().updateAll(context)
-                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
-            } catch (e: Exception) { }
+            _message.emit(if (username.isBlank()) "Developer slot cleared." else "Username saved.")
+            WidgetUpdater.refreshGithub(context)
         }
     }
 
@@ -94,35 +106,27 @@ class SettingsViewModel @Inject constructor(
      */
     fun syncAllGithubContributions() {
         viewModelScope.launch {
-            val settings = repository.getSettingsSnapshot()
-            val user1 = settings.githubUser1.ifBlank { "LennyDany-03" }
-            val user2 = settings.githubUser2.ifBlank { "Quadr1on" }
-            val user3 = settings.githubUser3.ifBlank { "SidhanthBibi" }
-            val users = listOf(user1, user2, user3).filter { it.isNotBlank() }
+            val users = repository.getSettingsSnapshot().githubSlots().map { it.username }
+            if (users.isEmpty()) {
+                _message.emit("Add a GitHub username first.")
+                return@launch
+            }
 
             _message.emit("Syncing ${users.size} contribution graphs...")
 
-            var successCount = 0
-            withContext(Dispatchers.IO) {
+            val successCount = withContext(Dispatchers.IO) {
                 users.map { username ->
-                    async {
-                        repository.syncGithubContributions(username)
-                    }
-                }.awaitAll().forEach { success ->
-                    if (success) successCount++
-                }
+                    async { repository.syncGithubContributions(username) }
+                }.awaitAll().count { it }
             }
 
             if (successCount == users.size) {
                 _message.emit("All $successCount graphs updated successfully!")
             } else {
-                _message.emit("$successCount/${users.size} synced. Check connection for failures.")
+                _message.emit("$successCount/${users.size} synced. Check usernames and connection.")
             }
 
-            try {
-                dev.diligent.app.widget.GithubWidget().updateAll(context)
-                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
-            } catch (e: Exception) { }
+            WidgetUpdater.refreshGithub(context)
         }
     }
 
@@ -136,44 +140,50 @@ class SettingsViewModel @Inject constructor(
                 else -> current
             }
             repository.updateSettings(updated)
-            try {
-                dev.diligent.app.widget.GithubWidget().updateAll(context)
-                dev.diligent.app.widget.GithubVsWidget().updateAll(context)
-            } catch (e: Exception) { }
+            WidgetUpdater.refreshGithub(context)
         }
     }
 
     // ─── Backup & Restore ───────────────────────────────────────
 
     /**
-     * Data model for JSON backup.
+     * Data model for JSON backup. Missing fields fall back to defaults, so backups
+     * made by older versions (or containing fields added later) still restore.
      */
+    @Serializable
     data class BackupData(
-        val activities: List<dev.diligent.app.data.local.entity.Activity>,
-        val dailyProgress: List<dev.diligent.app.data.local.entity.DailyProgress>,
-        val settings: Settings,
-        val reminders: List<dev.diligent.app.data.local.entity.ActivityReminder>,
-        val backupTime: String
+        val activities: List<Activity> = emptyList(),
+        val dailyProgress: List<DailyProgress> = emptyList(),
+        val settings: Settings = Settings(),
+        val reminders: List<ActivityReminder> = emptyList(),
+        val backupTime: String = ""
     )
+
+    private val backupJson = Json {
+        prettyPrint = true
+        ignoreUnknownKeys = true
+        coerceInputValues = true
+        encodeDefaults = true
+    }
 
     fun backupToJson() {
         viewModelScope.launch {
             try {
-                val gson = GsonBuilder().setPrettyPrinting().create()
                 val backup = BackupData(
-                    activities = repository.getAllActiveSnapshot(),
+                    // Include archived activities too: their progress rows reference them.
+                    activities = repository.getAllActivitiesSnapshot(),
                     dailyProgress = repository.getAllDailyProgressSnapshot(),
                     settings = repository.getSettingsSnapshot(),
                     reminders = repository.getAllRemindersSnapshot(),
                     backupTime = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                 )
 
-                val json = gson.toJson(backup)
-                val dir = File(context.getExternalFilesDir(null), "backups")
-                dir.mkdirs()
-                val filename = "diligent_backup_${System.currentTimeMillis()}.json"
-                val file = File(dir, filename)
-                file.writeText(json)
+                val json = backupJson.encodeToString(backup)
+                val file = withContext(Dispatchers.IO) {
+                    val dir = File(context.getExternalFilesDir(null), "backups")
+                    dir.mkdirs()
+                    File(dir, "diligent_backup_${System.currentTimeMillis()}.json").also { it.writeText(json) }
+                }
 
                 repository.updateSettings(
                     repository.getSettingsSnapshot().copy(lastBackupTime = System.currentTimeMillis())
@@ -189,20 +199,30 @@ class SettingsViewModel @Inject constructor(
     fun restoreFromJson(uri: Uri) {
         viewModelScope.launch {
             try {
-                val inputStream = context.contentResolver.openInputStream(uri)
-                val json = inputStream?.bufferedReader()?.readText() ?: throw Exception("Cannot read file")
-                inputStream.close()
+                val json = withContext(Dispatchers.IO) {
+                    context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
+                } ?: throw IllegalStateException("Cannot read file")
 
-                val gson = Gson()
-                val backup = gson.fromJson(json, BackupData::class.java)
+                val backup = backupJson.decodeFromString<BackupData>(json)
 
                 // Restore data
                 repository.insertAllActivities(backup.activities)
-                repository.insertAllProgress(backup.dailyProgress)
-                repository.updateSettings(backup.settings)
-                repository.insertAllReminders(backup.reminders)
 
-                _message.emit("Restore complete — ${backup.activities.size} activities recovered")
+                // Skip rows whose activity no longer exists (older backups left archived
+                // activities out), instead of failing the whole restore on a foreign key.
+                val knownIds = repository.getAllActivitiesSnapshot().mapTo(HashSet()) { it.id }
+                val progress = backup.dailyProgress.filter { it.activityId in knownIds }
+                val reminders = backup.reminders.filter { it.activityId in knownIds }
+                repository.insertAllProgress(progress)
+                repository.updateSettings(backup.settings)
+                repository.insertAllReminders(reminders)
+
+                ReminderScheduler.sync(context, backup.settings, replaceExisting = true)
+                WidgetUpdater.refreshAll(context)
+
+                val skipped = (backup.dailyProgress.size - progress.size) + (backup.reminders.size - reminders.size)
+                val suffix = if (skipped > 0) " ($skipped orphaned rows skipped)" else ""
+                _message.emit("Restore complete — ${backup.activities.size} activities recovered$suffix")
             } catch (e: Exception) {
                 _message.emit("Restore failed: ${e.message}")
             }
@@ -214,25 +234,24 @@ class SettingsViewModel @Inject constructor(
     fun exportStatsCsv() {
         viewModelScope.launch {
             try {
-                val activities = repository.getAllActiveSnapshot()
+                val activityMap = repository.getAllActivitiesSnapshot().associateBy { it.id }
                 val progress = repository.getAllDailyProgressSnapshot()
-                val activityMap = activities.associateBy { it.id }
 
                 val csv = buildString {
                     appendLine("Date,Activity,Progress,Goal,Unit,Completed")
                     progress.sortedBy { it.date }.forEach { p ->
                         val a = activityMap[p.activityId]
                         if (a != null) {
-                            appendLine("${p.date},\"${a.name}\",${p.progress},${a.dailyGoal},${a.unit},${p.isCompleted}")
+                            appendLine("${p.date},${csvField(a.name)},${p.progress},${a.dailyGoal},${csvField(a.unit)},${p.isCompleted}")
                         }
                     }
                 }
 
-                val dir = File(context.getExternalFilesDir(null), "exports")
-                dir.mkdirs()
-                val filename = "diligent_stats_${System.currentTimeMillis()}.csv"
-                val file = File(dir, filename)
-                file.writeText(csv)
+                val file = withContext(Dispatchers.IO) {
+                    val dir = File(context.getExternalFilesDir(null), "exports")
+                    dir.mkdirs()
+                    File(dir, "diligent_stats_${System.currentTimeMillis()}.csv").also { it.writeText(csv) }
+                }
 
                 _message.emit("CSV exported to ${file.absolutePath}")
             } catch (e: Exception) {
@@ -240,4 +259,7 @@ class SettingsViewModel @Inject constructor(
             }
         }
     }
+
+    /** Quotes a CSV field and escapes embedded quotes (RFC 4180). */
+    private fun csvField(value: String): String = "\"" + value.replace("\"", "\"\"") + "\""
 }
