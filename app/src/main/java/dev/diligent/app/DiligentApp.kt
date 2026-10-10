@@ -7,6 +7,9 @@ import dagger.hilt.android.HiltAndroidApp
 import dev.diligent.app.data.local.SampleDataSeeder
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.quotapulse.data.LiveMode
+import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
+import dev.diligent.app.quotapulse.live.LiveMonitorService
 import dev.diligent.app.widget.DayChangeRefresh
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -30,6 +33,9 @@ class DiligentApp : Application(), Configuration.Provider {
     @Inject
     lateinit var repository: DiligentRepository
 
+    @Inject
+    lateinit var quotaPulsePrefs: QuotaPulsePrefs
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -49,5 +55,11 @@ class DiligentApp : Application(), Configuration.Provider {
 
         // Re-arm the midnight widget refresh if any widget is on the home screen
         DayChangeRefresh.scheduleIfWidgetsExist(this)
+
+        // A fresh process can't have a running live service. If live mode was marked on,
+        // report the interruption truthfully instead of claiming LIVE or restarting it.
+        if (quotaPulsePrefs.current().liveMode == LiveMode.LIVE && !LiveMonitorService.isRunning) {
+            quotaPulsePrefs.markInterrupted("Live monitoring ended when the app was closed or the phone restarted")
+        }
     }
 }

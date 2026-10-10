@@ -3,11 +3,15 @@ package dev.diligent.app.ui.navigation
 import androidx.compose.animation.*
 import androidx.compose.animation.core.tween
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import dev.diligent.app.quotapulse.data.Provider
+import dev.diligent.app.quotapulse.ui.QuotaPulseProviderScreen
+import dev.diligent.app.quotapulse.ui.QuotaPulseScreen
 import dev.diligent.app.ui.screens.ActivityDetailScreen
 import dev.diligent.app.ui.screens.ActivityEditScreen
 import dev.diligent.app.ui.screens.DashboardScreen
@@ -19,7 +23,19 @@ import dev.diligent.app.ui.screens.StatisticsScreen
  * Smooth fade transitions between screens for a premium feel.
  */
 @Composable
-fun DiligentNavGraph(navController: NavHostController) {
+fun DiligentNavGraph(
+    navController: NavHostController,
+    pendingRoute: String? = null,
+    onRouteConsumed: () -> Unit = {}
+) {
+    // Routes requested from outside the app (e.g. QuotaPulse widget taps)
+    LaunchedEffect(pendingRoute) {
+        if (pendingRoute != null) {
+            navController.navigate(pendingRoute) { launchSingleTop = true }
+            onRouteConsumed()
+        }
+    }
+
     NavHost(
         navController = navController,
         startDestination = DiligentScreen.Dashboard.route,
@@ -41,6 +57,9 @@ fun DiligentNavGraph(navController: NavHostController) {
                 },
                 onNavigateToSettings = {
                     navController.navigate(DiligentScreen.Settings.route)
+                },
+                onNavigateToQuotaPulse = {
+                    navController.navigate(DiligentScreen.QuotaPulse.route)
                 }
             )
         }
@@ -74,6 +93,26 @@ fun DiligentNavGraph(navController: NavHostController) {
 
         composable(DiligentScreen.Settings.route) {
             SettingsScreen(
+                onNavigateBack = { navController.popBackStack() }
+            )
+        }
+
+        composable(DiligentScreen.QuotaPulse.route) {
+            QuotaPulseScreen(
+                onNavigateBack = { navController.popBackStack() },
+                onOpenProvider = { provider ->
+                    navController.navigate(DiligentScreen.QuotaPulseProvider.createRoute(provider.name))
+                }
+            )
+        }
+
+        composable(
+            route = DiligentScreen.QuotaPulseProvider.route,
+            arguments = listOf(navArgument("provider") { type = NavType.StringType })
+        ) { entry ->
+            val provider = Provider.from(entry.arguments?.getString("provider")) ?: Provider.CLAUDE
+            QuotaPulseProviderScreen(
+                provider = provider,
                 onNavigateBack = { navController.popBackStack() }
             )
         }

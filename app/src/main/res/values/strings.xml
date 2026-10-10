@@ -7,4 +7,6 @@
     <string name="widget_github_description">Displays a developer\'s GitHub contribution grid and streak</string>
     <string name="widget_github_vs_name">GitHub Versus Mode</string>
     <string name="widget_github_vs_description">Compare side-by-side streaks and contribution grids of two developers</string>
+    <string name="widget_quotapulse_name">QuotaPulse</string>
+    <string name="widget_quotapulse_description">Claude, Gemini, Antigravity and Codex usage at a glance. Syncs only when you tap SYNC.</string>
 </resources>

@@ -14,6 +14,9 @@ import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.quotapulse.data.QuotaPulseDao
+import dev.diligent.app.quotapulse.data.UsageSnapshot
+import dev.diligent.app.quotapulse.data.UsageSourceStatus
 
 /**
  * Room database for the Diligent app.
@@ -25,9 +28,11 @@ import dev.diligent.app.data.local.entity.Settings
         DailyProgress::class,
         Settings::class,
         ActivityReminder::class,
-        GithubContribution::class
+        GithubContribution::class,
+        UsageSnapshot::class,
+        UsageSourceStatus::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 abstract class DiligentDatabase : RoomDatabase() {
@@ -36,6 +41,7 @@ abstract class DiligentDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
     abstract fun activityReminderDao(): ActivityReminderDao
     abstract fun githubContributionDao(): GithubContributionDao
+    abstract fun quotaPulseDao(): QuotaPulseDao
 
     companion object {
         const val DATABASE_NAME = "diligent_db"
@@ -69,6 +75,25 @@ abstract class DiligentDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3)
+        /** v4 added the QuotaPulse usage snapshot and source status tables. */
+        val MIGRATION_3_4 = object : Migration(3, 4) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `usage_snapshots` (`provider` TEXT NOT NULL, " +
+                        "`metricKey` TEXT NOT NULL, `kind` TEXT NOT NULL, `source` TEXT NOT NULL, " +
+                        "`title` TEXT NOT NULL, `percentLeft` REAL, `amount` REAL, `unit` TEXT, `detail` TEXT, " +
+                        "`resetsAt` INTEGER, `measuredAt` INTEGER NOT NULL, `fetchedAt` INTEGER NOT NULL, " +
+                        "PRIMARY KEY(`provider`, `metricKey`))"
+                )
+                db.execSQL(
+                    "CREATE TABLE IF NOT EXISTS `usage_source_status` (`provider` TEXT NOT NULL, " +
+                        "`source` TEXT NOT NULL, `state` TEXT NOT NULL, `message` TEXT, " +
+                        "`lastAttemptAt` INTEGER NOT NULL, `lastSuccessAt` INTEGER NOT NULL, " +
+                        "`retryAfter` INTEGER NOT NULL, PRIMARY KEY(`provider`, `source`))"
+                )
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
     }
 }

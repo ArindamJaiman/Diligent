@@ -45,6 +45,16 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - CSV statistics export
 - Persistent across reboots
 
+### Quote Packs
+- 11 widget quote packs (Wall Street plus 10 themed packs of 100 quotes each), and a Mix option
+- Pick one in Settings → Widget Quotes; quotes appear in random order
+
+### QuotaPulse (AI usage widget)
+- Claude Code, Gemini, Antigravity and ChatGPT / Codex usage on the home screen
+- Syncs only when you tap SYNC; live mode only runs when you start it, and has a STOP button
+- Shows only real numbers, each labelled with its source and time
+- Setup and supported metrics: [docs/QUOTAPULSE.md](docs/QUOTAPULSE.md)
+
 ## ✦ Architecture
 
 ```
@@ -57,6 +67,7 @@ MVVM + Repository Pattern
 │   └── repository/          # Single source of truth
 ├── di/                      # Hilt modules
 ├── notifications/           # WorkManager + BroadcastReceiver
+├── quotapulse/              # AI usage widget: sources, sync, live service, UI
 ├── ui/
 │   ├── components/          # Reusable Compose components
 │   ├── navigation/          # NavGraph + routes

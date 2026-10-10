@@ -2,6 +2,7 @@ package dev.diligent.app.ui
 
 import android.Manifest
 import android.content.Context
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -12,12 +13,14 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Surface
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.Modifier
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.quotapulse.data.Provider
 import dev.diligent.app.ui.navigation.DiligentNavGraph
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DiligentTheme
@@ -36,10 +39,14 @@ class MainActivity : ComponentActivity() {
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
 
+    /** Screen requested by an external tap (e.g. a QuotaPulse widget cell). */
+    private val pendingRoute = mutableStateOf<String?>(null)
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         requestNotificationPermissionOnce()
+        if (savedInstanceState == null) pendingRoute.value = routeFor(intent)
 
         setContent {
             // Material You toggle from Settings (previously saved but never applied)
@@ -51,10 +58,29 @@ class MainActivity : ComponentActivity() {
                     color = DiligentColors.Black
                 ) {
                     val navController = rememberNavController()
-                    DiligentNavGraph(navController = navController)
+                    DiligentNavGraph(
+                        navController = navController,
+                        pendingRoute = pendingRoute.value,
+                        onRouteConsumed = { pendingRoute.value = null }
+                    )
                 }
             }
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingRoute.value = routeFor(intent)
+    }
+
+    /** Maps diligent://quotapulse[/provider/NAME] to an in-app route; anything else is ignored. */
+    private fun routeFor(intent: Intent?): String? {
+        val data = intent?.data ?: return null
+        if (data.scheme != "diligent" || data.host != "quotapulse") return null
+        val segments = data.pathSegments
+        val provider = if (segments.size == 2 && segments[0] == "provider") Provider.from(segments[1]) else null
+        return if (provider != null) "quotapulse/${provider.name}" else "quotapulse"
     }
 
     /**
@@ -73,7 +99,10 @@ class MainActivity : ComponentActivity() {
         notificationPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
     }
 
-    private companion object {
-        const val KEY_ASKED_NOTIFICATIONS = "asked_notification_permission"
+    companion object {
+        private const val KEY_ASKED_NOTIFICATIONS = "asked_notification_permission"
+
+        /** Base URI the QuotaPulse widget and notification use to open the app. */
+        const val ROUTE_URI_QUOTAPULSE = "diligent://quotapulse"
     }
 }

@@ -42,6 +42,7 @@ fun DashboardScreen(
     onNavigateToDetail: (Long) -> Unit,
     onNavigateToStats: () -> Unit,
     onNavigateToSettings: () -> Unit,
+    onNavigateToQuotaPulse: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val activities by viewModel.activitiesWithProgress.collectAsStateWithLifecycle()
@@ -76,6 +77,13 @@ fun DashboardScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onNavigateToQuotaPulse) {
+                            Icon(
+                                imageVector = Icons.Outlined.Speed,
+                                contentDescription = "QuotaPulse",
+                                tint = DiligentColors.Gray700
+                            )
+                        }
                         IconButton(onClick = onNavigateToStats) {
                             Icon(
                                 imageVector = Icons.Outlined.Analytics,

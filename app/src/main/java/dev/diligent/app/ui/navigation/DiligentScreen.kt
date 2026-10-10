@@ -14,4 +14,8 @@ sealed class DiligentScreen(val route: String) {
     data object ActivityDetail : DiligentScreen("activity_detail/{activityId}") {
         fun createRoute(activityId: Long) = "activity_detail/$activityId"
     }
+    data object QuotaPulse : DiligentScreen("quotapulse")
+    data object QuotaPulseProvider : DiligentScreen("quotapulse/{provider}") {
+        fun createRoute(provider: String) = "quotapulse/$provider"
+    }
 }

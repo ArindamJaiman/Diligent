@@ -13,6 +13,7 @@ import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.SettingsDao
+import dev.diligent.app.quotapulse.data.QuotaPulseDao
 import javax.inject.Singleton
 
 /**
@@ -50,4 +51,7 @@ object DatabaseModule {
 
     @Provides
     fun provideGithubContributionDao(db: DiligentDatabase): GithubContributionDao = db.githubContributionDao()
+
+    @Provides
+    fun provideQuotaPulseDao(db: DiligentDatabase): QuotaPulseDao = db.quotaPulseDao()
 }
