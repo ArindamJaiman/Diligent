@@ -147,6 +147,37 @@ class DiligentRepository @Inject constructor(
     }
 
     /**
+     * Raises today's progress for [activity] to at least [value] (used by LeetCode auto-log).
+     * Never lowers it, and never un-completes a day.
+     */
+    suspend fun raiseProgressTo(activity: Activity, value: Float) {
+        val date = today()
+        val existing = dailyProgressDao.getProgressForActivityOnDate(activity.id, date)
+        if (existing != null && existing.progress >= value) return
+
+        if (existing != null) {
+            dailyProgressDao.update(
+                existing.copy(
+                    progress = value,
+                    isCompleted = existing.isCompleted || value >= activity.dailyGoal,
+                    lastUpdated = System.currentTimeMillis()
+                )
+            )
+        } else {
+            dailyProgressDao.insert(
+                DailyProgress(
+                    activityId = activity.id,
+                    date = date,
+                    progress = value,
+                    isCompleted = value >= activity.dailyGoal,
+                    lastUpdated = System.currentTimeMillis()
+                )
+            )
+        }
+        trackerChanged()
+    }
+
+    /**
      * Decrement progress for an activity today.
      * Clamps to 0 — never goes negative.
      */

@@ -6,6 +6,9 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.diligent.app.data.local.SampleDataSeeder
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.leetcode.data.LeetCodePrefs
+import dev.diligent.app.leetcode.notify.LeetCodeAlarms
+import dev.diligent.app.leetcode.notify.LeetCodeReminders
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
@@ -36,6 +39,9 @@ class DiligentApp : Application(), Configuration.Provider {
     @Inject
     lateinit var quotaPulsePrefs: QuotaPulsePrefs
 
+    @Inject
+    lateinit var leetCodePrefs: LeetCodePrefs
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -51,6 +57,11 @@ class DiligentApp : Application(), Configuration.Provider {
 
             // Make reminder jobs match the user's settings (keeps already-queued jobs)
             ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)
+
+            // LeetCode checks (kept if already queued) and contest alarms, which a reboot clears
+            val leetCode = leetCodePrefs.current()
+            LeetCodeReminders.sync(this@DiligentApp, leetCode, replace = false)
+            LeetCodeAlarms.armContests(this@DiligentApp, leetCode.snapshot, leetCode.config, System.currentTimeMillis())
         }
 
         // Re-arm the midnight widget refresh if any widget is on the home screen

@@ -9,6 +9,7 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
+import dev.diligent.app.leetcode.ui.LeetCodeScreen
 import dev.diligent.app.quotapulse.data.Provider
 import dev.diligent.app.quotapulse.ui.QuotaPulseProviderScreen
 import dev.diligent.app.quotapulse.ui.QuotaPulseScreen
@@ -60,8 +61,15 @@ fun DiligentNavGraph(
                 },
                 onNavigateToQuotaPulse = {
                     navController.navigate(DiligentScreen.QuotaPulse.route)
+                },
+                onNavigateToLeetCode = {
+                    navController.navigate(DiligentScreen.LeetCode.route)
                 }
             )
+        }
+
+        composable(DiligentScreen.LeetCode.route) {
+            LeetCodeScreen(onNavigateBack = { navController.popBackStack() })
         }
 
         composable(

@@ -22,6 +22,7 @@ import dagger.hilt.android.AndroidEntryPoint
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.quotapulse.data.Provider
 import dev.diligent.app.ui.navigation.DiligentNavGraph
+import dev.diligent.app.ui.navigation.DiligentScreen
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DiligentTheme
 import javax.inject.Inject
@@ -74,10 +75,15 @@ class MainActivity : ComponentActivity() {
         pendingRoute.value = routeFor(intent)
     }
 
-    /** Maps diligent://quotapulse[/provider/NAME] to an in-app route; anything else is ignored. */
+    /**
+     * Maps diligent://quotapulse[/provider/NAME] and diligent://leetcode to in-app routes;
+     * anything else is ignored.
+     */
     private fun routeFor(intent: Intent?): String? {
         val data = intent?.data ?: return null
-        if (data.scheme != "diligent" || data.host != "quotapulse") return null
+        if (data.scheme != "diligent") return null
+        if (data.host == "leetcode") return DiligentScreen.LeetCode.route
+        if (data.host != "quotapulse") return null
         val segments = data.pathSegments
         val provider = if (segments.size == 2 && segments[0] == "provider") Provider.from(segments[1]) else null
         return if (provider != null) "quotapulse/${provider.name}" else "quotapulse"
@@ -104,5 +110,8 @@ class MainActivity : ComponentActivity() {
 
         /** Base URI the QuotaPulse widget and notification use to open the app. */
         const val ROUTE_URI_QUOTAPULSE = "diligent://quotapulse"
+
+        /** Opens the LeetCode screen (widget and notification taps). */
+        const val ROUTE_URI_LEETCODE = "diligent://leetcode"
     }
 }

@@ -43,6 +43,7 @@ fun DashboardScreen(
     onNavigateToStats: () -> Unit,
     onNavigateToSettings: () -> Unit,
     onNavigateToQuotaPulse: () -> Unit = {},
+    onNavigateToLeetCode: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val activities by viewModel.activitiesWithProgress.collectAsStateWithLifecycle()
@@ -77,6 +78,13 @@ fun DashboardScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onNavigateToLeetCode) {
+                            Icon(
+                                imageVector = Icons.Outlined.Code,
+                                contentDescription = "LeetCode",
+                                tint = DiligentColors.Gray700
+                            )
+                        }
                         IconButton(onClick = onNavigateToQuotaPulse) {
                             Icon(
                                 imageVector = Icons.Outlined.Speed,

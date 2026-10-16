@@ -8,5 +8,7 @@
     <string name="widget_github_vs_name">GitHub Versus Mode</string>
     <string name="widget_github_vs_description">Compare side-by-side streaks and contribution grids of two developers</string>
     <string name="widget_quotapulse_name">QuotaPulse</string>
+    <string name="widget_leetcode_name">LeetCode Tracker</string>
+    <string name="widget_leetcode_description">LeetCode streak, today\'s status, solved counts, daily challenge and next contest. Syncs only when you tap SYNC or a reminder checks.</string>
     <string name="widget_quotapulse_description">Claude, Gemini, Antigravity and Codex usage at a glance. Syncs only when you tap SYNC.</string>
 </resources>

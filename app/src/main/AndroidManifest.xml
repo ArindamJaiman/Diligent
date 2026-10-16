@@ -93,6 +93,33 @@
             android:exported="false"
             android:foregroundServiceType="dataSync" />
 
+        <!-- LeetCode tracker widget -->
+        <receiver
+            android:name=".leetcode.widget.LeetCodeWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_leetcode_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/leetcode_widget_info" />
+        </receiver>
+
+        <!-- LeetCode contest alarms, notification buttons, widget redraw (not exported) -->
+        <receiver
+            android:name=".leetcode.notify.LeetCodeReceiver"
+            android:exported="false" />
+
+        <!-- Invisible hop from a widget tap to a leetcode.com link -->
+        <activity
+            android:name=".leetcode.widget.LeetCodeLinkActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
         <!-- Midnight widget refresh (non-wakeup alarm, see DayChangeRefresh) -->
         <receiver
             android:name=".widget.DayChangeReceiver"

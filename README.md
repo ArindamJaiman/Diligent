@@ -55,6 +55,13 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - Shows only real numbers, each labelled with its source and time
 - Setup and supported metrics: [docs/QUOTAPULSE.md](docs/QUOTAPULSE.md)
 
+### LeetCode Tracker
+- Streak, today's status, Easy / Medium / Hard solved, daily challenge, contest rating and a submission heatmap, from your public profile (no login)
+- Home-screen widget in three sizes; the code icon on the dashboard opens the full screen
+- Reminders: daily challenge alert, streak guard before the UTC reset (with CHECK NOW / DONE TODAY buttons and quiet hours), contest heads-up
+- Auto-logs problems solved today into your LeetCode activity
+- How it works and what it costs in battery: [docs/LEETCODE.md](docs/LEETCODE.md)
+
 ## ✦ Architecture
 
 ```
@@ -66,6 +73,7 @@ MVVM + Repository Pattern
 │   │   └── DiligentDatabase # Room database
 │   └── repository/          # Single source of truth
 ├── di/                      # Hilt modules
+├── leetcode/                # LeetCode tracker: API, sync, reminders, widget, UI
 ├── notifications/           # WorkManager + BroadcastReceiver
 ├── quotapulse/              # AI usage widget: sources, sync, live service, UI
 ├── ui/
