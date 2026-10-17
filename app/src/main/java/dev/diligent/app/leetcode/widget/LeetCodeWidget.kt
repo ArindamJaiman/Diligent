@@ -70,8 +70,8 @@ import java.time.format.DateTimeFormatter
 import java.util.Locale
 
 /**
- * LeetCode streak, today's status, solved counts, the daily challenge and (large size) a
- * submission heatmap with the next contest.
+ * LeetCode streak, today's status, solved counts, the daily challenge with the number of
+ * reviews due, and (large size) a submission heatmap with the next contest.
  *
  * Renders only the cached snapshot — placing or resizing it never calls LeetCode. It redraws
  * after a sync and once at the UTC reset / contest boundaries via a non-wakeup alarm, so all
@@ -82,10 +82,10 @@ class LeetCodeWidget : GlanceAppWidget() {
     override val sizeMode = SizeMode.Responsive(setOf(COMPACT, STANDARD, LARGE))
 
     override suspend fun provideGlance(context: Context, id: GlanceId) {
-        val prefs = EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
-            .leetCodePrefs()
+        val entryPoint = EntryPointAccessors.fromApplication(context.applicationContext, WidgetEntryPoint::class.java)
         val now = System.currentTimeMillis()
-        val view = LeetCodePresenter.build(prefs.current(), now)
+        // One local query; the queue only changes after a sync or a tap in the app.
+        val view = LeetCodePresenter.build(entryPoint.leetCodePrefs().current(), now, entryPoint.leetCodeReviews().activeOrEmpty())
         LeetCodeAlarms.scheduleRedraw(context, if (view.hasData) LeetCodePresenter.nextBoundary(view, now) else null)
 
         provideContent { LeetCodeContent(view) }
@@ -362,28 +362,56 @@ private fun DifficultyLine(label: String, solved: Int, total: Int, color: Color)
     }
 }
 
+/** The daily challenge, plus "N DUE" for the review queue (hidden while nothing is due). */
 @Composable
 private fun DailyRow(view: LeetCodeView) {
     val context = LocalContext.current
     val daily = view.daily
-    if (daily == null) {
-        Text("DAILY · SYNC TO LOAD TODAY'S PROBLEM", style = mono(7.sp, Dim), maxLines = 1)
-        return
+    Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
+        if (daily == null) {
+            Text(
+                "DAILY · SYNC TO LOAD TODAY'S PROBLEM",
+                style = mono(7.sp, Dim),
+                maxLines = 1,
+                modifier = GlanceModifier.defaultWeight()
+            )
+        } else {
+            Row(
+                modifier = GlanceModifier.defaultWeight().padding(vertical = 2.dp).clickable(openLink(context, daily.url)),
+                verticalAlignment = Alignment.Vertical.CenterVertically
+            ) {
+                Dot(difficultyColor(daily.difficulty), size = 4)
+                Spacer(GlanceModifier.width(5.dp))
+                Text(
+                    "DAILY #${daily.frontendId} · ${daily.title}",
+                    style = mono(7.sp, White),
+                    maxLines = 1,
+                    modifier = GlanceModifier.defaultWeight()
+                )
+                Spacer(GlanceModifier.width(4.dp))
+                Text(if (view.dailySolved) "✓" else "→", style = mono(8.sp, if (view.dailySolved) Easy else Brand, bold = true))
+            }
+        }
+        if (view.reviewsDue > 0) {
+            Spacer(GlanceModifier.width(6.dp))
+            DueChip(view.reviewsDue)
+        }
     }
-    Row(
-        modifier = GlanceModifier.fillMaxWidth().padding(vertical = 2.dp).clickable(openLink(context, daily.url)),
-        verticalAlignment = Alignment.Vertical.CenterVertically
+}
+
+/** Opens the LeetCode screen, where the due problems are listed. */
+@Composable
+private fun DueChip(count: Int) {
+    val context = LocalContext.current
+    Box(
+        modifier = GlanceModifier
+            .cornerRadius(6.dp)
+            .background(Line)
+            .padding(horizontal = 6.dp, vertical = 3.dp)
+            .clickable(openApp(context)),
+        contentAlignment = Alignment.Center
     ) {
-        Dot(difficultyColor(daily.difficulty), size = 4)
-        Spacer(GlanceModifier.width(5.dp))
-        Text(
-            "DAILY #${daily.frontendId} · ${daily.title}",
-            style = mono(7.sp, White),
-            maxLines = 1,
-            modifier = GlanceModifier.defaultWeight()
-        )
-        Spacer(GlanceModifier.width(4.dp))
-        Text(if (view.dailySolved) "✓" else "→", style = mono(8.sp, if (view.dailySolved) Easy else Brand, bold = true))
+        Text("$count DUE", style = mono(7.sp, Brand, bold = true), maxLines = 1)
     }
 }
 

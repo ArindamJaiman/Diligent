@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Only the shared-image cache folder is exposed (weekly review card). -->
+<paths>
+    <cache-path name="shared" path="shared/" />
+</paths>

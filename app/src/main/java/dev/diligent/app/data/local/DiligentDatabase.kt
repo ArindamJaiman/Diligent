@@ -14,6 +14,8 @@ import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.leetcode.data.LeetCodeReview
+import dev.diligent.app.leetcode.data.LeetCodeReviewDao
 import dev.diligent.app.quotapulse.data.QuotaPulseDao
 import dev.diligent.app.quotapulse.data.UsageSnapshot
 import dev.diligent.app.quotapulse.data.UsageSourceStatus
@@ -30,9 +32,10 @@ import dev.diligent.app.quotapulse.data.UsageSourceStatus
         ActivityReminder::class,
         GithubContribution::class,
         UsageSnapshot::class,
-        UsageSourceStatus::class
+        UsageSourceStatus::class,
+        LeetCodeReview::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = true
 )
 abstract class DiligentDatabase : RoomDatabase() {
@@ -42,6 +45,7 @@ abstract class DiligentDatabase : RoomDatabase() {
     abstract fun activityReminderDao(): ActivityReminderDao
     abstract fun githubContributionDao(): GithubContributionDao
     abstract fun quotaPulseDao(): QuotaPulseDao
+    abstract fun leetCodeReviewDao(): LeetCodeReviewDao
 
     companion object {
         const val DATABASE_NAME = "diligent_db"
@@ -94,6 +98,19 @@ abstract class DiligentDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        /** Same SQL as the exported schema 5.json; DatabaseSchemaTest keeps the two in step. */
+        internal const val CREATE_LEETCODE_REVIEWS =
+            "CREATE TABLE IF NOT EXISTS `leetcode_reviews` (`slug` TEXT NOT NULL, `title` TEXT NOT NULL, " +
+                "`difficulty` TEXT, `firstSolvedAt` INTEGER NOT NULL, `stage` INTEGER NOT NULL, " +
+                "`dueAt` INTEGER NOT NULL, `lastReviewedAt` INTEGER NOT NULL, PRIMARY KEY(`slug`))"
+
+        /** v5 added the LeetCode spaced-repetition review queue. */
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(CREATE_LEETCODE_REVIEWS)
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
     }
 }

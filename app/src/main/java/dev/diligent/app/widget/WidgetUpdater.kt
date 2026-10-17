@@ -9,6 +9,9 @@ import android.content.Context
 import android.content.Intent
 import android.util.Log
 import androidx.glance.appwidget.updateAll
+import dev.diligent.app.screentime.ScreenTimeWidgetReceiver
+import dev.diligent.app.tools.ToolWidgets
+import dev.diligent.app.top3.Top3WidgetReceiver
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -25,7 +28,11 @@ object WidgetUpdater {
 
     private const val TAG = "WidgetUpdater"
 
-    suspend fun refreshTracker(context: Context) = safely { DiligentWidget().updateAll(context) }
+    suspend fun refreshTracker(context: Context) = safely {
+        DiligentWidget().updateAll(context)
+        // Top 3 and Focus-vs-Scroll show tracker progress too
+        ToolWidgets.refreshLocal(context)
+    }
 
     suspend fun refreshGithub(context: Context) = safely {
         GithubWidget().updateAll(context)
@@ -62,7 +69,9 @@ object DayChangeRefresh {
     private val receivers = listOf(
         DiligentWidgetReceiver::class.java,
         GithubWidgetReceiver::class.java,
-        GithubVsWidgetReceiver::class.java
+        GithubVsWidgetReceiver::class.java,
+        Top3WidgetReceiver::class.java,
+        ScreenTimeWidgetReceiver::class.java
     )
 
     fun schedule(context: Context) {

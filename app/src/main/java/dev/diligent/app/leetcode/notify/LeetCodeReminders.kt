@@ -19,6 +19,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dev.diligent.app.R
 import dev.diligent.app.leetcode.data.LeetCodePrefs
+import dev.diligent.app.leetcode.data.LeetCodeReviewStore
 import dev.diligent.app.leetcode.data.LeetCodeSnapshot
 import dev.diligent.app.leetcode.data.LeetCodeState
 import dev.diligent.app.leetcode.domain.LeetCodeDay
@@ -38,7 +39,8 @@ import java.util.concurrent.TimeUnit
  * Schedules the two clock-time LeetCode checks as self-chaining one-time jobs (same
  * approach as [ReminderScheduler]): they survive reboots and each run queues the next.
  *
- * - DAILY: at the chosen time, fetch once and announce today's daily challenge unless solved.
+ * - DAILY: at the chosen time, fetch once and announce today's daily challenge unless solved,
+ *   with the number of reviews due (from the same fetch — no extra request or alarm).
  * - STREAK: at the chosen time (and, with repeats, a few more times until the UTC reset),
  *   fetch once and warn if nothing was submitted this LeetCode day.
  *
@@ -176,7 +178,8 @@ class LeetCodeWorker @AssistedInject constructor(
     @Assisted appContext: Context,
     @Assisted params: WorkerParameters,
     private val sync: LeetCodeSync,
-    private val prefs: LeetCodePrefs
+    private val prefs: LeetCodePrefs,
+    private val reviews: LeetCodeReviewStore
 ) : CoroutineWorker(appContext, params) {
 
     override suspend fun doWork(): Result {
@@ -207,7 +210,8 @@ class LeetCodeWorker @AssistedInject constructor(
         // A cached question from before today's reset isn't today's challenge.
         if (daily.date.isNotBlank() && daily.date != LeetCodeDay.utcDay(now).toString()) return
         if (LeetCodeDay.dailySolved(snapshot, now)) return
-        LeetCodeNotifier.dailyChallenge(applicationContext, daily, LeetCodeDay.currentStreak(snapshot, now))
+        val reviewsDue = reviews.activeOrEmpty().count { it.isDue(now) }
+        LeetCodeNotifier.dailyChallenge(applicationContext, daily, LeetCodeDay.currentStreak(snapshot, now), reviewsDue)
     }
 
     private suspend fun streak(fromUser: Boolean) {

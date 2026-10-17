@@ -21,6 +21,7 @@ import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.quotapulse.data.Provider
+import dev.diligent.app.tools.ToolRoutes
 import dev.diligent.app.ui.navigation.DiligentNavGraph
 import dev.diligent.app.ui.navigation.DiligentScreen
 import dev.diligent.app.ui.theme.DiligentColors
@@ -83,6 +84,8 @@ class MainActivity : ComponentActivity() {
         val data = intent?.data ?: return null
         if (data.scheme != "diligent") return null
         if (data.host == "leetcode") return DiligentScreen.LeetCode.route
+        // diligent://tool[/name] from the Hub tools' widgets and notifications
+        ToolRoutes.fromUri(data)?.let { return it }
         if (data.host != "quotapulse") return null
         val segments = data.pathSegments
         val provider = if (segments.size == 2 && segments[0] == "provider") Provider.from(segments[1]) else null

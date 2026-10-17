@@ -11,6 +11,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
+import androidx.compose.material.icons.filled.Stop
+import androidx.compose.material.icons.outlined.Timer
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,10 +24,17 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.repeatOnLifecycle
+import dev.diligent.app.focus.data.FocusSession
+import dev.diligent.app.focus.domain.FocusMath
+import dev.diligent.app.focus.domain.Phase
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.viewmodel.DashboardViewModel.ActivityWithProgress
+import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -36,6 +45,7 @@ import java.util.*
  * - Inline increment/decrement controls
  * - Animated progress bar
  * - Last-updated timestamp
+ * - Focus timer (plain or Pomodoro) for activities measured in hrs or mins
  */
 @Composable
 fun ActivityCard(
@@ -45,15 +55,23 @@ fun ActivityCard(
     onDecrement: () -> Unit,
     onToggleComplete: () -> Unit,
     onClick: () -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    /** The running timer when it is timing this activity. */
+    focus: FocusSession? = null,
+    onStartFocus: (pomodoro: Boolean) -> Unit = {},
+    onStopFocus: () -> Unit = {}
 ) {
     val completionPercent = item.completionPercent
     val isCompleted = item.isCompleted
+    val canFocus = FocusMath.isTimeUnit(item.activity.unit)
 
-    // Subtle animated border for completed items
+    // Subtle animated border for completed items (and a running timer)
     val borderColor by animateColorAsState(
-        targetValue = if (isCompleted) DiligentColors.CompletedGreen.copy(alpha = 0.6f)
-        else DiligentColors.Border,
+        targetValue = when {
+            isCompleted -> DiligentColors.CompletedGreen.copy(alpha = 0.6f)
+            focus != null -> DiligentColors.White.copy(alpha = 0.45f)
+            else -> DiligentColors.Border
+        },
         animationSpec = tween(500),
         label = "borderColor"
     )
@@ -199,7 +217,9 @@ fun ActivityCard(
                     color = DiligentColors.Gray600
                 )
 
-                if (item.lastUpdated > 0) {
+                if (focus != null) {
+                    FocusClock(focus)
+                } else if (item.lastUpdated > 0) {
                     Text(
                         text = formatTimestamp(item.lastUpdated),
                         style = MaterialTheme.typography.labelSmall.copy(
@@ -209,21 +229,115 @@ fun ActivityCard(
                     )
                 }
 
-                // Complete toggle
-                IconButton(
-                    onClick = onToggleComplete,
-                    modifier = Modifier.size(28.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = "Toggle Complete",
-                        tint = if (isCompleted) DiligentColors.CompletedGreen else DiligentColors.Gray500,
-                        modifier = Modifier.size(14.dp)
-                    )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (canFocus || focus != null) {
+                        FocusButton(
+                            running = focus != null,
+                            onStart = onStartFocus,
+                            onStop = onStopFocus
+                        )
+                    }
+
+                    // Complete toggle
+                    IconButton(
+                        onClick = onToggleComplete,
+                        modifier = Modifier.size(28.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Check,
+                            contentDescription = "Toggle Complete",
+                            tint = if (isCompleted) DiligentColors.CompletedGreen else DiligentColors.Gray500,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
                 }
             }
         }
     }
+}
+
+/** Stop while running; otherwise a menu to pick a plain timer or Pomodoro 25/5. */
+@Composable
+private fun FocusButton(
+    running: Boolean,
+    onStart: (pomodoro: Boolean) -> Unit,
+    onStop: () -> Unit
+) {
+    var showMenu by remember { mutableStateOf(false) }
+    Box {
+        IconButton(
+            onClick = { if (running) onStop() else showMenu = true },
+            modifier = Modifier.size(28.dp)
+        ) {
+            Icon(
+                imageVector = if (running) Icons.Default.Stop else Icons.Outlined.Timer,
+                contentDescription = if (running) "Stop focus timer" else "Start focus timer",
+                tint = if (running) DiligentColors.White else DiligentColors.Gray500,
+                modifier = Modifier.size(14.dp)
+            )
+        }
+
+        DropdownMenu(
+            expanded = showMenu,
+            onDismissRequest = { showMenu = false },
+            containerColor = DiligentColors.SurfaceElevated
+        ) {
+            listOf(false to "FOCUS TIMER", true to "POMODORO 25/5").forEach { (pomodoro, label) ->
+                DropdownMenuItem(
+                    text = {
+                        Text(
+                            text = label,
+                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                            color = DiligentColors.White
+                        )
+                    },
+                    onClick = {
+                        showMenu = false
+                        onStart(pomodoro)
+                    }
+                )
+            }
+        }
+    }
+}
+
+/** Elapsed time, or time left in the Pomodoro phase. */
+@Composable
+private fun FocusClock(session: FocusSession) {
+    val now = rememberTickingNow()
+    val position = if (session.pomodoro) FocusMath.pomodoroAt(session.startedAt, now) else null
+    val text = when {
+        position == null -> "● ${FocusMath.formatClock(now - session.startedAt)}"
+        position.phase == Phase.FOCUS -> "● FOCUS ${position.block} · ${FocusMath.formatClock(position.phaseEnd - now)}"
+        else -> "◌ BREAK · ${FocusMath.formatClock(position.phaseEnd - now)}"
+    }
+    Text(
+        text = text,
+        style = MaterialTheme.typography.labelSmall.copy(
+            fontFamily = DotMatrix,
+            letterSpacing = 1.sp
+        ),
+        color = if (position?.phase == Phase.BREAK) DiligentColors.Gray700 else DiligentColors.CompletedGreen
+    )
+}
+
+/**
+ * Wall-clock now, updated on each second boundary — only while the app is on screen
+ * (STARTED), so a running timer never keeps the app busy in the background.
+ */
+@Composable
+private fun rememberTickingNow(): Long {
+    var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
+    val lifecycle = LocalLifecycleOwner.current.lifecycle
+    LaunchedEffect(lifecycle) {
+        lifecycle.repeatOnLifecycle(Lifecycle.State.STARTED) {
+            while (true) {
+                now = System.currentTimeMillis()
+                delay(1_000 - now % 1_000)
+            }
+        }
+    }
+    return now
 }
 
 /**

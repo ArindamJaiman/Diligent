@@ -12,6 +12,8 @@ import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.goals.StreakEngine
+import dev.diligent.app.goals.StreakState
 import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.delay
@@ -118,8 +120,14 @@ class DiligentRepository @Inject constructor(
      * Creates a new DailyProgress row if none exists.
      * Automatically marks complete when progress >= dailyGoal.
      */
-    suspend fun incrementProgress(activityId: Long, amount: Float = 1f) {
-        val date = today()
+    suspend fun incrementProgress(activityId: Long, amount: Float = 1f) = addProgress(activityId, amount)
+
+    /**
+     * Adds [amount] (in the activity's own unit) to its progress on [date], creating the row
+     * if needed and marking it complete once the goal is met. The focus timer calls this once
+     * per local day, so a session that crosses midnight counts towards both days.
+     */
+    suspend fun addProgress(activityId: Long, amount: Float, date: String = today()) {
         val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date)
         val activity = activityDao.getById(activityId) ?: return
 
@@ -238,41 +246,17 @@ class DiligentRepository @Inject constructor(
     // ─── Streaks ────────────────────────────────────────────────
 
     /**
-     * Calculates the current streak for an activity.
-     * A streak is the number of consecutive days (ending today or yesterday)
-     * where the activity was marked complete.
+     * Calculates the current streak for an activity: consecutive completed days ending
+     * today or yesterday, where banked streak freezes cover single missed days
+     * (see [StreakEngine]).
      */
-    suspend fun calculateStreak(activityId: Long): Int {
+    suspend fun calculateStreak(activityId: Long): Int = streakState(activityId).current
+
+    /** Streak plus freezes banked and days saved by a freeze. */
+    suspend fun streakState(activityId: Long): StreakState {
         val completedDates = dailyProgressDao.getCompletedDates(activityId)
-            .map { LocalDate.parse(it, dateFormatter) }
-            .sorted()
-            .reversed()
-
-        if (completedDates.isEmpty()) return 0
-
-        val today = LocalDate.now()
-        var streak = 0
-        var expectedDate = today
-
-        // Allow streak to start from today or yesterday
-        if (completedDates.first() == today) {
-            expectedDate = today
-        } else if (completedDates.first() == today.minusDays(1)) {
-            expectedDate = today.minusDays(1)
-        } else {
-            return 0
-        }
-
-        for (date in completedDates) {
-            if (date == expectedDate) {
-                streak++
-                expectedDate = expectedDate.minusDays(1)
-            } else if (date.isBefore(expectedDate)) {
-                break
-            }
-        }
-
-        return streak
+            .mapNotNull { runCatching { LocalDate.parse(it, dateFormatter) }.getOrNull() }
+        return StreakEngine.compute(completedDates, LocalDate.now())
     }
 
     // ─── Statistics ─────────────────────────────────────────────

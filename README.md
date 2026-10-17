@@ -62,6 +62,23 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - Auto-logs problems solved today into your LeetCode activity
 - How it works and what it costs in battery: [docs/LEETCODE.md](docs/LEETCODE.md)
 
+### Focus Timer
+- Time any activity measured in hrs or mins instead of tapping +/−. Start and stop it from the ⏱ button on the activity card, the **Focus Timer** widget (2×1 or 2×2) or the **Focus timer** Quick Settings tile
+- On stop, the time is added to that day's progress, rounded to the nearest minute (under 30 s logs nothing). A session that runs past midnight is split between the two days
+- Optional Pomodoro 25/5. Each 25-minute block is logged when it ends, and breaks aren't counted. The widget and tile start the last-timed activity in the last-used mode; on the widget, tap the name to change the activity or tap the mode to switch to 25/5
+- Battery: nothing in the app ticks. The widget clock is a launcher-side `Chronometer`, and the ongoing notification (with STOP) uses the system chronometer. Pomodoro sets one non-wakeup alarm per block. The running session is just a start time in SharedPreferences, so it survives the app being killed and is picked up again on the next start
+
+### Hub: productivity tools
+The grid icon on the dashboard opens the Hub. Details: [docs/TOOLS.md](docs/TOOLS.md)
+- **Today's Top 3**: pick your three must-dos each morning; a widget with + buttons and today's calendar busy and free time
+- **LeetCode Versus**: you vs up to 3 friends (solved today, streaks), with a widget and an evening nudge when a friend is ahead
+- **Contest Radar**: Codeforces, AtCoder, CodeChef and LeetCode contests plus your ratings in one list, with a widget and heads-up alerts
+- **Paper of the Day**: a daily arXiv pick (quant-ph, q-fin.TR, …), a reading queue, and READ to log time to Research Papers
+- **Streaks & Goals**: streak freezes (7 days in a row earn one, max 2) and a goal coach that suggests realistic goals
+- **Weekly Review**: Sunday summary notification and a shareable image card
+- **Screen vs Focus**: hours logged vs time in distracting apps (on-device usage data), with a widget and an evening nudge
+- **Health → Gym**: auto-logs workouts from Health Connect (phone, watch, fitness apps)
+
 ## ✦ Architecture
 
 ```
@@ -73,6 +90,7 @@ MVVM + Repository Pattern
 │   │   └── DiligentDatabase # Room database
 │   └── repository/          # Single source of truth
 ├── di/                      # Hilt modules
+├── focus/                   # Focus timer: session, Pomodoro, notification, widget, QS tile
 ├── leetcode/                # LeetCode tracker: API, sync, reminders, widget, UI
 ├── notifications/           # WorkManager + BroadcastReceiver
 ├── quotapulse/              # AI usage widget: sources, sync, live service, UI

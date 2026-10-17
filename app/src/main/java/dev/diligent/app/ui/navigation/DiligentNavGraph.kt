@@ -13,6 +13,8 @@ import dev.diligent.app.leetcode.ui.LeetCodeScreen
 import dev.diligent.app.quotapulse.data.Provider
 import dev.diligent.app.quotapulse.ui.QuotaPulseProviderScreen
 import dev.diligent.app.quotapulse.ui.QuotaPulseScreen
+import dev.diligent.app.tools.ToolRoutes
+import dev.diligent.app.tools.toolsGraph
 import dev.diligent.app.ui.screens.ActivityDetailScreen
 import dev.diligent.app.ui.screens.ActivityEditScreen
 import dev.diligent.app.ui.screens.DashboardScreen
@@ -64,6 +66,9 @@ fun DiligentNavGraph(
                 },
                 onNavigateToLeetCode = {
                     navController.navigate(DiligentScreen.LeetCode.route)
+                },
+                onNavigateToHub = {
+                    navController.navigate(ToolRoutes.HUB)
                 }
             )
         }
@@ -71,6 +76,9 @@ fun DiligentNavGraph(
         composable(DiligentScreen.LeetCode.route) {
             LeetCodeScreen(onNavigateBack = { navController.popBackStack() })
         }
+
+        // Hub and productivity tools (Contest Radar, Papers, Top 3, Screen time, ...)
+        toolsGraph(navController)
 
         composable(
             route = DiligentScreen.ActivityEdit.route,

@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Periodic updates are disabled (updatePeriodMillis=0): redrawn after data changes,
+     on tap, or at a real boundary via a non-wakeup alarm. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="100dp"
+    android:maxResizeWidth="560dp"
+    android:maxResizeHeight="520dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:widgetCategory="home_screen"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_contests_preview"
+    android:previewLayout="@layout/widget_contests_preview"
+    android:description="@string/widget_contests_description" />

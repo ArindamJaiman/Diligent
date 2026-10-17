@@ -44,11 +44,13 @@ fun DashboardScreen(
     onNavigateToSettings: () -> Unit,
     onNavigateToQuotaPulse: () -> Unit = {},
     onNavigateToLeetCode: () -> Unit = {},
+    onNavigateToHub: () -> Unit = {},
     viewModel: DashboardViewModel = hiltViewModel()
 ) {
     val activities by viewModel.activitiesWithProgress.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
+    val focus by viewModel.focus.collectAsStateWithLifecycle()
 
     var showSortMenu by remember { mutableStateOf(false) }
 
@@ -78,6 +80,13 @@ fun DashboardScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        IconButton(onClick = onNavigateToHub) {
+                            Icon(
+                                imageVector = Icons.Outlined.Apps,
+                                contentDescription = "Hub",
+                                tint = DiligentColors.White
+                            )
+                        }
                         IconButton(onClick = onNavigateToLeetCode) {
                             Icon(
                                 imageVector = Icons.Outlined.Code,
@@ -292,7 +301,10 @@ fun DashboardScreen(
                         onDecrement = { viewModel.decrementProgress(item.activity.id) },
                         onToggleComplete = { viewModel.toggleComplete(item.activity.id) },
                         onClick = { onNavigateToDetail(item.activity.id) },
-                        modifier = Modifier.animateItem()
+                        modifier = Modifier.animateItem(),
+                        focus = focus.session?.takeIf { it.activityId == item.activity.id },
+                        onStartFocus = { pomodoro -> viewModel.startFocus(item.activity.id, pomodoro) },
+                        onStopFocus = { viewModel.stopFocus() }
                     )
                 }
 

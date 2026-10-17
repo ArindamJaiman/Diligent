@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Focus widget clock. A RemoteViews Chronometer ticks inside the launcher (and pauses while
+     the home screen is hidden), so the app is never woken to update it. -->
+<Chronometer xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/focus_chronometer"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:fontFamily="monospace"
+    android:includeFontPadding="false"
+    android:maxLines="1"
+    android:textColor="#FFF2F2F2"
+    android:textSize="20sp"
+    android:textStyle="bold" />

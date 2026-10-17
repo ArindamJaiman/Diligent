@@ -8,6 +8,15 @@
     <!-- QuotaPulse live mode: user-started foreground service (dataSync) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
+    <!-- Today's Top 3: busy time from the phone's calendars (read locally, asked at runtime) -->
+    <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Screen vs Focus: per-app screen time, granted by the user in Usage access settings -->
+    <uses-permission
+        android:name="android.permission.PACKAGE_USAGE_STATS"
+        tools:ignore="ProtectedPermissions" />
+    <!-- Health → Gym: read exercise sessions from Health Connect -->
+    <uses-permission android:name="android.permission.health.READ_EXERCISE" />
+    <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
 
     <application
         android:name=".DiligentApp"
@@ -27,6 +36,10 @@
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+            <!-- Long-press on the focus Quick Settings tile opens the app -->
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
             </intent-filter>
         </activity>
 
@@ -120,6 +133,39 @@
             android:taskAffinity=""
             android:theme="@android:style/Theme.Translucent.NoTitleBar" />
 
+        <!-- Focus timer widget -->
+        <receiver
+            android:name=".focus.widget.FocusWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_focus_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/focus_widget_info" />
+        </receiver>
+
+        <!-- Focus timer STOP button and Pomodoro block alarm (not exported) -->
+        <receiver
+            android:name=".focus.notify.FocusReceiver"
+            android:exported="false" />
+
+        <!-- Focus timer Quick Settings tile. Active tile: bound only when the timer changes or on tap -->
+        <service
+            android:name=".focus.tile.FocusTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_focus_timer"
+            android:label="@string/tile_focus_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.service.quicksettings.ACTIVE_TILE"
+                android:value="true" />
+        </service>
+
         <!-- Midnight widget refresh (non-wakeup alarm, see DayChangeRefresh) -->
         <receiver
             android:name=".widget.DayChangeReceiver"
@@ -137,5 +183,121 @@
                 tools:node="remove" />
         </provider>
 
+        <!-- ─── Productivity tools (Hub) ─────────────────────────── -->
+
+        <receiver
+            android:name=".contests.ContestWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_contests_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/contests_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".versus.VersusWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_versus_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/versus_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".papers.PaperWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_papers_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/papers_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".top3.Top3WidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_top3_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/top3_widget_info" />
+        </receiver>
+
+        <receiver
+            android:name=".screentime.ScreenTimeWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_screentime_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/screentime_widget_info" />
+        </receiver>
+
+        <!-- Contest heads-up alarms and tool widget redraws (not exported) -->
+        <receiver
+            android:name=".tools.ToolsReceiver"
+            android:exported="false" />
+
+        <!-- Invisible hop from a tool widget tap to arXiv / contest pages -->
+        <activity
+            android:name=".tools.ToolLinkActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <!-- Weekly review image sharing -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.tools.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/tool_file_paths" />
+        </provider>
+
+        <!-- Health Connect: privacy explanation shown from its permission screen -->
+        <activity
+            android:name=".health.HealthPrivacyActivity"
+            android:exported="true"
+            android:theme="@style/Theme.Diligent">
+            <intent-filter>
+                <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
+            </intent-filter>
+        </activity>
+        <activity-alias
+            android:name="ViewPermissionUsageActivity"
+            android:exported="true"
+            android:permission="android.permission.START_VIEW_PERMISSION_USAGE"
+            android:targetActivity=".health.HealthPrivacyActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
+                <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
+            </intent-filter>
+        </activity-alias>
+
     </application>
+
+    <!-- Health Connect app (Android 13 and older) and launcher detection for screen time -->
+    <queries>
+        <package android:name="com.google.android.apps.healthdata" />
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.HOME" />
+        </intent>
+    </queries>
 </manifest>

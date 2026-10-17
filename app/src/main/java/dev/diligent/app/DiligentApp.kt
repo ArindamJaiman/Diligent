@@ -6,6 +6,7 @@ import androidx.work.Configuration
 import dagger.hilt.android.HiltAndroidApp
 import dev.diligent.app.data.local.SampleDataSeeder
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.focus.FocusTimer
 import dev.diligent.app.leetcode.data.LeetCodePrefs
 import dev.diligent.app.leetcode.notify.LeetCodeAlarms
 import dev.diligent.app.leetcode.notify.LeetCodeReminders
@@ -13,6 +14,7 @@ import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
 import dev.diligent.app.quotapulse.live.LiveMonitorService
+import dev.diligent.app.tools.ToolsBootstrap
 import dev.diligent.app.widget.DayChangeRefresh
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -42,6 +44,9 @@ class DiligentApp : Application(), Configuration.Provider {
     @Inject
     lateinit var leetCodePrefs: LeetCodePrefs
 
+    @Inject
+    lateinit var focusTimer: FocusTimer
+
     override val workManagerConfiguration: Configuration
         get() = Configuration.Builder()
             .setWorkerFactory(workerFactory)
@@ -64,8 +69,15 @@ class DiligentApp : Application(), Configuration.Provider {
             LeetCodeAlarms.armContests(this@DiligentApp, leetCode.snapshot, leetCode.config, System.currentTimeMillis())
         }
 
+        // A focus timer outlives its process (it's only a start time in prefs). Re-post its
+        // notification, re-arm the Pomodoro alarm and log blocks that ended meanwhile.
+        if (focusTimer.current().session != null) focusTimer.launch { refresh() }
+
         // Re-arm the midnight widget refresh if any widget is on the home screen
         DayChangeRefresh.scheduleIfWidgetsExist(this)
+
+        // Hub tools: keep their scheduled jobs, re-arm contest alarms, refresh on app open
+        ToolsBootstrap.onAppStart(this)
 
         // A fresh process can't have a running live service. If live mode was marked on,
         // report the interruption truthfully instead of claiming LIVE or restarting it.

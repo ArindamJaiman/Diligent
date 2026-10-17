@@ -3,8 +3,10 @@ package dev.diligent.app.leetcode
 import dev.diligent.app.leetcode.data.Contest
 import dev.diligent.app.leetcode.data.DailyQuestion
 import dev.diligent.app.leetcode.data.LeetCodeConfig
+import dev.diligent.app.leetcode.data.LeetCodeReview
 import dev.diligent.app.leetcode.data.LeetCodeSnapshot
 import dev.diligent.app.leetcode.data.LeetCodeState
+import dev.diligent.app.leetcode.domain.ReviewSchedule
 import dev.diligent.app.leetcode.presentation.LeetCodePresenter
 import dev.diligent.app.leetcode.presentation.TodayStatus
 import org.junit.Assert.assertEquals
@@ -64,6 +66,28 @@ class LeetCodePresenterTest {
         )
         val view = LeetCodePresenter.build(state(snapshot), now)
         assertEquals(startSec * 1000, LeetCodePresenter.nextBoundary(view, now))
+    }
+
+    @Test
+    fun `due reviews are listed most overdue first, retired ones never`() {
+        fun review(slug: String, stage: Int, dueAt: Long) = LeetCodeReview(slug, slug, null, at(1, 9), stage, dueAt, at(1, 9))
+        val snapshot = LeetCodeSnapshot("coder", fetchedAt = at(17, 20))
+        val queue = listOf(
+            review("later", 1, at(18, 0)),
+            review("today", 0, at(17, 0)),
+            review("retired", ReviewSchedule.DONE, ReviewSchedule.NEVER),
+            review("overdue", 2, at(15, 0))
+        )
+        val view = LeetCodePresenter.build(state(snapshot), now, queue)
+        assertEquals(listOf("overdue", "today"), view.dueReviews.map { it.slug })
+        assertEquals(2, view.reviewsDue)
+        assertEquals(1, view.queuedReviews)
+        assertEquals(at(18, 0), view.nextReviewAt)
+        // Local midnight comes before the 05:30 UTC reset, so the widget redraws then to show "3 DUE".
+        assertEquals(at(18, 0), LeetCodePresenter.nextBoundary(view, now))
+
+        val signedOut = LeetCodePresenter.build(LeetCodeState(snapshot = snapshot), now, queue)
+        assertEquals(0, signedOut.reviewsDue)
     }
 
     @Test

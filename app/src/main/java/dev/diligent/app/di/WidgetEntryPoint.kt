@@ -5,6 +5,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.leetcode.data.LeetCodePrefs
+import dev.diligent.app.leetcode.data.LeetCodeReviewStore
 import dev.diligent.app.leetcode.sync.LeetCodeSync
 import dev.diligent.app.quotapulse.data.QuotaPulseDao
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
@@ -24,4 +25,5 @@ interface WidgetEntryPoint {
     fun usageSyncEngine(): UsageSyncEngine
     fun leetCodePrefs(): LeetCodePrefs
     fun leetCodeSync(): LeetCodeSync
+    fun leetCodeReviews(): LeetCodeReviewStore
 }

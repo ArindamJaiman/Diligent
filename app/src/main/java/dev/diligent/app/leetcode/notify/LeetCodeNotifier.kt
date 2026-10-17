@@ -47,11 +47,13 @@ object LeetCodeNotifier {
         )
     }
 
-    fun dailyChallenge(context: Context, daily: DailyQuestion, streak: Int) {
+    /** @param reviewsDue problems in the review queue due today, mentioned when there are any. */
+    fun dailyChallenge(context: Context, daily: DailyQuestion, streak: Int, reviewsDue: Int = 0) {
         val details = listOfNotNull(
             daily.difficulty.uppercase().takeIf { it.isNotBlank() },
             daily.acRate?.let { "%.0f%% acceptance".format(it) },
-            streak.takeIf { it > 0 }?.let { "$it-day streak" }
+            streak.takeIf { it > 0 }?.let { "$it-day streak" },
+            reviewsDue.takeIf { it > 0 }?.let { if (it == 1) "1 review due" else "$it reviews due" }
         ).joinToString(" · ")
         val notification = base(context, CHANNEL_REMINDERS)
             .setContentTitle("LeetCode · Daily #${daily.frontendId}".trimEnd('#', ' '))

@@ -4,6 +4,7 @@ import dev.diligent.app.leetcode.data.Contest
 import dev.diligent.app.leetcode.data.ContestStats
 import dev.diligent.app.leetcode.data.DailyQuestion
 import dev.diligent.app.leetcode.data.DifficultyCounts
+import dev.diligent.app.leetcode.data.LeetCodeReview
 import dev.diligent.app.leetcode.data.LeetCodeState
 import dev.diligent.app.leetcode.data.RecentAc
 import dev.diligent.app.leetcode.domain.LeetCodeDay
@@ -36,12 +37,21 @@ data class LeetCodeView(
     val fetchedAt: Long,
     val error: String?,
     val syncing: Boolean,
-    val dailyOnly: Boolean
-)
+    val dailyOnly: Boolean,
+    /** Problems due for a re-solve now, most overdue first. */
+    val dueReviews: List<LeetCodeReview> = emptyList(),
+    /** Problems still in the review queue but not due yet. */
+    val queuedReviews: Int = 0,
+    /** When the next queued problem falls due (start of a local day), if any. */
+    val nextReviewAt: Long? = null
+) {
+    val reviewsDue: Int get() = dueReviews.size
+}
 
 object LeetCodePresenter {
 
-    fun build(state: LeetCodeState, now: Long): LeetCodeView {
+    /** @param reviews the review queue's active rows (retired ones are ignored). */
+    fun build(state: LeetCodeState, now: Long, reviews: List<LeetCodeReview> = emptyList()): LeetCodeView {
         val config = state.config
         val snapshot = state.snapshot?.takeIf { it.username.equals(config.username, ignoreCase = true) }
         val today = LeetCodeDay.utcDay(now)
@@ -54,6 +64,7 @@ object LeetCodePresenter {
         }
         // Yesterday's daily challenge is not today's; hide it until the next sync.
         val daily = snapshot?.daily?.takeIf { it.date.isBlank() || it.date == today.toString() }
+        val (due, queued) = reviews.filter { config.configured && !it.retired }.partition { it.isDue(now) }
 
         return LeetCodeView(
             configured = config.configured,
@@ -75,7 +86,10 @@ object LeetCodePresenter {
             fetchedAt = snapshot?.fetchedAt ?: 0L,
             error = state.sync.lastError,
             syncing = state.sync.isSyncing(now),
-            dailyOnly = config.guardDailyOnly
+            dailyOnly = config.guardDailyOnly,
+            dueReviews = due.sortedWith(compareBy({ it.dueAt }, { it.slug })),
+            queuedReviews = queued.size,
+            nextReviewAt = queued.minOfOrNull { it.dueAt }
         )
     }
 
@@ -88,11 +102,14 @@ object LeetCodePresenter {
         else -> 4
     }
 
-    /** The next time the widget's content changes on its own: the UTC reset or a contest edge. */
+    /**
+     * The next time the widget's content changes on its own: the UTC reset, a contest edge, or
+     * the local midnight when the next queued review falls due.
+     */
     fun nextBoundary(view: LeetCodeView, now: Long): Long {
         val contestEdges = listOfNotNull(view.nextContest).flatMap {
             listOf(it.startTime * 1000L, (it.startTime + it.durationSec) * 1000L)
         }
-        return (contestEdges + view.resetAt).filter { it > now }.minOrNull() ?: view.resetAt
+        return (contestEdges + listOfNotNull(view.nextReviewAt) + view.resetAt).filter { it > now }.minOrNull() ?: view.resetAt
     }
 }

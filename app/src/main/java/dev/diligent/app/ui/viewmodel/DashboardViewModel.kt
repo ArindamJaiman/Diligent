@@ -6,6 +6,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.focus.FocusTimer
+import dev.diligent.app.focus.data.FocusState
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -18,7 +20,8 @@ import javax.inject.Inject
 @OptIn(ExperimentalCoroutinesApi::class)
 @HiltViewModel
 class DashboardViewModel @Inject constructor(
-    private val repository: DiligentRepository
+    private val repository: DiligentRepository,
+    private val focusTimer: FocusTimer
 ) : ViewModel() {
 
     // ─── Sort/Filter State ──────────────────────────────────────
@@ -107,6 +110,23 @@ class DashboardViewModel @Inject constructor(
     fun toggleComplete(activityId: Long) {
         viewModelScope.launch {
             repository.toggleComplete(activityId)
+        }
+    }
+
+    // ─── Focus timer ────────────────────────────────────────────
+
+    /** The running timer (shared with the widget, tile and notification). */
+    val focus: StateFlow<FocusState> = focusTimer.state
+
+    fun startFocus(activityId: Long, pomodoro: Boolean) {
+        viewModelScope.launch {
+            focusTimer.start(activityId, pomodoro)
+        }
+    }
+
+    fun stopFocus() {
+        viewModelScope.launch {
+            focusTimer.stop()
         }
     }
 

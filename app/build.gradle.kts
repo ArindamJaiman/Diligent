@@ -127,6 +127,9 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // Health Connect (reads today's exercise sessions for Gym auto-log)
+    implementation(libs.androidx.health.connect.client)
+
     // Testing
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.test.ext.junit)

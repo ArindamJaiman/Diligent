@@ -40,7 +40,9 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.leetcode.data.Contest
 import dev.diligent.app.leetcode.data.LeetCodeConfig
 import dev.diligent.app.leetcode.data.LeetCodeLinks
+import dev.diligent.app.leetcode.data.LeetCodeReview
 import dev.diligent.app.leetcode.domain.LeetCodeDay
+import dev.diligent.app.leetcode.domain.ReviewSchedule
 import dev.diligent.app.leetcode.domain.StreakSchedule
 import dev.diligent.app.leetcode.notify.LeetCodeNotifier
 import dev.diligent.app.leetcode.presentation.LeetCodePresenter
@@ -163,6 +165,7 @@ fun LeetCodeScreen(
             StatusCard(view, state.now, onSync = { viewModel.syncNow() })
             if (view.hasData) {
                 TodayCard(view, state.now)
+                ReviewCard(view, state.now, onSkip = viewModel::skipReview, onReset = viewModel::resetReview)
                 SolvedCard(view)
                 HeatmapCard(view, state.now)
                 ContestCard(view, state.now)
@@ -233,7 +236,8 @@ private fun HowItWorks() {
             "Daily challenge alert at your chosen time, skipped once it's solved",
             "Streak guard: warns before the UTC reset if you haven't submitted today, with CHECK NOW and DONE TODAY buttons",
             "Contest heads-up before weekly and biweekly contests",
-            "Home-screen widget: streak, today's status, E/M/H, daily, heatmap",
+            "Review queue: problems you solve come back for a re-solve after 1, 3, 7, 21 and 60 days",
+            "Home-screen widget: streak, today's status, E/M/H, daily, reviews due, heatmap",
             "Auto-logs solved problems into your LeetCode activity"
         ).forEach {
             Text("·  $it", style = label(10.sp), color = DiligentColors.Gray600, modifier = Modifier.padding(vertical = 2.dp))
@@ -326,6 +330,93 @@ private fun TodayCard(view: LeetCodeView, now: Long) {
                 LcButton("SOLVE ON LEETCODE", Modifier.fillMaxWidth()) { uri.openUri(daily.url) }
             }
         }
+    }
+}
+
+// ─── Review queue ───────────────────────────────────────────────
+
+@Composable
+private fun ReviewCard(view: LeetCodeView, now: Long, onSkip: (String) -> Unit, onReset: (String) -> Unit) {
+    val uri = LocalUriHandler.current
+    val zone = ZoneId.systemDefault()
+    LcCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text("DUE FOR REVIEW", style = label(10.sp), color = DiligentColors.Gray500, modifier = Modifier.weight(1f))
+            Text(
+                "${view.reviewsDue}",
+                style = label(18.sp, bold = true),
+                color = if (view.reviewsDue > 0) Brand else DiligentColors.Gray600
+            )
+        }
+        if (view.dueReviews.isEmpty()) {
+            Spacer(Modifier.height(4.dp))
+            val next = view.nextReviewAt
+            Text(
+                if (next != null) {
+                    val day = Instant.ofEpochMilli(next).atZone(zone).format(DateTimeFormatter.ofPattern("EEE d MMM", Locale.getDefault()))
+                    "Nothing due today · next on $day · ${view.queuedReviews} in the queue"
+                } else {
+                    "Problems you get accepted come back here for a re-solve after 1, 3, 7, 21 and 60 days."
+                },
+                style = label(11.sp), color = DiligentColors.Gray600
+            )
+        }
+        view.dueReviews.forEachIndexed { index, review ->
+            Spacer(Modifier.height(10.dp))
+            if (index > 0) {
+                HorizontalDivider(color = DiligentColors.Border)
+                Spacer(Modifier.height(10.dp))
+            }
+            ReviewItem(
+                review = review,
+                overdueDays = ReviewSchedule.daysOverdue(review, now, zone),
+                onOpen = { uri.openUri(review.url) },
+                onSkip = { onSkip(review.slug) },
+                onReset = { onReset(review.slug) }
+            )
+        }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            "Re-solve a due problem on LeetCode and the next sync moves it to its next review. " +
+                "Reset starts it over at 1 day; skip retires it.",
+            style = label(9.sp), color = DiligentColors.Gray500
+        )
+    }
+}
+
+@Composable
+private fun ReviewItem(review: LeetCodeReview, overdueDays: Long, onOpen: () -> Unit, onSkip: () -> Unit, onReset: () -> Unit) {
+    Row(Modifier.fillMaxWidth().clickable(onClick = onOpen), verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(
+                review.title, style = label(12.sp, bold = true), color = DiligentColors.White,
+                maxLines = 1, overflow = TextOverflow.Ellipsis
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                review.difficulty?.let {
+                    Text(it.uppercase(), style = label(10.sp, bold = true), color = difficultyColor(it))
+                    Text("  ·  ", style = label(10.sp), color = DiligentColors.Gray600)
+                }
+                Text(
+                    listOfNotNull(
+                        ReviewSchedule.intervalDays(review.stage)?.let { "$it-DAY REVIEW ${review.stage + 1}/${ReviewSchedule.DONE}" },
+                        when (overdueDays) {
+                            0L -> "DUE TODAY"
+                            1L -> "1 DAY LATE"
+                            else -> "$overdueDays DAYS LATE"
+                        }
+                    ).joinToString("  ·  "),
+                    style = label(10.sp), color = DiligentColors.Gray600
+                )
+            }
+        }
+        Spacer(Modifier.width(8.dp))
+        Text("OPEN →", style = label(11.sp, bold = true), color = Brand)
+    }
+    Spacer(Modifier.height(8.dp))
+    Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+        LcButton("TOO EASY, SKIP", Modifier.weight(1f), outlined = true, onClick = onSkip)
+        LcButton("RESET", Modifier.weight(1f), outlined = true, onClick = onReset)
     }
 }
 

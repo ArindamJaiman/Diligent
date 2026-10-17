@@ -7,6 +7,7 @@ import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.leetcode.data.FetchOutcome
 import dev.diligent.app.leetcode.data.LeetCodeApi
 import dev.diligent.app.leetcode.data.LeetCodePrefs
+import dev.diligent.app.leetcode.data.LeetCodeReviewStore
 import dev.diligent.app.leetcode.data.LeetCodeSnapshot
 import dev.diligent.app.leetcode.domain.LeetCodeDay
 import dev.diligent.app.leetcode.notify.LeetCodeAlarms
@@ -31,12 +32,14 @@ sealed interface LeetCodeSyncResult {
  * The only place that talks to LeetCode. Called by the SYNC buttons, by opening the LeetCode
  * screen, and by reminder checks — never on a timer. Concurrent callers share one request,
  * and a fresh result (under [MIN_GAP_MS] old) is reused instead of fetching again.
+ * Each fresh result also feeds the review queue, from the data already fetched.
  */
 @Singleton
 class LeetCodeSync @Inject constructor(
     @ApplicationContext private val context: Context,
     private val prefs: LeetCodePrefs,
-    private val repository: DiligentRepository
+    private val repository: DiligentRepository,
+    private val reviews: LeetCodeReviewStore
 ) {
     private val mutex = Mutex()
 
@@ -82,7 +85,19 @@ class LeetCodeSync @Inject constructor(
         if (LeetCodeDay.streakSafe(snapshot, now, config.guardDailyOnly)) {
             LeetCodeNotifier.cancelStreak(context)
         }
+        recordReviews(snapshot)
         if (config.autoLog) autoLog(snapshot, config.autoLogActivityId, now)
+    }
+
+    /** New accepted problems join the review queue; re-solved due ones move to the next stage. */
+    private suspend fun recordReviews(snapshot: LeetCodeSnapshot) {
+        try {
+            reviews.record(snapshot)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.w(TAG, "Review queue update failed", e)
+        }
     }
 
     /**

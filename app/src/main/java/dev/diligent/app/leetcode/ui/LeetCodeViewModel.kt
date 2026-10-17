@@ -9,6 +9,7 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.leetcode.data.LeetCodeConfig
 import dev.diligent.app.leetcode.data.LeetCodePrefs
+import dev.diligent.app.leetcode.data.LeetCodeReviewStore
 import dev.diligent.app.leetcode.data.LeetCodeState
 import dev.diligent.app.leetcode.notify.LeetCodeAlarms
 import dev.diligent.app.leetcode.notify.LeetCodeNotifier
@@ -43,6 +44,7 @@ class LeetCodeViewModel @Inject constructor(
     @ApplicationContext private val context: Context,
     private val prefs: LeetCodePrefs,
     private val sync: LeetCodeSync,
+    private val reviews: LeetCodeReviewStore,
     repository: DiligentRepository
 ) : ViewModel() {
 
@@ -57,11 +59,12 @@ class LeetCodeViewModel @Inject constructor(
     val ui: StateFlow<LeetCodeUiState?> = combine(
         prefs.state,
         repository.getAllActiveActivities(),
+        reviews.observeActive(),
         ticker
-    ) { state, activities, now ->
+    ) { state, activities, queue, now ->
         val config = state.config
         LeetCodeUiState(
-            view = LeetCodePresenter.build(state, now),
+            view = LeetCodePresenter.build(state, now, queue),
             state = state,
             activities = activities,
             linkedActivity = activities.firstOrNull { it.id == config.autoLogActivityId }
@@ -101,6 +104,8 @@ class LeetCodeViewModel @Inject constructor(
         if (changed) prefs.clearSnapshot()
         LeetCodeReminders.sync(context, prefs.current(), replace = true)
         viewModelScope.launch {
+            // Another account's problems don't belong in this queue.
+            if (changed) reviews.clear()
             when (val result = sync.sync(force = true)) {
                 is LeetCodeSyncResult.Synced -> _messages.emit("Tracking ${result.snapshot.username}")
                 is LeetCodeSyncResult.Failed -> _messages.emit(result.message)
@@ -114,8 +119,31 @@ class LeetCodeViewModel @Inject constructor(
         prefs.clearSnapshot()
         LeetCodeReminders.cancelAll(context)
         LeetCodeNotifier.cancelAll(context)
-        LeetCodeWidgetUpdater.refreshAsync(context)
-        say("LeetCode tracking removed")
+        viewModelScope.launch {
+            reviews.clear()
+            LeetCodeWidgetUpdater.refresh(context)
+            _messages.emit("LeetCode tracking removed")
+        }
+    }
+
+    /** "Too easy, skip": the problem leaves the review queue for good. */
+    fun skipReview(slug: String) {
+        viewModelScope.launch {
+            if (reviews.skip(slug, System.currentTimeMillis())) {
+                LeetCodeWidgetUpdater.refresh(context)
+                _messages.emit("Skipped — it won't come back for review")
+            }
+        }
+    }
+
+    /** "Reset": start the problem's reviews over, 1 day from today. */
+    fun resetReview(slug: String) {
+        viewModelScope.launch {
+            if (reviews.reset(slug, System.currentTimeMillis())) {
+                LeetCodeWidgetUpdater.refresh(context)
+                _messages.emit("Reset — due again tomorrow")
+            }
+        }
     }
 
     fun update(transform: (LeetCodeConfig) -> LeetCodeConfig) {
