@@ -8,11 +8,13 @@ import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
+import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
+import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.leetcode.data.LeetCodeReview
 import dev.diligent.app.leetcode.data.LeetCodeReviewDao
@@ -33,9 +35,10 @@ import dev.diligent.app.quotapulse.data.UsageSourceStatus
         GithubContribution::class,
         UsageSnapshot::class,
         UsageSourceStatus::class,
-        LeetCodeReview::class
+        LeetCodeReview::class,
+        GithubUser::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = true
 )
 abstract class DiligentDatabase : RoomDatabase() {
@@ -46,6 +49,7 @@ abstract class DiligentDatabase : RoomDatabase() {
     abstract fun githubContributionDao(): GithubContributionDao
     abstract fun quotaPulseDao(): QuotaPulseDao
     abstract fun leetCodeReviewDao(): LeetCodeReviewDao
+    abstract fun githubUserDao(): GithubUserDao
 
     companion object {
         const val DATABASE_NAME = "diligent_db"
@@ -111,6 +115,44 @@ abstract class DiligentDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5)
+        /** Same SQL as the exported schema 6.json; DatabaseSchemaTest keeps the two in step. */
+        internal const val CREATE_GITHUB_USERS =
+            "CREATE TABLE IF NOT EXISTS `github_users` (`username` TEXT NOT NULL COLLATE NOCASE, " +
+                "`color` TEXT NOT NULL, `position` INTEGER NOT NULL, PRIMARY KEY(`username`))"
+
+        /** The v6 settings table: v5 minus the three githubUser columns. */
+        internal fun createSettingsV6(table: String) =
+            "CREATE TABLE IF NOT EXISTS `$table` (`id` INTEGER NOT NULL, `darkMode` INTEGER, " +
+                "`dailyReminderEnabled` INTEGER NOT NULL, `dailyReminderHour` INTEGER NOT NULL, " +
+                "`dailyReminderMinute` INTEGER NOT NULL, `missedGoalNotification` INTEGER NOT NULL, " +
+                "`dynamicColor` INTEGER NOT NULL, `lastBackupTime` INTEGER NOT NULL, " +
+                "`quotePreset` TEXT NOT NULL, PRIMARY KEY(`id`))"
+
+        private const val SETTINGS_V6_COLUMNS = "`id`, `darkMode`, `dailyReminderEnabled`, `dailyReminderHour`, " +
+            "`dailyReminderMinute`, `missedGoalNotification`, `dynamicColor`, `lastBackupTime`, `quotePreset`"
+
+        /**
+         * v6 moved GitHub developers from three fixed settings columns to their own ordered
+         * list, so there can be more than three. Filled slots are copied in order (a name in
+         * two slots once); SQLite can't drop columns on older Android, so settings is rebuilt.
+         */
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(CREATE_GITHUB_USERS)
+                (1..3).forEach { slot ->
+                    db.execSQL(
+                        "INSERT OR IGNORE INTO `github_users` (`username`, `color`, `position`) " +
+                            "SELECT TRIM(`githubUser$slot`), `githubUser${slot}Color`, ${slot - 1} FROM `settings` " +
+                            "WHERE TRIM(`githubUser$slot`) != ''"
+                    )
+                }
+                db.execSQL(createSettingsV6("settings_new"))
+                db.execSQL("INSERT INTO `settings_new` ($SETTINGS_V6_COLUMNS) SELECT $SETTINGS_V6_COLUMNS FROM `settings`")
+                db.execSQL("DROP TABLE `settings`")
+                db.execSQL("ALTER TABLE `settings_new` RENAME TO `settings`")
+            }
+        }
+
+        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
     }
 }

@@ -11,7 +11,6 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.R
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
-import dev.diligent.app.data.local.entity.githubSlots
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.data.repository.GithubContributionFetcher
 import dev.diligent.app.goals.GoalCoach
@@ -183,8 +182,7 @@ class WeeklyReviewService @Inject constructor(
         val history = repository.getAllProgressRangeSnapshot(start.minusDays(GoalCoach.WINDOW_DAYS + 1).toString(), start.plusDays(6).toString())
         val streaks = activities.associate { it.id to repository.calculateStreak(it.id) }
         val goals = GoalsCalculator.build(activities, history, goalsPrefs.snoozed.value, today)
-        val settings = repository.getSettingsSnapshot()
-        val github = settings.githubSlots().map { slot ->
+        val github = repository.getGithubUsersSnapshot().map { slot ->
             val cached = repository.getGithubContributionSnapshot(slot.username)
             val active = cached?.let { GithubContributionFetcher.decode(it.contributionsJson) }.orEmpty()
                 .filter { it.level > 0 }

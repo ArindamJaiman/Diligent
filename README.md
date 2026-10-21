@@ -49,6 +49,12 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - 11 widget quote packs (Wall Street plus 10 themed packs of 100 quotes each), and a Mix option
 - Pick one in Settings → Widget Quotes; quotes appear in random order
 
+### GitHub Contribution Graphs
+- Track up to 50 developers in Settings → GitHub Contribution Graphs: add a username or paste a profile link, reorder with ↑/↓, tap a row to rename it or pick its colour
+- The **GitHub** widget is a slideshow of every developer, flipped by the launcher. A launcher only takes a few MB of bitmaps per widget, so with a long list it loads the slides that fit (about 5 on a 4×2 widget) starting from the current one; tap a slide's header to step on to the next developer
+- The **GitHub Versus** widget compares the first two developers in the list
+- Graphs sync only when you tap **Update Contribution Graphs** (one request per developer, 4 at a time)
+
 ### QuotaPulse (AI usage widget)
 - Claude Code, Gemini, Antigravity and ChatGPT / Codex usage on the home screen
 - Syncs only when you tap SYNC; live mode only runs when you start it, and has a STOP button

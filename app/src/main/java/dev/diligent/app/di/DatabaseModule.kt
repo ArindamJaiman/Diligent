@@ -12,6 +12,7 @@ import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
+import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.leetcode.data.LeetCodeReviewDao
 import dev.diligent.app.quotapulse.data.QuotaPulseDao
@@ -52,6 +53,9 @@ object DatabaseModule {
 
     @Provides
     fun provideGithubContributionDao(db: DiligentDatabase): GithubContributionDao = db.githubContributionDao()
+
+    @Provides
+    fun provideGithubUserDao(db: DiligentDatabase): GithubUserDao = db.githubUserDao()
 
     @Provides
     fun provideQuotaPulseDao(db: DiligentDatabase): QuotaPulseDao = db.quotaPulseDao()

@@ -11,7 +11,10 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
@@ -21,12 +24,18 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.diligent.app.data.local.entity.GithubUser
+import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
@@ -44,6 +53,7 @@ fun SettingsScreen(
     viewModel: SettingsViewModel = hiltViewModel()
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
+    val githubUsers by viewModel.githubUsers.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // File picker for restore
@@ -194,39 +204,25 @@ fun SettingsScreen(
             )
 
             // ─── GitHub Section ─────────────────────────────
-            SettingsSectionHeader("GITHUB VERSUS CONTROLS")
+            SettingsSectionHeader("GITHUB CONTRIBUTION GRAPHS")
 
-            GithubUserConfigCard(
-                index = 1,
-                label = "Developer 1 (Main User)",
-                username = settings.githubUser1,
-                selectedColor = settings.githubUser1Color,
-                onUsernameChange = { viewModel.updateGithubUser(1, it) },
-                onColorChange = { viewModel.updateGithubColor(1, it) }
-            )
-
-            GithubUserConfigCard(
-                index = 2,
-                label = "Developer 2 (Competitor 1)",
-                username = settings.githubUser2,
-                selectedColor = settings.githubUser2Color,
-                onUsernameChange = { viewModel.updateGithubUser(2, it) },
-                onColorChange = { viewModel.updateGithubColor(2, it) }
-            )
-
-            GithubUserConfigCard(
-                index = 3,
-                label = "Developer 3 (Competitor 2)",
-                username = settings.githubUser3,
-                selectedColor = settings.githubUser3Color,
-                onUsernameChange = { viewModel.updateGithubUser(3, it) },
-                onColorChange = { viewModel.updateGithubColor(3, it) }
+            GithubDevelopersCard(
+                users = githubUsers,
+                onAdd = viewModel::addGithubUser,
+                onRename = viewModel::renameGithubUser,
+                onRemove = viewModel::removeGithubUser,
+                onMove = viewModel::moveGithubUser,
+                onColorChange = viewModel::updateGithubColor
             )
 
             SettingsActionItem(
                 icon = Icons.Default.Refresh,
                 title = "Update Contribution Graphs",
-                subtitle = "Scrape latest data for all configured devs",
+                subtitle = when (githubUsers.size) {
+                    0 -> "Add a developer first"
+                    1 -> "Scrape latest data for 1 developer"
+                    else -> "Scrape latest data for all ${githubUsers.size} developers"
+                },
                 onClick = { viewModel.syncAllGithubContributions() }
             )
 
@@ -420,16 +416,48 @@ private fun formatBackupTime(millis: Long): String {
     }
 }
 
+/** Glow colours offered for each developer (same names as GithubTheme). */
+private val GithubSwatches = listOf(
+    "emerald" to Color(0xFF4ADE80),
+    "crimson" to Color(0xFFF43F5E),
+    "blue" to Color(0xFF3B82F6),
+    "gold" to Color(0xFFFBBF24),
+    "purple" to Color(0xFFA855F7)
+)
+
+private fun swatch(name: String): Color = GithubSwatches.firstOrNull { it.first == name }?.second ?: GithubSwatches[0].second
+
+/**
+ * Every developer whose graph the GitHub widgets show, in slideshow order. The first two
+ * face off in the Versus widget. Tap a row to rename it or change its colour.
+ */
 @Composable
-private fun GithubUserConfigCard(
-    index: Int,
-    label: String,
-    username: String,
-    selectedColor: String,
-    onUsernameChange: (String) -> Unit,
-    onColorChange: (String) -> Unit
+private fun GithubDevelopersCard(
+    users: List<GithubUser>,
+    onAdd: (String) -> Unit,
+    onRename: (String, String) -> Unit,
+    onRemove: (String) -> Unit,
+    onMove: (String, Int) -> Unit,
+    onColorChange: (String, String) -> Unit
 ) {
-    var textState by remember(username) { mutableStateOf(username) }
+    var expanded by remember { mutableStateOf<String?>(null) }
+    var newName by remember { mutableStateOf("") }
+    var pendingAdd by remember { mutableStateOf<String?>(null) }
+
+    // Clear the field only once the name is actually on the list (a rejected name stays editable).
+    LaunchedEffect(users) {
+        val added = pendingAdd ?: return@LaunchedEffect
+        if (users.any { it.username.equals(added, ignoreCase = true) }) {
+            newName = ""
+            pendingAdd = null
+        }
+    }
+    val submit = {
+        if (newName.isNotBlank()) {
+            pendingAdd = GithubUsers.normalize(newName)
+            onAdd(newName)
+        }
+    }
 
     Box(
         modifier = Modifier
@@ -439,40 +467,132 @@ private fun GithubUserConfigCard(
             .background(DiligentColors.Surface)
             .padding(16.dp)
     ) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                text = label,
-                style = MaterialTheme.typography.bodyMedium.copy(
-                    fontFamily = DotMatrix,
-                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold
-                ),
-                color = DiligentColors.White
+                text = when (users.size) {
+                    0 -> "No developers yet"
+                    1 -> "1 developer"
+                    else -> "${users.size} developers · the first two face off in the Versus widget"
+                },
+                style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                color = DiligentColors.Gray500
             )
 
+            users.forEachIndexed { index, user ->
+                GithubDeveloperRow(
+                    user = user,
+                    index = index,
+                    isLast = index == users.lastIndex,
+                    expanded = expanded == user.username,
+                    onToggle = { expanded = if (expanded == user.username) null else user.username },
+                    onRename = { raw ->
+                        onRename(user.username, raw)
+                        expanded = null
+                    },
+                    onRemove = { onRemove(user.username) },
+                    onMove = { delta -> onMove(user.username, delta) },
+                    onColorChange = { color -> onColorChange(user.username, color) }
+                )
+                if (index < users.lastIndex) HorizontalDivider(color = DiligentColors.Border)
+            }
+
+            if (users.size < GithubUsers.MAX_USERS) {
+                OutlinedTextField(
+                    value = newName,
+                    onValueChange = { newName = it },
+                    placeholder = { Text("Add GitHub username or profile link", color = DiligentColors.Gray600) },
+                    singleLine = true,
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, autoCorrectEnabled = false),
+                    keyboardActions = KeyboardActions(onDone = { submit() }),
+                    colors = githubFieldColors(),
+                    modifier = Modifier.fillMaxWidth(),
+                    trailingIcon = {
+                        if (newName.isNotBlank()) {
+                            IconButton(onClick = submit) {
+                                Icon(Icons.Default.Add, contentDescription = "Add developer", tint = DiligentColors.White)
+                            }
+                        }
+                    }
+                )
+            } else {
+                Text(
+                    text = "List full (${GithubUsers.MAX_USERS} developers)",
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                    color = DiligentColors.Gray500
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun GithubDeveloperRow(
+    user: GithubUser,
+    index: Int,
+    isLast: Boolean,
+    expanded: Boolean,
+    onToggle: () -> Unit,
+    onRename: (String) -> Unit,
+    onRemove: () -> Unit,
+    onMove: (Int) -> Unit,
+    onColorChange: (String) -> Unit
+) {
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Row(
+            modifier = Modifier.fillMaxWidth().clickable(onClick = onToggle),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(Modifier.size(10.dp).clip(CircleShape).background(swatch(user.color)))
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(
+                    text = user.username,
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix, fontWeight = FontWeight.Bold),
+                    color = DiligentColors.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = when (index) {
+                        0 -> "#1 · VERSUS: YOU"
+                        1 -> "#2 · VERSUS: RIVAL"
+                        else -> "#${index + 1}"
+                    },
+                    style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix, fontSize = 10.sp),
+                    color = DiligentColors.Gray500
+                )
+            }
+            IconButton(onClick = { onMove(-1) }, enabled = index > 0) {
+                Icon(Icons.Default.KeyboardArrowUp, contentDescription = "Move ${user.username} up", tint = if (index > 0) DiligentColors.Gray700 else DiligentColors.Gray300)
+            }
+            IconButton(onClick = { onMove(1) }, enabled = !isLast) {
+                Icon(Icons.Default.KeyboardArrowDown, contentDescription = "Move ${user.username} down", tint = if (!isLast) DiligentColors.Gray700 else DiligentColors.Gray300)
+            }
+            IconButton(onClick = onRemove) {
+                Icon(Icons.Default.Close, contentDescription = "Remove ${user.username}", tint = DiligentColors.Gray600)
+            }
+        }
+
+        if (expanded) {
+            var text by remember(user.username) { mutableStateOf(user.username) }
             OutlinedTextField(
-                value = textState,
-                onValueChange = { textState = it },
-                placeholder = { Text("Enter GitHub username", color = DiligentColors.Gray600) },
+                value = text,
+                onValueChange = { text = it },
                 singleLine = true,
                 textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedBorderColor = DiligentColors.White,
-                    unfocusedBorderColor = DiligentColors.Border,
-                    focusedTextColor = DiligentColors.White,
-                    unfocusedTextColor = DiligentColors.White,
-                    focusedContainerColor = DiligentColors.Black,
-                    unfocusedContainerColor = DiligentColors.Black
-                ),
+                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done, autoCorrectEnabled = false),
+                keyboardActions = KeyboardActions(onDone = { if (text.trim() != user.username) onRename(text) }),
+                colors = githubFieldColors(),
                 modifier = Modifier.fillMaxWidth(),
                 trailingIcon = {
-                    if (textState.trim() != username) {
-                        IconButton(onClick = { onUsernameChange(textState.trim()) }) {
+                    if (text.trim() != user.username) {
+                        IconButton(onClick = { onRename(text) }) {
                             Icon(Icons.Default.Check, contentDescription = "Save", tint = DiligentColors.White)
                         }
                     }
                 }
             )
-
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 horizontalArrangement = Arrangement.spacedBy(12.dp)
@@ -482,26 +602,17 @@ private fun GithubUserConfigCard(
                     style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
                     color = DiligentColors.Gray500
                 )
-
-                val colorsMap = listOf(
-                    "emerald" to androidx.compose.ui.graphics.Color(0xFF4ADE80),
-                    "crimson" to androidx.compose.ui.graphics.Color(0xFFF43F5E),
-                    "blue" to androidx.compose.ui.graphics.Color(0xFF3B82F6),
-                    "gold" to androidx.compose.ui.graphics.Color(0xFFFBBF24),
-                    "purple" to androidx.compose.ui.graphics.Color(0xFFA855F7)
-                )
-
-                colorsMap.forEach { (colorName, colorVal) ->
-                    val isSelected = selectedColor == colorName
+                GithubSwatches.forEach { (colorName, colorVal) ->
+                    val isSelected = user.color == colorName
                     Box(
                         modifier = Modifier
                             .size(24.dp)
-                            .clip(androidx.compose.foundation.shape.CircleShape)
+                            .clip(CircleShape)
                             .background(colorVal)
                             .border(
                                 width = if (isSelected) 2.dp else 0.dp,
-                                color = if (isSelected) DiligentColors.White else androidx.compose.ui.graphics.Color.Transparent,
-                                shape = androidx.compose.foundation.shape.CircleShape
+                                color = if (isSelected) DiligentColors.White else Color.Transparent,
+                                shape = CircleShape
                             )
                             .clickable { onColorChange(colorName) }
                     )
@@ -510,6 +621,16 @@ private fun GithubUserConfigCard(
         }
     }
 }
+
+@Composable
+private fun githubFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedBorderColor = DiligentColors.White,
+    unfocusedBorderColor = DiligentColors.Border,
+    focusedTextColor = DiligentColors.White,
+    unfocusedTextColor = DiligentColors.White,
+    focusedContainerColor = DiligentColors.Black,
+    unfocusedContainerColor = DiligentColors.Black
+)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable

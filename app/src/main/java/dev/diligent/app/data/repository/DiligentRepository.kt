@@ -6,21 +6,32 @@ import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
+import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.local.entity.GithubContribution
+import dev.diligent.app.data.local.entity.GithubUser
+import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.goals.StreakEngine
 import dev.diligent.app.goals.StreakState
 import dev.diligent.app.widget.WidgetUpdater
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withLock
+import kotlinx.coroutines.sync.withPermit
 import java.time.Duration
 import java.time.LocalDate
 import java.time.LocalDateTime
@@ -40,7 +51,8 @@ class DiligentRepository @Inject constructor(
     private val dailyProgressDao: DailyProgressDao,
     private val settingsDao: SettingsDao,
     private val activityReminderDao: ActivityReminderDao,
-    private val githubContributionDao: GithubContributionDao
+    private val githubContributionDao: GithubContributionDao,
+    private val githubUserDao: GithubUserDao
 ) {
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -359,6 +371,53 @@ class DiligentRepository @Inject constructor(
         return true
     }
 
+    /**
+     * Syncs every developer's graph, [GITHUB_SYNC_PARALLELISM] requests at a time so a long
+     * list doesn't fire dozens of requests at GitHub at once. Returns (synced, total).
+     */
+    suspend fun syncAllGithubContributions(): Pair<Int, Int> = coroutineScope {
+        val users = getGithubUsersSnapshot().map { it.username }
+        val gate = Semaphore(GITHUB_SYNC_PARALLELISM)
+        val synced = users.map { username ->
+            async(Dispatchers.IO) { gate.withPermit { syncGithubContributions(username) } }
+        }.awaitAll().count { it }
+        synced to users.size
+    }
+
+    // ─── GitHub Developers ──────────────────────────────────────
+
+    private val githubUsersMutex = Mutex()
+
+    fun getGithubUsers(): Flow<List<GithubUser>> = githubUserDao.observeAll()
+
+    suspend fun getGithubUsersSnapshot(): List<GithubUser> = githubUserDao.getAll()
+
+    /**
+     * Applies one edit from [GithubUsers] to the stored list. Graphs cached for a developer
+     * who left the list are deleted; a change of letter case keeps its graph.
+     */
+    suspend fun editGithubUsers(edit: (List<GithubUser>) -> GithubUsers.Edit): GithubUsers.Edit =
+        githubUsersMutex.withLock {
+            val before = githubUserDao.getAll()
+            val result = edit(before)
+            if (result is GithubUsers.Edit.Done) {
+                githubUserDao.replaceAll(result.users)
+                for (old in before) {
+                    if (result.users.any { it.username == old.username }) continue
+                    val renamed = result.users.firstOrNull { it.username.equals(old.username, ignoreCase = true) }
+                    val cached = githubContributionDao.getContributionSnapshot(old.username)
+                    if (renamed != null && cached != null) githubContributionDao.insert(cached.copy(username = renamed.username))
+                    githubContributionDao.deleteByUsername(old.username)
+                }
+            }
+            result
+        }
+
+    /** Replaces the whole list (restore, first-launch defaults). */
+    suspend fun replaceGithubUsers(users: List<GithubUser>) {
+        editGithubUsers { GithubUsers.Edit.Done(GithubUsers.ordered(users)) }
+    }
+
     // ─── Helpers ────────────────────────────────────────────────
 
     fun today(): String = LocalDate.now().format(dateFormatter)
@@ -388,5 +447,10 @@ class DiligentRepository @Inject constructor(
     /** Keeps the home-screen tracker widget in sync with in-app changes. */
     private suspend fun trackerChanged() {
         WidgetUpdater.refreshTracker(context)
+    }
+
+    companion object {
+        /** Contribution pages fetched at once during a sync. */
+        const val GITHUB_SYNC_PARALLELISM = 4
     }
 }

@@ -20,6 +20,11 @@ class DatabaseSchemaTest {
         return Json.parseToJsonElement(file.readText()).jsonObject.getValue("database").jsonObject
     }
 
+    private fun entity(version: Int, table: String): JsonObject =
+        database(version).getValue("entities").jsonArray
+            .map { it.jsonObject }
+            .single { it.getValue("tableName").jsonPrimitive.content == table }
+
     /** tableName → createSql with the placeholder filled in. */
     private fun tables(version: Int): Map<String, String> =
         database(version).getValue("entities").jsonArray.associate { entity ->
@@ -31,9 +36,7 @@ class DatabaseSchemaTest {
     fun `migration 4 to 5 creates leetcode_reviews exactly as Room exports it`() {
         assertEquals(5, database(5).getValue("version").jsonPrimitive.int)
         assertEquals(tables(5).getValue("leetcode_reviews"), DiligentDatabase.CREATE_LEETCODE_REVIEWS)
-        val entity = database(5).getValue("entities").jsonArray
-            .map { it.jsonObject }
-            .single { it.getValue("tableName").jsonPrimitive.content == "leetcode_reviews" }
+        val entity = entity(5, "leetcode_reviews")
         assertEquals(0, entity["indices"]?.jsonArray?.size ?: 0)
         assertEquals(0, entity["foreignKeys"]?.jsonArray?.size ?: 0)
     }
@@ -41,5 +44,21 @@ class DatabaseSchemaTest {
     @Test
     fun `version 5 only adds leetcode_reviews`() {
         assertEquals(tables(4), tables(5) - "leetcode_reviews")
+    }
+
+    @Test
+    fun `migration 5 to 6 builds github_users and the slimmer settings exactly as Room exports them`() {
+        assertEquals(6, database(6).getValue("version").jsonPrimitive.int)
+        assertEquals(tables(6).getValue("github_users"), DiligentDatabase.CREATE_GITHUB_USERS)
+        assertEquals(tables(6).getValue("settings"), DiligentDatabase.createSettingsV6("settings"))
+        listOf("github_users", "settings").forEach { table ->
+            assertEquals(0, entity(6, table)["indices"]?.jsonArray?.size ?: 0)
+            assertEquals(0, entity(6, table)["foreignKeys"]?.jsonArray?.size ?: 0)
+        }
+    }
+
+    @Test
+    fun `version 6 changes only settings and github_users`() {
+        assertEquals(tables(5) - "settings", tables(6) - "settings" - "github_users")
     }
 }

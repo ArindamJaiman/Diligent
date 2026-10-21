@@ -6,14 +6,9 @@ import androidx.hilt.work.HiltWorker
 import androidx.work.*
 import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
-import dev.diligent.app.data.local.entity.githubSlots
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.widget.WidgetUpdater
 import java.util.concurrent.TimeUnit
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.withContext
 
 /**
  * Background GitHub contribution sync. Contribution graphs are synced manually from
@@ -28,23 +23,9 @@ class GithubSyncWorker @AssistedInject constructor(
 
     override suspend fun doWork(): Result {
         Log.d(TAG, "Starting GitHub contribution sync...")
-        val users = repository.getSettingsSnapshot().githubSlots().map { it.username }
-
-        var success = true
-        if (users.isNotEmpty()) {
-            val results = withContext(Dispatchers.IO) {
-                users.map { username ->
-                    async {
-                        val res = repository.syncGithubContributions(username)
-                        Log.d(TAG, "Sync user $username result: $res")
-                        res
-                    }
-                }.awaitAll()
-            }
-            if (results.any { !it }) {
-                success = false
-            }
-        }
+        val (synced, total) = repository.syncAllGithubContributions()
+        Log.d(TAG, "Synced $synced/$total contribution graphs")
+        val success = synced == total
 
         WidgetUpdater.refreshGithub(applicationContext)
 

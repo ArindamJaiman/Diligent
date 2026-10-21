@@ -36,8 +36,7 @@ import androidx.glance.unit.ColorProvider
 import dagger.hilt.android.EntryPointAccessors
 import dev.diligent.app.R
 import dev.diligent.app.data.local.entity.GithubContribution
-import dev.diligent.app.data.local.entity.GithubSlot
-import dev.diligent.app.data.local.entity.githubSlots
+import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.repository.GithubContributionFetcher
 import dev.diligent.app.di.WidgetEntryPoint
 import dev.diligent.app.ui.MainActivity
@@ -53,6 +52,10 @@ import kotlinx.coroutines.launch
  * The slideshow runs inside the launcher (ViewFlipper), so the app never wakes up
  * to rotate developers. Tapping a slide's header jumps to the next developer;
  * tapping the body opens the app.
+ *
+ * A launcher only accepts so many bitmap bytes per widget, so a long developer list is
+ * shown as a window of the slides that fit ([SlideWindow]) starting at the current one.
+ * The header tap moves the window on, so every developer is reachable.
  */
 class GithubWidget : GlanceAppWidget() {
 
@@ -64,11 +67,10 @@ class GithubWidget : GlanceAppWidget() {
             WidgetEntryPoint::class.java
         )
         val repository = entryPoint.repository()
-        val settings = repository.getSettingsSnapshot()
 
         // Cached contributions only — syncing happens when the user taps Update in Settings.
-        val slides = settings.githubSlots().map { slot ->
-            GithubSlide(slot, repository.getGithubContributionSnapshot(slot.username))
+        val slides = repository.getGithubUsersSnapshot().map { user ->
+            GithubSlide(user, repository.getGithubContributionSnapshot(user.username))
         }
 
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
@@ -87,7 +89,7 @@ class GithubWidget : GlanceAppWidget() {
     }
 }
 
-internal class GithubSlide(val slot: GithubSlot, val cached: GithubContribution?)
+internal class GithubSlide(val slot: GithubUser, val cached: GithubContribution?)
 
 class GithubWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = GithubWidget()
@@ -193,7 +195,25 @@ private fun buildSlideshow(
     val flipper = RemoteViews(context.packageName, R.layout.widget_github_flipper)
     flipper.removeAllViews(R.id.github_flipper)
 
-    slides.forEachIndexed { index, slide ->
+    // Grids are drawn in slideshow order until the bitmap budget is used up.
+    val budget = SlideWindow.budgetBytes(metrics.widthPixels, metrics.heightPixels)
+    var used = 0L
+    for ((position, index) in SlideWindow.order(slides.size, startIndex).withIndex()) {
+        val slide = slides[index]
+        val grid = slide.cached?.let { cached ->
+            val contributions = GithubContributionFetcher.decode(cached.contributionsJson)
+            ContributionGrid.render(
+                ContributionGrid.buildWeeks(ContributionGrid.levelsByDate(contributions), geometry.weeks),
+                GithubTheme.palette(slide.slot.color),
+                geometry,
+                metrics.density,
+                metrics.densityDpi
+            ) to GithubContributionFetcher.calculateStreak(contributions)
+        }
+        val bytes = grid?.first?.allocationByteCount?.toLong() ?: 0L
+        if (!SlideWindow.fits(position, used, bytes, budget)) break
+        used += bytes
+
         val accent = GithubTheme.accent(slide.slot.color)
         val slideViews = RemoteViews(context.packageName, R.layout.widget_github_slide).apply {
             setTextViewText(
@@ -207,37 +227,22 @@ private fun buildSlideshow(
             setTextViewTextSize(R.id.slide_streak, TypedValue.COMPLEX_UNIT_SP, textSize)
 
             if (slides.size > 1) {
-                setOnClickPendingIntent(R.id.slide_header, nextSlideIntent(context, index, slides.size))
+                setOnClickPendingIntent(R.id.slide_header, nextSlideIntent(context, position, index, slides.size))
             } else {
                 setViewVisibility(R.id.slide_rotate, View.INVISIBLE)
             }
             setOnClickPendingIntent(R.id.slide_body, openApp)
 
             val cached = slide.cached
-            if (cached == null) {
+            if (cached == null || grid == null) {
                 setViewVisibility(R.id.slide_streak, View.GONE)
                 setViewVisibility(R.id.slide_grid, View.GONE)
                 setViewVisibility(R.id.slide_footer, View.GONE)
                 setViewVisibility(R.id.slide_message, View.VISIBLE)
                 setTextViewText(R.id.slide_message, "tap update in settings")
             } else {
-                val contributions = GithubContributionFetcher.decode(cached.contributionsJson)
-                val streak = GithubContributionFetcher.calculateStreak(contributions)
-                val columns = ContributionGrid.buildWeeks(
-                    ContributionGrid.levelsByDate(contributions),
-                    geometry.weeks
-                )
-                setTextViewText(R.id.slide_streak, "STREAK: ${streak}d")
-                setImageViewBitmap(
-                    R.id.slide_grid,
-                    ContributionGrid.render(
-                        columns,
-                        GithubTheme.palette(slide.slot.color),
-                        geometry,
-                        metrics.density,
-                        metrics.densityDpi
-                    )
-                )
+                setTextViewText(R.id.slide_streak, "STREAK: ${grid.second}d")
+                setImageViewBitmap(R.id.slide_grid, grid.first)
                 setTextViewText(R.id.slide_total, "CONTRIBUTIONS (1Y): ${cached.totalAnnual}")
                 setTextViewText(R.id.slide_updated, ContributionGrid.formatAge(cached.lastUpdated))
             }
@@ -245,17 +250,19 @@ private fun buildSlideshow(
         flipper.addView(R.id.github_flipper, slideViews)
     }
 
-    flipper.setDisplayedChild(R.id.github_flipper, startIndex)
+    // The window starts at the current developer.
+    flipper.setDisplayedChild(R.id.github_flipper, 0)
     return flipper
 }
 
-private fun nextSlideIntent(context: Context, index: Int, count: Int): PendingIntent {
+/** @param position the slide's place in the window, which keys its PendingIntent */
+private fun nextSlideIntent(context: Context, position: Int, index: Int, count: Int): PendingIntent {
     val intent = Intent(context, GithubWidgetReceiver::class.java)
         .setAction(GithubWidget.ACTION_SHOW_SLIDE)
         .putExtra(GithubWidget.EXTRA_SLIDE_INDEX, (index + 1) % count)
     return PendingIntent.getBroadcast(
         context,
-        7300 + index,
+        7300 + position,
         intent,
         PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     )

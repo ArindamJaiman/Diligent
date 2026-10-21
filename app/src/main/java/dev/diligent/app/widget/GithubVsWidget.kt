@@ -24,7 +24,7 @@ import dev.diligent.app.ui.MainActivity
 
 /**
  * Versus Mode GitHub Contribution Widget.
- * Side-by-side comparison of user and competitor contribution graphs,
+ * Side-by-side comparison of the first two developers in the list (user and competitor),
  * featuring a central "VS" divider overlay and neon glowing color palettes.
  *
  * Renders cached data only; contribution graphs are synced manually from Settings.
@@ -39,12 +39,12 @@ class GithubVsWidget : GlanceAppWidget() {
             WidgetEntryPoint::class.java
         )
         val repository = entryPoint.repository()
-        val settings = repository.getSettingsSnapshot()
+        val users = repository.getGithubUsersSnapshot()
 
-        val user1 = settings.githubUser1.trim()
-        val themeColor1 = settings.githubUser1Color
-        val user2 = settings.githubUser2.trim()
-        val themeColor2 = settings.githubUser2Color
+        val user1 = users.getOrNull(0)?.username.orEmpty()
+        val themeColor1 = users.getOrNull(0)?.color ?: "emerald"
+        val user2 = users.getOrNull(1)?.username.orEmpty()
+        val themeColor2 = users.getOrNull(1)?.color ?: "crimson"
 
         val cached1 = if (user1.isNotBlank()) repository.getGithubContributionSnapshot(user1) else null
         val cached2 = if (user2.isNotBlank()) repository.getGithubContributionSnapshot(user2) else null

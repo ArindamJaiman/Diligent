@@ -1,6 +1,7 @@
 package dev.diligent.app.data.local
 
 import dev.diligent.app.data.local.entity.Activity
+import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
 import javax.inject.Inject
@@ -31,6 +32,9 @@ class SampleDataSeeder @Inject constructor(
             )
             repository.insertAllActivities(defaults)
         }
+
+        // Starter GitHub developers; the list can then grow, shrink or be emptied for good.
+        repository.replaceGithubUsers(GithubUsers.DEFAULTS)
 
         // Initialize settings
         repository.updateSettings(Settings())

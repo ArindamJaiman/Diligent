@@ -9,20 +9,21 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.GithubUser
+import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
-import dev.diligent.app.data.local.entity.githubSlots
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.async
-import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.jsonObject
 import java.io.File
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
@@ -42,6 +43,11 @@ class SettingsViewModel @Inject constructor(
         repository.getSettings()
             .map { it ?: Settings() }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), Settings())
+
+    /** GitHub developers, in widget order. */
+    val githubUsers: StateFlow<List<GithubUser>> =
+        repository.getGithubUsers()
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     private val _message = MutableSharedFlow<String>()
     val message: SharedFlow<String> = _message.asSharedFlow()
@@ -85,18 +91,29 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    fun updateGithubUser(index: Int, username: String) {
+    // ─── GitHub Developers ──────────────────────────────────────
+
+    fun addGithubUser(raw: String) = editGithubUsers { GithubUsers.add(it, raw) }
+
+    fun renameGithubUser(username: String, raw: String) = editGithubUsers { GithubUsers.rename(it, username, raw) }
+
+    fun removeGithubUser(username: String) = editGithubUsers { GithubUsers.remove(it, username) }
+
+    /** [delta] -1 moves up one place, +1 down; the first two are the Versus pair. */
+    fun moveGithubUser(username: String, delta: Int) = editGithubUsers { GithubUsers.move(it, username, delta) }
+
+    fun updateGithubColor(username: String, colorName: String) =
+        editGithubUsers { GithubUsers.recolor(it, username, colorName) }
+
+    private fun editGithubUsers(edit: (List<GithubUser>) -> GithubUsers.Edit) {
         viewModelScope.launch {
-            val current = repository.getSettingsSnapshot()
-            val updated = when (index) {
-                1 -> current.copy(githubUser1 = username)
-                2 -> current.copy(githubUser2 = username)
-                3 -> current.copy(githubUser3 = username)
-                else -> current
+            when (val result = repository.editGithubUsers(edit)) {
+                is GithubUsers.Edit.Done -> {
+                    result.message?.let { _message.emit(it) }
+                    WidgetUpdater.refreshGithub(context)
+                }
+                is GithubUsers.Edit.Rejected -> _message.emit(result.message)
             }
-            repository.updateSettings(updated)
-            _message.emit(if (username.isBlank()) "Developer slot cleared." else "Username saved.")
-            WidgetUpdater.refreshGithub(context)
         }
     }
 
@@ -106,40 +123,22 @@ class SettingsViewModel @Inject constructor(
      */
     fun syncAllGithubContributions() {
         viewModelScope.launch {
-            val users = repository.getSettingsSnapshot().githubSlots().map { it.username }
-            if (users.isEmpty()) {
+            val count = repository.getGithubUsersSnapshot().size
+            if (count == 0) {
                 _message.emit("Add a GitHub username first.")
                 return@launch
             }
 
-            _message.emit("Syncing ${users.size} contribution graphs...")
+            _message.emit("Syncing $count contribution graphs...")
 
-            val successCount = withContext(Dispatchers.IO) {
-                users.map { username ->
-                    async { repository.syncGithubContributions(username) }
-                }.awaitAll().count { it }
-            }
+            val (successCount, total) = repository.syncAllGithubContributions()
 
-            if (successCount == users.size) {
+            if (successCount == total) {
                 _message.emit("All $successCount graphs updated successfully!")
             } else {
-                _message.emit("$successCount/${users.size} synced. Check usernames and connection.")
+                _message.emit("$successCount/$total synced. Check usernames and connection.")
             }
 
-            WidgetUpdater.refreshGithub(context)
-        }
-    }
-
-    fun updateGithubColor(index: Int, colorName: String) {
-        viewModelScope.launch {
-            val current = repository.getSettingsSnapshot()
-            val updated = when (index) {
-                1 -> current.copy(githubUser1Color = colorName)
-                2 -> current.copy(githubUser2Color = colorName)
-                3 -> current.copy(githubUser3Color = colorName)
-                else -> current
-            }
-            repository.updateSettings(updated)
             WidgetUpdater.refreshGithub(context)
         }
     }
@@ -149,6 +148,9 @@ class SettingsViewModel @Inject constructor(
     /**
      * Data model for JSON backup. Missing fields fall back to defaults, so backups
      * made by older versions (or containing fields added later) still restore.
+     *
+     * [githubUsers] is null in backups from before the developer list; those carry the
+     * three old slots inside settings instead (see [GithubUsers.fromLegacySettings]).
      */
     @Serializable
     data class BackupData(
@@ -156,6 +158,7 @@ class SettingsViewModel @Inject constructor(
         val dailyProgress: List<DailyProgress> = emptyList(),
         val settings: Settings = Settings(),
         val reminders: List<ActivityReminder> = emptyList(),
+        val githubUsers: List<GithubUser>? = null,
         val backupTime: String = ""
     )
 
@@ -175,6 +178,7 @@ class SettingsViewModel @Inject constructor(
                     dailyProgress = repository.getAllDailyProgressSnapshot(),
                     settings = repository.getSettingsSnapshot(),
                     reminders = repository.getAllRemindersSnapshot(),
+                    githubUsers = repository.getGithubUsersSnapshot(),
                     backupTime = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                 )
 
@@ -216,6 +220,9 @@ class SettingsViewModel @Inject constructor(
                 repository.insertAllProgress(progress)
                 repository.updateSettings(backup.settings)
                 repository.insertAllReminders(reminders)
+                val legacySettings = backupJson.parseToJsonElement(json).jsonObject["settings"] as? JsonObject
+                (backup.githubUsers ?: GithubUsers.fromLegacySettings(legacySettings))
+                    ?.let { repository.replaceGithubUsers(it) }
 
                 ReminderScheduler.sync(context, backup.settings, replaceExisting = true)
                 WidgetUpdater.refreshAll(context)

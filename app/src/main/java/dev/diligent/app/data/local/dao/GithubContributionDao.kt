@@ -21,4 +21,7 @@ interface GithubContributionDao {
 
     @Delete
     suspend fun delete(contribution: GithubContribution)
+
+    @Query("DELETE FROM github_contributions WHERE username = :username")
+    suspend fun deleteByUsername(username: String)
 }
