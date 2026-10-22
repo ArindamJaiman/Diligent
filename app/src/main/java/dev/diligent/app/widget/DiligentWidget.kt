@@ -1,6 +1,7 @@
 package dev.diligent.app.widget
 
 import android.content.Context
+import android.os.SystemClock
 import android.widget.RemoteViews
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
@@ -43,7 +44,7 @@ import kotlin.random.Random
  * - Random quotes from the pack chosen in Settings (Wall Street, Street Wisdom, …)
  * - Displays all active activities with progress
  * - Inline increment/decrement via action callbacks
- * - Tap quote panel to shuffle to new quotes
+ * - Tap (or double-tap) the quote panel for the next quote at once
  * - [+] button to create new activity
  *
  * Design: Pure monochrome, black background, green ticker accent,
@@ -82,8 +83,11 @@ class DiligentWidget : GlanceAppWidget() {
             id = preset.id,
             quoteCount = QUOTE_SLIDES,
             heroCount = HERO_SLIDES,
-            random = Random(seed)
+            random = Random(seed),
+            // After a tap, the quotes that were on screen go to the back of the queue.
+            avoid = prefs.getStringSet(KEY_QUOTES_AVOID, null).orEmpty()
         )
+        prefs.edit().putStringSet(KEY_QUOTES_SHOWN, quotes.map { it.text }.toSet()).apply()
 
         provideContent {
             DiligentWidgetContent(
@@ -99,14 +103,19 @@ class DiligentWidget : GlanceAppWidget() {
     companion object {
         private const val PREFS_NAME = "diligent_widget_prefs"
         private const val KEY_QUOTE_SEED = "quote_seed"
+        private const val KEY_QUOTES_SHOWN = "quotes_shown"
+        private const val KEY_QUOTES_AVOID = "quotes_avoid"
         private const val QUOTE_ROTATION_MILLIS = 3 * 60 * 60 * 1000L
         private const val HERO_SLIDES = 4
         private const val QUOTE_SLIDES = 5
 
-        /** Forces a fresh set of random quotes on the next render. */
+        /** Forces a fresh set of random quotes on the next render, none of them the ones on screen now. */
         internal fun reshuffleQuotes(context: Context) {
             val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
-            prefs.edit().putLong(KEY_QUOTE_SEED, prefs.getLong(KEY_QUOTE_SEED, 0L) + 1).apply()
+            prefs.edit()
+                .putLong(KEY_QUOTE_SEED, prefs.getLong(KEY_QUOTE_SEED, 0L) + 1)
+                .putStringSet(KEY_QUOTES_AVOID, prefs.getStringSet(KEY_QUOTES_SHOWN, null).orEmpty())
+                .apply()
         }
     }
 }
@@ -251,7 +260,7 @@ private fun DiligentWidgetContent(
 /**
  * Premium quote ticker panel.
  * - Hero phrases and quotes slide inside launcher-side ViewFlippers (no app wakeups)
- * - Tap anywhere on the panel to shuffle to new random quotes
+ * - Tap (or double-tap) anywhere on the panel for the next quote, without waiting for the flip
  * - Decorative ticker-tape separators for a terminal aesthetic
  */
 @Composable
@@ -395,7 +404,8 @@ val ActivityIdKey = ActionParameters.Key<Long>("activityId")
 // ─── Action Callbacks ───────────────────────────────────────────
 
 /**
- * Refresh quote action — tapping the quote panel reshuffles the random quotes.
+ * Next quote — a tap (or a double tap, which counts once) on the quote panel shows a quote
+ * that wasn't in the set on screen, right away instead of after the 12 s flip.
  */
 class RefreshQuoteAction : ActionCallback {
     override suspend fun onAction(
@@ -403,14 +413,20 @@ class RefreshQuoteAction : ActionCallback {
         glanceId: GlanceId,
         parameters: ActionParameters
     ) {
+        // The first tap of a double tap already moved on; the second one isn't another skip.
+        if (quoteTaps.tap(SystemClock.uptimeMillis()).isDouble) return
         DiligentWidget.reshuffleQuotes(context)
-        DiligentWidget().update(context, glanceId)
+        InstantWidget.redraw(context, DiligentWidget(), glanceId)
+    }
+
+    private companion object {
+        val quoteTaps = TapTracker()
     }
 }
 
 /**
- * Increment action — runs directly from the widget.
- * The repository redraws every tracker widget after the change.
+ * Increment action — runs directly from the widget. The tapped widget redraws at once,
+ * then the other widgets that show tracker progress.
  */
 class IncrementAction : ActionCallback {
     override suspend fun onAction(
@@ -423,13 +439,14 @@ class IncrementAction : ActionCallback {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        entryPoint.repository().incrementProgress(activityId)
+        entryPoint.repository().incrementProgress(activityId, refreshWidgets = false)
+        WidgetUpdater.afterProgressTap(context, DiligentWidget(), glanceId)
     }
 }
 
 /**
- * Decrement action — runs directly from the widget.
- * The repository redraws every tracker widget after the change.
+ * Decrement action — runs directly from the widget. The tapped widget redraws at once,
+ * then the other widgets that show tracker progress.
  */
 class DecrementAction : ActionCallback {
     override suspend fun onAction(
@@ -442,7 +459,8 @@ class DecrementAction : ActionCallback {
             context.applicationContext,
             WidgetEntryPoint::class.java
         )
-        entryPoint.repository().decrementProgress(activityId)
+        entryPoint.repository().decrementProgress(activityId, refreshWidgets = false)
+        WidgetUpdater.afterProgressTap(context, DiligentWidget(), glanceId)
     }
 }
 

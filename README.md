@@ -23,7 +23,8 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 
 ### Widget
 - Resizable Jetpack Glance widget
-- Inline +/− controls (no app launch required)
+- Inline +/− controls (no app launch required); the tapped widget redraws in-process at once
+- Tap or double-tap the quote panel for the next quote without waiting for the flip
 - Real-time progress display
 - Auto-refresh every 30 minutes
 
@@ -51,7 +52,7 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 
 ### GitHub Contribution Graphs
 - Track up to 50 developers in Settings → GitHub Contribution Graphs: add a username or paste a profile link, reorder with ↑/↓, tap a row to rename it or pick its colour
-- The **GitHub** widget is a slideshow of every developer, flipped by the launcher. A launcher only takes a few MB of bitmaps per widget, so with a long list it loads the slides that fit (about 5 on a 4×2 widget) starting from the current one; tap a slide's header to step on to the next developer
+- The **GitHub** widget is a slideshow of every developer, flipped by the launcher. A launcher only takes a few MB of bitmaps per widget, so with a long list it loads the slides that fit (about 5 on a 4×2 widget) starting from the current one; tap a slide's header or double-tap the graph to step on to the next developer. A single tap on the graph opens the app after a short pause (to tell it from a double tap); the footer row opens it straight away
 - The **GitHub Versus** widget compares the first two developers in the list
 - Graphs sync only when you tap **Update Contribution Graphs** (one request per developer, 4 at a time)
 
@@ -152,6 +153,11 @@ The Cloister Black font (`cloister_black.ttf`) is included in `app/src/main/res/
 3. Find "Diligent Tracker"
 4. Drag to home screen
 5. Resize as needed (supports 2x2 to 5x4)
+
+### Lock screen
+- Every widget declares `home_screen|keyguard`, so any lock screen that hosts third-party widgets can show it: Android 16 QPR2+ "widgets on lock screen" (Pixel and other AOSP-based phones) and tablet hubs
+- Buttons inside widgets (+/−, next graph or quote, SYNC, Focus start/stop, STOP LIVE) are broadcasts and work without unlocking; anything that opens the app asks you to unlock first
+- **Nothing phones:** as of Nothing OS 5.0, Nothing's own lock screen only accepts Nothing's widgets and has no developer API, so these widgets can't be placed there yet. They are ready if Nothing opens it up
 
 ## ✦ Default Activities
 

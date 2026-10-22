@@ -79,16 +79,19 @@ object QuotePresets {
         if (id == MIX_ID) mix else all.firstOrNull { it.id == id } ?: WallStreetPreset
 
     /**
-     * Picks random, non-repeating quotes and hero phrases from the preset.
+     * Picks random, non-repeating quotes and hero phrases from the preset. Quotes whose text
+     * is in [avoid] (the ones just on screen) come last, so "next" always shows a new one
+     * while the pack has enough quotes.
      */
     fun pick(
         id: String,
         quoteCount: Int,
         heroCount: Int,
-        random: Random = Random.Default
+        random: Random = Random.Default,
+        avoid: Set<String> = emptySet()
     ): Pair<List<String>, List<Quote>> {
         val preset = byId(id)
         return preset.heroPhrases.shuffled(random).take(heroCount) to
-            preset.quotes.shuffled(random).take(quoteCount)
+            preset.quotes.shuffled(random).sortedBy { it.text in avoid }.take(quoteCount)
     }
 }

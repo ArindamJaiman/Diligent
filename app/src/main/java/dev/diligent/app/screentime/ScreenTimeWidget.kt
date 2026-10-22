@@ -6,6 +6,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
+import dev.diligent.app.widget.updateAllExcept
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext as GlanceLocalContext
 import androidx.glance.LocalSize
@@ -90,9 +91,9 @@ class ScreenTimeRefreshAction : ActionCallback {
 object ScreenTimeWidgetUpdater {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    suspend fun refresh(context: Context) {
+    suspend fun refresh(context: Context, except: GlanceId? = null) {
         try {
-            ScreenTimeWidget().updateAll(context)
+            ScreenTimeWidget().updateAllExcept(context, except)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

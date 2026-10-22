@@ -4,6 +4,8 @@ import android.app.PendingIntent
 import android.appwidget.AppWidgetManager
 import android.content.Context
 import android.content.Intent
+import android.os.SystemClock
+import android.util.Log
 import android.util.TypedValue
 import android.view.View
 import android.widget.RemoteViews
@@ -43,6 +45,7 @@ import dev.diligent.app.ui.MainActivity
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /**
@@ -50,8 +53,8 @@ import kotlinx.coroutines.launch
  * Shows contribution grid, streaks, and annual contributions.
  *
  * The slideshow runs inside the launcher (ViewFlipper), so the app never wakes up
- * to rotate developers. Tapping a slide's header jumps to the next developer;
- * tapping the body opens the app.
+ * to rotate developers. Tapping a slide's header, or double-tapping its graph, jumps to the
+ * next developer at once; a single tap on the graph or a tap on the footer opens the app.
  *
  * A launcher only accepts so many bitmap bytes per widget, so a long developer list is
  * shown as a window of the slides that fit ([SlideWindow]) starting at the current one.
@@ -85,6 +88,7 @@ class GithubWidget : GlanceAppWidget() {
         internal const val PREFS_NAME = "diligent_widget_prefs"
         internal const val KEY_SLIDE_INDEX = "github_widget_slide_index"
         internal const val ACTION_SHOW_SLIDE = "dev.diligent.app.widget.action.SHOW_GITHUB_SLIDE"
+        internal const val ACTION_BODY_TAP = "dev.diligent.app.widget.action.GITHUB_BODY_TAP"
         internal const val EXTRA_SLIDE_INDEX = "slide_index"
     }
 }
@@ -95,23 +99,68 @@ class GithubWidgetReceiver : GlanceAppWidgetReceiver() {
     override val glanceAppWidget: GlanceAppWidget = GithubWidget()
 
     override fun onReceive(context: Context, intent: Intent) {
-        if (intent.action == GithubWidget.ACTION_SHOW_SLIDE) {
-            val index = intent.getIntExtra(GithubWidget.EXTRA_SLIDE_INDEX, 0)
-            context.getSharedPreferences(GithubWidget.PREFS_NAME, Context.MODE_PRIVATE)
-                .edit().putInt(GithubWidget.KEY_SLIDE_INDEX, index).apply()
-
-            val appContext = context.applicationContext
-            val pending = goAsync()
-            CoroutineScope(SupervisorJob() + Dispatchers.Default).launch {
-                try {
-                    glanceAppWidget.updateAll(appContext)
-                } finally {
-                    pending.finish()
-                }
-            }
-            return
+        when (intent.action) {
+            GithubWidget.ACTION_SHOW_SLIDE -> showSlide(context, intent)
+            GithubWidget.ACTION_BODY_TAP -> bodyTap(context, intent)
+            else -> super.onReceive(context, intent)
         }
-        super.onReceive(context, intent)
+    }
+
+    /** Header tap: the next developer, drawn at once. */
+    private fun showSlide(context: Context, intent: Intent) {
+        val appContext = context.applicationContext
+        val pending = goAsync()
+        scope.launch {
+            try {
+                showNext(appContext, intent)
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    /**
+     * Graph tap. Widgets only report single clicks, so a second tap within
+     * [TapTracker.DOUBLE_TAP_MS] makes it a double tap (next developer); otherwise the app
+     * opens once that window has passed. Widget taps may start an activity for a few seconds
+     * after the broadcast, which covers the wait; the footer opens the app directly as well.
+     */
+    private fun bodyTap(context: Context, intent: Intent) {
+        val appContext = context.applicationContext
+        val tap = bodyTaps.tap(SystemClock.uptimeMillis())
+        val pending = goAsync()
+        scope.launch {
+            try {
+                if (tap.isDouble) {
+                    showNext(appContext, intent)
+                } else {
+                    delay(TapTracker.DOUBLE_TAP_MS)
+                    if (bodyTaps.isLatest(tap)) openApp(appContext)
+                }
+            } finally {
+                pending.finish()
+            }
+        }
+    }
+
+    private suspend fun showNext(context: Context, intent: Intent) {
+        val index = intent.getIntExtra(GithubWidget.EXTRA_SLIDE_INDEX, 0)
+        context.getSharedPreferences(GithubWidget.PREFS_NAME, Context.MODE_PRIVATE)
+            .edit().putInt(GithubWidget.KEY_SLIDE_INDEX, index).apply()
+        InstantWidget.redrawAll(context, glanceAppWidget)
+    }
+
+    private fun openApp(context: Context) {
+        try {
+            context.startActivity(Intent(context, MainActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
+        } catch (e: Exception) {
+            Log.w("GithubWidget", "Couldn't open the app from a graph tap", e)
+        }
+    }
+
+    private companion object {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+        val bodyTaps = TapTracker()
     }
 
     override fun onUpdate(context: Context, appWidgetManager: AppWidgetManager, appWidgetIds: IntArray) {
@@ -228,10 +277,13 @@ private fun buildSlideshow(
 
             if (slides.size > 1) {
                 setOnClickPendingIntent(R.id.slide_header, nextSlideIntent(context, position, index, slides.size))
+                setOnClickPendingIntent(R.id.slide_body, bodyTapIntent(context, position, index, slides.size))
+                // Always opens the app straight away, even where a launcher blocks the delayed open.
+                setOnClickPendingIntent(R.id.slide_footer, openApp)
             } else {
                 setViewVisibility(R.id.slide_rotate, View.INVISIBLE)
+                setOnClickPendingIntent(R.id.slide_body, openApp)
             }
-            setOnClickPendingIntent(R.id.slide_body, openApp)
 
             val cached = slide.cached
             if (cached == null || grid == null) {
@@ -253,6 +305,19 @@ private fun buildSlideshow(
     // The window starts at the current developer.
     flipper.setDisplayedChild(R.id.github_flipper, 0)
     return flipper
+}
+
+/** Graph tap: a single tap opens the app, a double tap shows the next developer. */
+private fun bodyTapIntent(context: Context, position: Int, index: Int, count: Int): PendingIntent {
+    val intent = Intent(context, GithubWidgetReceiver::class.java)
+        .setAction(GithubWidget.ACTION_BODY_TAP)
+        .putExtra(GithubWidget.EXTRA_SLIDE_INDEX, (index + 1) % count)
+    return PendingIntent.getBroadcast(
+        context,
+        7350 + position,
+        intent,
+        PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+    )
 }
 
 /** @param position the slide's place in the window, which keys its PendingIntent */

@@ -132,14 +132,16 @@ class DiligentRepository @Inject constructor(
      * Creates a new DailyProgress row if none exists.
      * Automatically marks complete when progress >= dailyGoal.
      */
-    suspend fun incrementProgress(activityId: Long, amount: Float = 1f) = addProgress(activityId, amount)
+    /** @param refreshWidgets false when a widget tap redraws the widgets itself (tapped one first) */
+    suspend fun incrementProgress(activityId: Long, amount: Float = 1f, refreshWidgets: Boolean = true) =
+        addProgress(activityId, amount, refreshWidgets = refreshWidgets)
 
     /**
      * Adds [amount] (in the activity's own unit) to its progress on [date], creating the row
      * if needed and marking it complete once the goal is met. The focus timer calls this once
      * per local day, so a session that crosses midnight counts towards both days.
      */
-    suspend fun addProgress(activityId: Long, amount: Float, date: String = today()) {
+    suspend fun addProgress(activityId: Long, amount: Float, date: String = today(), refreshWidgets: Boolean = true) {
         val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date)
         val activity = activityDao.getById(activityId) ?: return
 
@@ -163,7 +165,7 @@ class DiligentRepository @Inject constructor(
                 )
             )
         }
-        trackerChanged()
+        if (refreshWidgets) trackerChanged()
     }
 
     /**
@@ -201,7 +203,7 @@ class DiligentRepository @Inject constructor(
      * Decrement progress for an activity today.
      * Clamps to 0 — never goes negative.
      */
-    suspend fun decrementProgress(activityId: Long, amount: Float = 1f) {
+    suspend fun decrementProgress(activityId: Long, amount: Float = 1f, refreshWidgets: Boolean = true) {
         val date = today()
         val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date) ?: return
         val activity = activityDao.getById(activityId) ?: return
@@ -214,7 +216,7 @@ class DiligentRepository @Inject constructor(
                 lastUpdated = System.currentTimeMillis()
             )
         )
-        trackerChanged()
+        if (refreshWidgets) trackerChanged()
     }
 
     /**

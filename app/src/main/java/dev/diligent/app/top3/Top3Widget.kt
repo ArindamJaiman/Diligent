@@ -9,6 +9,8 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
+import dev.diligent.app.widget.WidgetUpdater
+import dev.diligent.app.widget.updateAllExcept
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.action.ActionParameters
@@ -102,17 +104,18 @@ class Top3StepAction : ActionCallback {
         val id = parameters[ActivityKey] ?: return
         val entry = EntryPointAccessors.fromApplication(context.applicationContext, ToolsEntryPoint::class.java)
         val activity = entry.repository().getActivityById(id) ?: return
-        entry.repository().incrementProgress(id, Top3Service.step(activity.unit))
-        Top3WidgetUpdater.refresh(context)
+        entry.repository().incrementProgress(id, Top3Service.step(activity.unit), refreshWidgets = false)
+        // This widget first and once; the tracker widgets follow.
+        WidgetUpdater.afterProgressTap(context, Top3Widget(), glanceId)
     }
 }
 
 object Top3WidgetUpdater {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
 
-    suspend fun refresh(context: Context) {
+    suspend fun refresh(context: Context, except: GlanceId? = null) {
         try {
-            Top3Widget().updateAll(context)
+            Top3Widget().updateAllExcept(context, except)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {

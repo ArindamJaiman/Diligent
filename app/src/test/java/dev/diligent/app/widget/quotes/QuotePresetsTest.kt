@@ -72,4 +72,24 @@ class QuotePresetsTest {
         val b = QuotePresets.pick("ball_knowledge", 5, 4, Random(42))
         assertEquals(a, b)
     }
+
+    @Test
+    fun `the next set never repeats a quote that was just on screen`() {
+        // Wall Street is the smallest pack (30), so overlaps would be most likely there.
+        repeat(50) { seed ->
+            val shown = QuotePresets.pick(QuotePresets.DEFAULT_ID, 5, 4, Random(seed)).second
+            val next = QuotePresets.pick(
+                QuotePresets.DEFAULT_ID, 5, 4, Random(seed + 1_000), avoid = shown.map { it.text }.toSet()
+            ).second
+            assertEquals(5, next.size)
+            assertTrue("seed $seed", next.none { it in shown })
+        }
+    }
+
+    @Test
+    fun `avoiding more than the pack holds still fills every slide`() {
+        val pack = QuotePresets.byId(QuotePresets.DEFAULT_ID).quotes
+        val next = QuotePresets.pick(QuotePresets.DEFAULT_ID, 5, 4, Random(1), avoid = pack.map { it.text }.toSet()).second
+        assertEquals(5, next.size)
+    }
 }

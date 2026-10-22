@@ -7,6 +7,7 @@ import android.content.Context
 import android.content.Intent
 import android.os.Bundle
 import android.util.Log
+import androidx.glance.GlanceId
 import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
@@ -100,9 +101,10 @@ object ToolsBootstrap {
 
 object ToolWidgets {
     /** Widgets whose content depends only on local data (tracker progress, usage stats, calendar). */
-    suspend fun refreshLocal(context: Context) {
-        Top3WidgetUpdater.refresh(context)
-        ScreenTimeWidgetUpdater.refresh(context)
+    /** @param except a widget a tap already redrew */
+    suspend fun refreshLocal(context: Context, except: GlanceId? = null) {
+        Top3WidgetUpdater.refresh(context, except)
+        ScreenTimeWidgetUpdater.refresh(context, except)
     }
 
     suspend fun refresh(context: Context, target: String?) {
