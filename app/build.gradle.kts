@@ -15,8 +15,17 @@ android {
         applicationId = "dev.diligent.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        // CI passes the number of commits on main, so every commit is a newer version
+        // (.github/workflows/release.yml). Local builds stay 1 / 1.0.0.
+        versionCode = (project.findProperty("ciVersionCode") as String?)?.toIntOrNull() ?: 1
+        versionName = (project.findProperty("ciVersionName") as String?) ?: "1.0.0"
+
+        // update.json of the newest GitHub release (see docs/UPDATES.md)
+        buildConfigField(
+            "String",
+            "UPDATE_FEED_URL",
+            "\"https://github.com/ArindamJaiman/Diligent/releases/latest/download/update.json\""
+        )
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
 
@@ -45,6 +54,7 @@ android {
             if (releaseKeystore.exists()) {
                 signingConfig = signingConfigs.getByName("release")
             }
+            buildConfigField("boolean", "UPDATES_ENABLED", "true")
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(
@@ -53,6 +63,8 @@ android {
             )
         }
         debug {
+            // A separate app (applicationId .debug), so release APKs can't update it.
+            buildConfigField("boolean", "UPDATES_ENABLED", "false")
             isMinifyEnabled = false
             applicationIdSuffix = ".debug"
         }

@@ -40,6 +40,11 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - Missed goal notifications
 - Survives device reboots
 
+### App updates
+- Every commit on `main` is built, signed and published as a GitHub release by CI
+- The release app checks when you open it (at most every 6 h, never in the background) or from Settings → App updates, asks **Update found**, verifies the download's SHA-256 and hands it to Android's installer
+- One-time setup (release key, GitHub secrets, moving data from the debug app): [docs/UPDATES.md](docs/UPDATES.md)
+
 ### Data
 - Room database with migration support
 - JSON backup & restore

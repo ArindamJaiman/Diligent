@@ -14,6 +14,8 @@ import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.update.AppUpdater
+import dev.diligent.app.update.UpdateState
 import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -36,8 +38,20 @@ import javax.inject.Inject
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
     private val repository: DiligentRepository,
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    val updater: AppUpdater
 ) : ViewModel() {
+
+    val updateState: StateFlow<UpdateState> = updater.state
+
+    /** Settings → App updates: check now, or reopen the question for a known update. */
+    fun onUpdatesTapped() {
+        when (val state = updater.state.value) {
+            is UpdateState.Available -> updater.offer(state.info)
+            is UpdateState.Checking, is UpdateState.Downloading, is UpdateState.Installing -> Unit
+            else -> updater.checkNow()
+        }
+    }
 
     val settings: StateFlow<Settings> =
         repository.getSettings()

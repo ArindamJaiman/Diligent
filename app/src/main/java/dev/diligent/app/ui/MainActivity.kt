@@ -26,6 +26,8 @@ import dev.diligent.app.ui.navigation.DiligentNavGraph
 import dev.diligent.app.ui.navigation.DiligentScreen
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DiligentTheme
+import dev.diligent.app.update.AppUpdater
+import dev.diligent.app.update.UpdateHost
 import javax.inject.Inject
 
 /**
@@ -37,6 +39,9 @@ class MainActivity : ComponentActivity() {
 
     @Inject
     lateinit var repository: DiligentRepository
+
+    @Inject
+    lateinit var updater: AppUpdater
 
     private val notificationPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { }
@@ -65,9 +70,22 @@ class MainActivity : ComponentActivity() {
                         pendingRoute = pendingRoute.value,
                         onRouteConsumed = { pendingRoute.value = null }
                     )
+                    UpdateHost(updater)
                 }
             }
         }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        updater.inForeground = true
+        // Opening the app is the only time it looks for an update (at most every 6 h).
+        updater.checkIfDue()
+    }
+
+    override fun onStop() {
+        updater.inForeground = false
+        super.onStop()
     }
 
     override fun onNewIntent(intent: Intent) {

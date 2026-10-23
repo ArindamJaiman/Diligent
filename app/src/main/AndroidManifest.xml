@@ -4,6 +4,8 @@
 
     <!-- Permissions -->
     <uses-permission android:name="android.permission.INTERNET" />
+    <!-- In-app updates from GitHub releases; Android still asks before installing -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- QuotaPulse live mode: user-started foreground service (dataSync) -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
@@ -42,6 +44,11 @@
                 <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
             </intent-filter>
         </activity>
+
+        <!-- Install results for in-app updates; only the system reaches it, via our PendingIntent -->
+        <receiver
+            android:name=".update.UpdateInstallReceiver"
+            android:exported="false" />
 
         <!-- Widget Provider -->
         <receiver

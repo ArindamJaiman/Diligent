@@ -41,6 +41,8 @@ import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.ui.viewmodel.SettingsViewModel
+import dev.diligent.app.update.UpdateState
+import dev.diligent.app.update.updateStatusLine
 import dev.diligent.app.widget.quotes.QuotePresets
 
 /**
@@ -54,6 +56,7 @@ fun SettingsScreen(
 ) {
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val githubUsers by viewModel.githubUsers.collectAsStateWithLifecycle()
+    val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // File picker for restore
@@ -224,6 +227,16 @@ fun SettingsScreen(
                     else -> "Scrape latest data for all ${githubUsers.size} developers"
                 },
                 onClick = { viewModel.syncAllGithubContributions() }
+            )
+
+            // ─── App Updates Section ────────────────────────
+            SettingsSectionHeader("APP UPDATES")
+
+            SettingsActionItem(
+                icon = Icons.Default.SystemUpdate,
+                title = if (updateState is UpdateState.Available) "Install update" else "Check for updates",
+                subtitle = updateStatusLine(updateState, viewModel.updater),
+                onClick = { viewModel.onUpdatesTapped() }
             )
 
             // ─── Data Section ───────────────────────────────
