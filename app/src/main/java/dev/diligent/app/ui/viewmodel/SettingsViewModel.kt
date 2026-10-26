@@ -16,6 +16,7 @@ import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.update.AppUpdater
 import dev.diligent.app.update.UpdateState
+import dev.diligent.app.widget.WidgetLook
 import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -93,6 +94,19 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             val current = repository.getSettingsSnapshot()
             repository.updateSettings(current.copy(dynamicColor = enabled))
+        }
+    }
+
+    private val _transparentWidgets = MutableStateFlow(WidgetLook.isTransparent(context))
+
+    /** Whether home-screen widgets draw without a background (kept outside Room, see [WidgetLook]). */
+    val transparentWidgets: StateFlow<Boolean> = _transparentWidgets.asStateFlow()
+
+    fun updateTransparentWidgets(enabled: Boolean) {
+        _transparentWidgets.value = enabled
+        viewModelScope.launch {
+            withContext(Dispatchers.IO) { WidgetLook.setTransparent(context, enabled) }
+            WidgetUpdater.refreshEverything(context)
         }
     }
 

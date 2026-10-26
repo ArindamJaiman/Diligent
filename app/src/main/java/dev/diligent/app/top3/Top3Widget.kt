@@ -11,6 +11,7 @@ import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import dev.diligent.app.widget.WidgetUpdater
 import dev.diligent.app.widget.updateAllExcept
+import dev.diligent.app.widget.widgetBackground
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext
 import androidx.glance.action.ActionParameters
@@ -132,7 +133,7 @@ object Top3WidgetUpdater {
 private fun Top3Content(picks: List<Top3Pick>, busy: BusySummary?) {
     val context = LocalContext.current
     Column(
-        modifier = GlanceModifier.fillMaxSize().background(WidgetPalette.Background).cornerRadius(18.dp)
+        modifier = GlanceModifier.fillMaxSize().background(widgetBackground(WidgetPalette.Background)).cornerRadius(18.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .clickable(openToolAction(context, ToolRoutes.TOP3))
     ) {

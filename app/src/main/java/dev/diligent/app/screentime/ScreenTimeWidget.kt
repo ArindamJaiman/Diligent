@@ -7,6 +7,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.glance.GlanceId
 import dev.diligent.app.widget.updateAllExcept
+import dev.diligent.app.widget.widgetBackground
 import androidx.glance.GlanceModifier
 import androidx.glance.LocalContext as GlanceLocalContext
 import androidx.glance.LocalSize
@@ -112,7 +113,7 @@ private fun ScreenContent(s: ScreenSummary) {
     val size = LocalSize.current
     val barWidth = (size.width.value - 24f).coerceAtLeast(40f)
     Column(
-        modifier = GlanceModifier.fillMaxSize().background(WidgetPalette.Background).cornerRadius(18.dp)
+        modifier = GlanceModifier.fillMaxSize().background(widgetBackground(WidgetPalette.Background)).cornerRadius(18.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .clickable(openToolAction(context, ToolRoutes.SCREEN_TIME))
     ) {

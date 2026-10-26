@@ -183,7 +183,7 @@ private fun GithubWidgetContent(slides: List<GithubSlide>, startIndex: Int) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Color(0x1A0A0A0A)) // 10% opacity background
+            .background(widgetBackground(Color(0x1A0A0A0A))) // 10% opacity background
             .cornerRadius(16.dp)
             .padding(padding)
     ) {

@@ -61,6 +61,7 @@ import dev.diligent.app.quotapulse.presentation.QuotaPulseView
 import dev.diligent.app.quotapulse.presentation.Tone
 import dev.diligent.app.quotapulse.sync.QuotaPulseSyncWorker
 import dev.diligent.app.ui.MainActivity
+import dev.diligent.app.widget.widgetBackground
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -201,7 +202,7 @@ private fun QuotaPulseContent(view: QuotaPulseView) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Background)
+            .background(widgetBackground(Background))
             .cornerRadius(18.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
