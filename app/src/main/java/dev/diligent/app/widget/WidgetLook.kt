@@ -12,22 +12,39 @@ import androidx.glance.LocalContext
 object WidgetLook {
 
     private const val PREFS_NAME = "widget_look"
-    private const val KEY_TRANSPARENT = "transparent_background"
+    private const val KEY_OPACITY = "background_opacity"
 
-    /** Whether widget backgrounds are clear, showing the wallpaper behind the content. */
-    fun isTransparent(context: Context): Boolean =
-        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).getBoolean(KEY_TRANSPARENT, false)
+    /** The on/off switch this slider replaced; on meant fully clear. */
+    private const val KEY_LEGACY_TRANSPARENT = "transparent_background"
+
+    const val FULL_OPACITY = 100
+
+    /**
+     * Background opacity in percent of each widget's own design: 100 draws it as designed,
+     * 0 leaves no background, so the wallpaper shows through.
+     */
+    fun backgroundOpacity(context: Context): Int {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return when {
+            prefs.contains(KEY_OPACITY) -> prefs.getInt(KEY_OPACITY, FULL_OPACITY).coerceIn(0, FULL_OPACITY)
+            prefs.getBoolean(KEY_LEGACY_TRANSPARENT, false) -> 0
+            else -> FULL_OPACITY
+        }
+    }
 
     /** commit(), not apply(): the widgets redrawn right after must read the new value. */
-    fun setTransparent(context: Context, transparent: Boolean) {
+    fun setBackgroundOpacity(context: Context, percent: Int) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             .edit()
-            .putBoolean(KEY_TRANSPARENT, transparent)
+            .putInt(KEY_OPACITY, percent.coerceIn(0, FULL_OPACITY))
+            .remove(KEY_LEGACY_TRANSPARENT)
             .commit()
     }
 }
 
-/** A widget's outer background: [opaque] normally, clear when transparent widgets are on. */
+/** A widget's outer background: [opaque] faded to the opacity chosen in Settings. */
 @Composable
-fun widgetBackground(opaque: Color): Color =
-    if (WidgetLook.isTransparent(LocalContext.current)) Color.Transparent else opaque
+fun widgetBackground(opaque: Color): Color {
+    val percent = WidgetLook.backgroundOpacity(LocalContext.current)
+    return if (percent >= WidgetLook.FULL_OPACITY) opaque else opaque.copy(alpha = opaque.alpha * percent / 100f)
+}

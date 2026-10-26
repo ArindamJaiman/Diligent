@@ -290,8 +290,9 @@ private fun QuoteTickerPanel(
             setTextViewText(quoteAuthorIds[idx], "— ${quote.author}")
         }
 
-        // The panel paints its own black; clear it too so the whole widget shows the wallpaper.
-        if (WidgetLook.isTransparent(context)) {
+        // The panel paints its own black over the widget's. Once that fades, clear the panel so
+        // it shows the same faded background instead of a darker band.
+        if (WidgetLook.backgroundOpacity(context) < WidgetLook.FULL_OPACITY) {
             setInt(R.id.ticker_container, "setBackgroundColor", android.graphics.Color.TRANSPARENT)
         }
     }

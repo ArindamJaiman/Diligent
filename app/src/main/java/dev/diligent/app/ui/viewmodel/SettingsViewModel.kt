@@ -97,15 +97,17 @@ class SettingsViewModel @Inject constructor(
         }
     }
 
-    private val _transparentWidgets = MutableStateFlow(WidgetLook.isTransparent(context))
+    private val _widgetOpacity = MutableStateFlow(WidgetLook.backgroundOpacity(context))
 
-    /** Whether home-screen widgets draw without a background (kept outside Room, see [WidgetLook]). */
-    val transparentWidgets: StateFlow<Boolean> = _transparentWidgets.asStateFlow()
+    /** Widget background opacity in percent (kept outside Room, see [WidgetLook]). */
+    val widgetOpacity: StateFlow<Int> = _widgetOpacity.asStateFlow()
 
-    fun updateTransparentWidgets(enabled: Boolean) {
-        _transparentWidgets.value = enabled
+    /** Called once the slider is let go, so widgets redraw once rather than on every step. */
+    fun updateWidgetOpacity(percent: Int) {
+        if (percent == _widgetOpacity.value) return
+        _widgetOpacity.value = percent
         viewModelScope.launch {
-            withContext(Dispatchers.IO) { WidgetLook.setTransparent(context, enabled) }
+            withContext(Dispatchers.IO) { WidgetLook.setBackgroundOpacity(context, percent) }
             WidgetUpdater.refreshEverything(context)
         }
     }

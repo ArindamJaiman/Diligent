@@ -44,6 +44,7 @@ import dev.diligent.app.ui.viewmodel.SettingsViewModel
 import dev.diligent.app.update.UpdateState
 import dev.diligent.app.update.updateStatusLine
 import dev.diligent.app.widget.quotes.QuotePresets
+import kotlin.math.roundToInt
 
 /**
  * Settings screen with reminder controls, backup/restore, and export.
@@ -57,7 +58,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val githubUsers by viewModel.githubUsers.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
-    val transparentWidgets by viewModel.transparentWidgets.collectAsStateWithLifecycle()
+    val widgetOpacity by viewModel.widgetOpacity.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // File picker for restore
@@ -199,13 +200,9 @@ fun SettingsScreen(
             // ─── Widgets Section ────────────────────────────
             SettingsSectionHeader("WIDGETS")
 
-            SettingsToggleItem(
-                icon = Icons.Default.Opacity,
-                title = "Transparent Widgets",
-                subtitle = if (transparentWidgets) "No background · wallpaper shows through"
-                else "Solid dark background",
-                checked = transparentWidgets,
-                onCheckedChange = { viewModel.updateTransparentWidgets(it) }
+            WidgetOpacityItem(
+                percent = widgetOpacity,
+                onPercentChosen = viewModel::updateWidgetOpacity
             )
 
             val selectedPreset = QuotePresets.byId(settings.quotePreset)
@@ -375,6 +372,76 @@ private fun SettingsToggleItem(
                     checkedTrackColor = DiligentColors.White,
                     uncheckedThumbColor = DiligentColors.Gray600,
                     uncheckedTrackColor = DiligentColors.Gray300
+                )
+            )
+        }
+    }
+}
+
+/** Widget background opacity, 0–100% in steps of 5; widgets update when the slider is let go. */
+@Composable
+private fun WidgetOpacityItem(
+    percent: Int,
+    onPercentChosen: (Int) -> Unit
+) {
+    // Follows the finger while dragging; snaps back to the saved value when that changes.
+    var dragged by remember(percent) { mutableFloatStateOf(percent.toFloat()) }
+    val shown = dragged.roundToInt()
+
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
+            .background(DiligentColors.Surface)
+            .padding(start = 16.dp, end = 16.dp, top = 14.dp, bottom = 4.dp)
+    ) {
+        Column {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Opacity,
+                    contentDescription = null,
+                    tint = DiligentColors.Gray500,
+                    modifier = Modifier.size(20.dp)
+                )
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Widget Opacity",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
+                        color = DiligentColors.White
+                    )
+                    Text(
+                        text = when (shown) {
+                            0 -> "No background · wallpaper shows through"
+                            100 -> "Background as designed"
+                            else -> "Background faded to $shown%"
+                        },
+                        style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
+                        color = DiligentColors.Gray600
+                    )
+                }
+                Text(
+                    text = "$shown%",
+                    style = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
+                    color = DiligentColors.White
+                )
+            }
+            Slider(
+                value = dragged,
+                onValueChange = { dragged = it },
+                onValueChangeFinished = { onPercentChosen(dragged.roundToInt()) },
+                valueRange = 0f..100f,
+                steps = 19,
+                colors = SliderDefaults.colors(
+                    thumbColor = DiligentColors.White,
+                    activeTrackColor = DiligentColors.White,
+                    inactiveTrackColor = DiligentColors.Gray300,
+                    activeTickColor = Color.Transparent,
+                    inactiveTickColor = Color.Transparent
                 )
             )
         }
