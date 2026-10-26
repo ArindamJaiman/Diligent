@@ -59,6 +59,7 @@ import dev.diligent.app.leetcode.presentation.TodayStatus
 import dev.diligent.app.ui.MainActivity
 import dev.diligent.app.widget.ContributionGrid
 import dev.diligent.app.widget.GithubTheme
+import dev.diligent.app.widget.widgetBackground
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -197,7 +198,7 @@ private fun LeetCodeContent(view: LeetCodeView) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Background)
+            .background(widgetBackground(Background))
             .cornerRadius(18.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
             .clickable(openApp(context))

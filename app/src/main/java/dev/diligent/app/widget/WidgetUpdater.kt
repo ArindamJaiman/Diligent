@@ -11,9 +11,15 @@ import android.util.Log
 import androidx.glance.GlanceId
 import androidx.glance.appwidget.GlanceAppWidget
 import androidx.glance.appwidget.updateAll
+import dev.diligent.app.contests.ContestWidgetUpdater
+import dev.diligent.app.focus.widget.FocusWidgetUpdater
+import dev.diligent.app.leetcode.widget.LeetCodeWidgetUpdater
+import dev.diligent.app.papers.PaperWidgetUpdater
+import dev.diligent.app.quotapulse.widget.QuotaPulseWidgetUpdater
 import dev.diligent.app.screentime.ScreenTimeWidgetReceiver
 import dev.diligent.app.tools.ToolWidgets
 import dev.diligent.app.top3.Top3WidgetReceiver
+import dev.diligent.app.versus.VersusWidgetUpdater
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -54,6 +60,17 @@ object WidgetUpdater {
     suspend fun refreshAll(context: Context) {
         refreshTracker(context)
         refreshGithub(context)
+    }
+
+    /** Redraws every widget the app has, e.g. after a look change in Settings. */
+    suspend fun refreshEverything(context: Context) {
+        refreshAll(context)
+        ContestWidgetUpdater.refresh(context)
+        VersusWidgetUpdater.refresh(context)
+        PaperWidgetUpdater.refresh(context)
+        FocusWidgetUpdater.refresh(context)
+        LeetCodeWidgetUpdater.refresh(context)
+        QuotaPulseWidgetUpdater.refresh(context)
     }
 
     private suspend fun safely(block: suspend () -> Unit) {

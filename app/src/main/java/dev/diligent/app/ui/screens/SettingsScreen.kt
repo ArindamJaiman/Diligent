@@ -57,6 +57,7 @@ fun SettingsScreen(
     val settings by viewModel.settings.collectAsStateWithLifecycle()
     val githubUsers by viewModel.githubUsers.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
+    val transparentWidgets by viewModel.transparentWidgets.collectAsStateWithLifecycle()
     val snackbarHostState = remember { SnackbarHostState() }
 
     // File picker for restore
@@ -195,8 +196,17 @@ fun SettingsScreen(
                 )
             }
 
-            // ─── Widget Quotes Section ──────────────────────
-            SettingsSectionHeader("WIDGET QUOTES")
+            // ─── Widgets Section ────────────────────────────
+            SettingsSectionHeader("WIDGETS")
+
+            SettingsToggleItem(
+                icon = Icons.Default.Opacity,
+                title = "Transparent Widgets",
+                subtitle = if (transparentWidgets) "No background · wallpaper shows through"
+                else "Solid dark background",
+                checked = transparentWidgets,
+                onCheckedChange = { viewModel.updateTransparentWidgets(it) }
+            )
 
             val selectedPreset = QuotePresets.byId(settings.quotePreset)
             SettingsActionItem(

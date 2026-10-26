@@ -54,6 +54,7 @@ import dev.diligent.app.tools.runAction
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.tools.wText
 import dev.diligent.app.ui.theme.DiligentColors
+import dev.diligent.app.widget.widgetBackground
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -119,7 +120,7 @@ private fun PaperContent(state: PaperState) {
     val context = LocalContext.current
     val paper = state.today
     Column(
-        modifier = GlanceModifier.fillMaxSize().background(WidgetPalette.Background).cornerRadius(18.dp)
+        modifier = GlanceModifier.fillMaxSize().background(widgetBackground(WidgetPalette.Background)).cornerRadius(18.dp)
             .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = androidx.glance.layout.Alignment.Vertical.CenterVertically) {

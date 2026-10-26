@@ -143,7 +143,7 @@ private fun DiligentWidgetContent(
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(WidgetBlack)
+            .background(widgetBackground(WidgetBlack))
             .cornerRadius(16.dp)
             .padding(12.dp)
     ) {
@@ -288,6 +288,11 @@ private fun QuoteTickerPanel(
             val quote = quotes.getOrElse(idx) { Quote("Money never sleeps.", "Gordon Gekko") }
             setTextViewText(viewId, "\"${quote.text}\"")
             setTextViewText(quoteAuthorIds[idx], "— ${quote.author}")
+        }
+
+        // The panel paints its own black; clear it too so the whole widget shows the wallpaper.
+        if (WidgetLook.isTransparent(context)) {
+            setInt(R.id.ticker_container, "setBackgroundColor", android.graphics.Color.TRANSPARENT)
         }
     }
 

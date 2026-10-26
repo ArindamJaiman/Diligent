@@ -54,6 +54,7 @@ import dev.diligent.app.focus.domain.PomodoroPosition
 import dev.diligent.app.focus.focusTimer
 import dev.diligent.app.focus.notify.FocusNotifier
 import dev.diligent.app.ui.MainActivity
+import dev.diligent.app.widget.widgetBackground
 import kotlinx.coroutines.CancellationException
 
 /** Everything one render needs, read once in provideGlance. */
@@ -183,7 +184,7 @@ private fun FocusContent(view: FocusWidgetView) {
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Background)
+            .background(widgetBackground(Background))
             .cornerRadius(16.dp)
             .padding(horizontal = 10.dp, vertical = 6.dp)
     ) {
