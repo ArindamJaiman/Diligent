@@ -1,6 +1,7 @@
 package dev.diligent.app.leetcode.widget
 
 import android.content.Context
+import dev.diligent.app.widget.WidgetStyle
 import android.content.Intent
 import android.graphics.Bitmap
 import android.net.Uri
@@ -137,7 +138,7 @@ class LeetCodeSyncAction : ActionCallback {
 
 // ─── Palette: monochrome plus LeetCode's difficulty colours ─────
 
-private val Background = Color(0xF20A0A0A)
+private val Background = WidgetStyle.Background
 private val White = Color(0xFFF2F2F2)
 private val Gray = Color(0xFF8C8C8C)
 private val Dim = Color(0xFF5A5A5A)

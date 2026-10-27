@@ -108,7 +108,7 @@ private fun GithubVsWidgetContent(
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(Color(0x1A0A0A0A)) // 10% opacity background
+            .background(WidgetStyle.Background) // 10% opacity background
             .cornerRadius(16.dp)
             .padding(12.dp)
             .clickable(actionStartActivity<MainActivity>())

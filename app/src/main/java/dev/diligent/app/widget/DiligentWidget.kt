@@ -143,7 +143,7 @@ private fun DiligentWidgetContent(
     Box(
         modifier = GlanceModifier
             .fillMaxSize()
-            .background(WidgetBlack)
+            .background(WidgetStyle.Background)
             .cornerRadius(16.dp)
             .padding(12.dp)
     ) {

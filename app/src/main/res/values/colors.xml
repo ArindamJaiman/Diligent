@@ -4,5 +4,6 @@
     <color name="white">#FFFFFFFF</color>
     <color name="gray_dark">#FF141414</color>
     <color name="gray_mid">#FF3A3A3A</color>
-    <color name="widget_background">#FF000000</color>
+    <!-- 10% opaque: every widget lets the wallpaper show through (see WidgetStyle) -->
+    <color name="widget_background">#1A0A0A0A</color>
 </resources>

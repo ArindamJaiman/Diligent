@@ -1,6 +1,7 @@
 package dev.diligent.app.tools
 
 import android.app.Activity
+import dev.diligent.app.widget.WidgetStyle
 import android.app.AlarmManager
 import android.app.PendingIntent
 import android.content.ActivityNotFoundException
@@ -36,7 +37,7 @@ import dev.diligent.app.ui.MainActivity
 
 /** Glance building blocks shared by the tool widgets (same palette as QuotaPulse / LeetCode). */
 object WidgetPalette {
-    val Background = Color(0xF20A0A0A)
+    val Background = WidgetStyle.Background
     val White = Color(0xFFF2F2F2)
     val Gray = Color(0xFF8C8C8C)
     val Dim = Color(0xFF5A5A5A)

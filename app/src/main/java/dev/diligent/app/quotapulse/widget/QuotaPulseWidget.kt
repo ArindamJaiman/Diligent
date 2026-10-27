@@ -1,6 +1,7 @@
 package dev.diligent.app.quotapulse.widget
 
 import android.app.AlarmManager
+import dev.diligent.app.widget.WidgetStyle
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
@@ -159,7 +160,7 @@ class QuotaPulseSyncAction : ActionCallback {
 
 // ─── Palette (monochrome + one restrained red) ──────────────────
 
-private val Background = Color(0xF20A0A0A)
+private val Background = WidgetStyle.Background
 private val White = Color(0xFFF2F2F2)
 private val Gray = Color(0xFF8C8C8C)
 private val Dim = Color(0xFF5A5A5A)
