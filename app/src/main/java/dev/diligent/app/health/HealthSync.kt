@@ -1,3 +1,6 @@
+// Mindfulness sessions are still marked experimental in Health Connect 1.1.0.
+@file:OptIn(ExperimentalMindfulnessSessionApi::class)
+
 package dev.diligent.app.health
 
 import android.content.Context
@@ -17,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
+import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.MindfulnessSessionRecord
