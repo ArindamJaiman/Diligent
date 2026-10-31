@@ -9,11 +9,16 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.DayLog
+import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.planning.Commitment
+import dev.diligent.app.tracking.DayClock
+import dev.diligent.app.widget.DayChangeRefresh
 import dev.diligent.app.update.AppUpdater
 import dev.diligent.app.update.UpdateState
 import dev.diligent.app.widget.WidgetLook
@@ -66,6 +71,30 @@ class SettingsViewModel @Inject constructor(
 
     private val _message = MutableSharedFlow<String>()
     val message: SharedFlow<String> = _message.asSharedFlow()
+
+    // ─── Tracking day & commitment ──────────────────────────────
+
+    data class TrackingPrefs(val dayStartMinutes: Int, val followSleep: Boolean, val commitment: Commitment.Config)
+
+    private val _tracking = MutableStateFlow(readTracking())
+    val tracking: StateFlow<TrackingPrefs> = _tracking.asStateFlow()
+
+    private fun readTracking() = TrackingPrefs(DayClock.startMinutes(), DayClock.followsSleep(), Commitment.config(context))
+
+    /** Moves the start of the tracking day; widgets and the day-change alarm follow. */
+    fun setDayStart(minutes: Int, followSleep: Boolean) {
+        DayClock.set(context, minutes, followSleep)
+        _tracking.value = readTracking()
+        viewModelScope.launch {
+            DayChangeRefresh.scheduleIfWidgetsExist(context)
+            WidgetUpdater.refreshAll(context)
+        }
+    }
+
+    fun setCommitment(config: Commitment.Config) {
+        Commitment.save(context, config)
+        _tracking.value = readTracking()
+    }
 
     // ─── Settings Updates ───────────────────────────────────────
 
@@ -189,6 +218,8 @@ class SettingsViewModel @Inject constructor(
         val settings: Settings = Settings(),
         val reminders: List<ActivityReminder> = emptyList(),
         val githubUsers: List<GithubUser>? = null,
+        val focusRecords: List<FocusRecord> = emptyList(),
+        val dayLogs: List<DayLog> = emptyList(),
         val backupTime: String = ""
     )
 
@@ -209,6 +240,8 @@ class SettingsViewModel @Inject constructor(
                     settings = repository.getSettingsSnapshot(),
                     reminders = repository.getAllRemindersSnapshot(),
                     githubUsers = repository.getGithubUsersSnapshot(),
+                    focusRecords = repository.getAllFocusRecords(),
+                    dayLogs = repository.getAllDayLogs(),
                     backupTime = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
                 )
 
@@ -250,6 +283,8 @@ class SettingsViewModel @Inject constructor(
                 repository.insertAllProgress(progress)
                 repository.updateSettings(backup.settings)
                 repository.insertAllReminders(reminders)
+                repository.insertAllFocusRecords(backup.focusRecords.filter { it.activityId in knownIds })
+                repository.insertAllDayLogs(backup.dayLogs)
                 val legacySettings = backupJson.parseToJsonElement(json).jsonObject["settings"] as? JsonObject
                 (backup.githubUsers ?: GithubUsers.fromLegacySettings(legacySettings))
                     ?.let { repository.replaceGithubUsers(it) }

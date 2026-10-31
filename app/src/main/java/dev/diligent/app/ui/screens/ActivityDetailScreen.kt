@@ -28,6 +28,17 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.tracking.DayClock
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.HabitStrength
+import dev.diligent.app.tracking.HeatDay
+import dev.diligent.app.tracking.Heatmap
+import dev.diligent.app.tracking.Schedule
+import dev.diligent.app.tracking.Tracking
+import dev.diligent.app.tracking.TrackingSummary
+import dev.diligent.app.ui.components.DayEditor
+import dev.diligent.app.ui.components.DayEditorSheet
+import dev.diligent.app.ui.components.YearHeatmap
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
@@ -45,7 +56,7 @@ import javax.inject.Inject
 class ActivityDetailViewModel @Inject constructor(
     private val repository: DiligentRepository,
     savedStateHandle: SavedStateHandle
-) : ViewModel() {
+) : ViewModel(), DayEditor {
 
     private val activityId: Long = savedStateHandle.get<Long>("activityId") ?: 0L
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
@@ -59,48 +70,64 @@ class ActivityDetailViewModel @Inject constructor(
             .map { list -> list.find { it.activityId == activityId } }
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
 
-    private data class History(
-        val streak: Int,
-        val weekly: List<Pair<String, Float>>,
-        val totalCompleted: Int
+    data class History(
+        val streak: Int = 0,
+        val weekly: List<Pair<String, Float>> = emptyList(),
+        val totalCompleted: Int = 0,
+        val summary: TrackingSummary? = null,
+        val heatmap: List<List<HeatDay>> = emptyList(),
+        val rows: Map<String, DailyProgress> = emptyMap(),
+        /** Quit / limit activities: days since the last slip. */
+        val daysClean: Long = 0
     )
 
     /**
-     * Last year of progress for this activity, re-derived whenever a row changes, so the
-     * streak, chart, and completed count update right after +1 / DONE.
+     * The last 400 days of this activity, re-derived whenever a row or the activity changes,
+     * so the streak, strength, chart and heatmap update right after +1 / DONE or an edit.
      */
     @OptIn(ExperimentalCoroutinesApi::class)
-    private val history: StateFlow<History> =
+    val history: StateFlow<History> =
         repository.todayFlow()
             .flatMapLatest { todayStr ->
                 val today = LocalDate.parse(todayStr, dateFormatter)
-                repository.getProgressRange(
-                    activityId,
-                    today.minusDays(365).format(dateFormatter),
-                    todayStr
-                ).mapLatest { rows ->
+                combine(
+                    repository.getActivityByIdFlow(activityId).filterNotNull(),
+                    repository.getProgressRange(
+                        activityId,
+                        today.minusDays(Tracking.HISTORY_DAYS).format(dateFormatter),
+                        todayStr
+                    )
+                ) { activity, rows ->
                     val byDate = rows.associateBy { it.date }
                     val weekly = (6 downTo 0).map { daysAgo ->
                         val date = today.minusDays(daysAgo.toLong())
                         date.dayOfWeek.name.take(3) to (byDate[date.format(dateFormatter)]?.progress ?: 0f)
                     }
+                    val days = repository.split(rows)
+                    val created = repository.createdDate(activity)
+                    val summary = repository.trackingSummary(activity, rows)
                     History(
-                        streak = repository.calculateStreak(activityId),
+                        streak = summary.streak.current,
                         weekly = weekly,
-                        totalCompleted = rows.count { it.isCompleted }
+                        totalCompleted = rows.count { it.isCompleted },
+                        summary = summary,
+                        heatmap = Heatmap.build(activity, days.progress, days.skipped, days.completed, today, created),
+                        rows = byDate,
+                        daysClean = Tracking.daysSinceSlip(activity, days.progress, today, created)
                     )
                 }
             }
-            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), History(0, emptyList(), 0))
+            .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), History())
 
-    val streak: StateFlow<Int> = history.map { it.streak }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    /** The day open in the editor sheet, if any. */
+    private val _editing = MutableStateFlow<LocalDate?>(null)
+    val editing: StateFlow<LocalDate?> = _editing.asStateFlow()
 
-    val weeklyData: StateFlow<List<Pair<String, Float>>> = history.map { it.weekly }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    fun edit(date: LocalDate?) {
+        _editing.value = date
+    }
 
-    val totalCompleted: StateFlow<Int> = history.map { it.totalCompleted }
-        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 0)
+    fun today(): LocalDate = DayClock.today()
 
     fun increment() {
         viewModelScope.launch { repository.incrementProgress(activityId) }
@@ -119,6 +146,37 @@ class ActivityDetailViewModel @Inject constructor(
             activity.value?.let { repository.deleteActivity(it) }
         }
     }
+
+    // ─── DayEditor: any day, from the heatmap ───────────────────
+
+    private fun LocalDate.key() = format(dateFormatter)
+
+    override fun adjust(date: LocalDate, delta: Float) {
+        viewModelScope.launch {
+            if (delta >= 0f) repository.addProgress(activityId, delta, date.key())
+            else repository.decrementProgress(activityId, -delta, date = date.key())
+        }
+    }
+
+    override fun set(date: LocalDate, value: Float) {
+        viewModelScope.launch { repository.setProgress(activityId, date.key(), value) }
+    }
+
+    override fun toggleDone(date: LocalDate) {
+        viewModelScope.launch { repository.toggleComplete(activityId, date.key()) }
+    }
+
+    override fun setSkipped(date: LocalDate, skipped: Boolean) {
+        viewModelScope.launch { repository.setSkipped(activityId, date.key(), skipped) }
+    }
+
+    override fun setRating(date: LocalDate, rating: Int) {
+        viewModelScope.launch { repository.setDayRating(activityId, date.key(), rating) }
+    }
+
+    override fun setNote(date: LocalDate, note: String) {
+        viewModelScope.launch { repository.setDayNote(activityId, date.key(), note) }
+    }
 }
 
 /**
@@ -133,11 +191,25 @@ fun ActivityDetailScreen(
 ) {
     val activity by viewModel.activity.collectAsStateWithLifecycle()
     val todayProgress by viewModel.todayProgress.collectAsStateWithLifecycle()
-    val streak by viewModel.streak.collectAsStateWithLifecycle()
-    val weeklyData by viewModel.weeklyData.collectAsStateWithLifecycle()
-    val totalCompleted by viewModel.totalCompleted.collectAsStateWithLifecycle()
+    val history by viewModel.history.collectAsStateWithLifecycle()
+    val editing by viewModel.editing.collectAsStateWithLifecycle()
+    val streak = history.streak
+    val weeklyData = history.weekly
+    val totalCompleted = history.totalCompleted
 
     var showDeleteDialog by remember { mutableStateOf(false) }
+
+    val editingActivity = activity
+    val editingDate = editing
+    if (editingActivity != null && editingDate != null) {
+        DayEditorSheet(
+            activity = editingActivity,
+            date = editingDate,
+            row = history.rows[editingDate.toString()],
+            editor = viewModel,
+            onDismiss = { viewModel.edit(null) }
+        )
+    }
 
     // Delete confirmation dialog
     if (showDeleteDialog) {
@@ -216,12 +288,26 @@ fun ActivityDetailScreen(
                     ),
                     color = DiligentColors.White
                 )
+                Text(
+                    text = listOf(
+                        Schedule.describe(act),
+                        when (act.goalType) {
+                            Goals.AT_MOST -> "max ${formatFloat(act.dailyGoal)} ${act.unit} a day"
+                            Goals.QUIT -> "quitting"
+                            else -> "${formatFloat(act.dailyGoal)} ${act.unit} a day"
+                        }
+                    ).joinToString(" · ").uppercase(),
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 2.sp),
+                    color = DiligentColors.Gray600
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // ─── Today's Progress ───────────────────────
                 val progress = todayProgress?.progress ?: 0f
-                val isCompleted = todayProgress?.isCompleted == true
+                val isLimit = Goals.isLimit(act)
+                val isCompleted = !isLimit && todayProgress?.isCompleted == true
+                val isOver = isLimit && !Goals.isMet(act, progress)
                 val percent = if (act.dailyGoal > 0) (progress / act.dailyGoal).coerceIn(0f, 1f) else 0f
 
                 Box(
@@ -251,25 +337,39 @@ fun ActivityDetailScreen(
 
                         // Large progress display
                         Text(
-                            text = if (isCompleted) "✓ DONE"
-                            else "${formatFloat(progress)} / ${formatFloat(act.dailyGoal)}",
+                            text = when {
+                                todayProgress?.isSkipped == true -> "SKIPPED"
+                                isCompleted -> "✓ DONE"
+                                act.goalType == Goals.QUIT -> if (progress > 0f) "SLIPPED" else "✓ CLEAN"
+                                else -> "${formatFloat(progress)} / ${formatFloat(act.dailyGoal)}"
+                            },
                             style = MaterialTheme.typography.displayMedium.copy(
                                 fontFamily = DotMatrix,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 2.sp
                             ),
-                            color = if (isCompleted) DiligentColors.CompletedGreen
-                            else DiligentColors.White
+                            color = when {
+                                isCompleted -> DiligentColors.CompletedGreen
+                                isOver -> DiligentColors.OverRed
+                                else -> DiligentColors.White
+                            }
                         )
 
                         Text(
-                            text = act.unit,
+                            text = act.unit + if (act.goalType == Goals.AT_MOST) " max" else "",
                             style = MaterialTheme.typography.bodyMedium.copy(
                                 fontFamily = DotMatrix,
                                 letterSpacing = 2.sp
                             ),
                             color = DiligentColors.Gray500
                         )
+                        history.summary?.caption?.let { caption ->
+                            Text(
+                                text = caption.uppercase(),
+                                style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 2.sp),
+                                color = DiligentColors.Gray600
+                            )
+                        }
 
                         Spacer(modifier = Modifier.height(20.dp))
 
@@ -292,8 +392,11 @@ fun ActivityDetailScreen(
                                     .fillMaxWidth(animatedProgress)
                                     .clip(RoundedCornerShape(2.dp))
                                     .background(
-                                        if (isCompleted) DiligentColors.CompletedGreen
-                                        else DiligentColors.White
+                                        when {
+                                            isCompleted -> DiligentColors.CompletedGreen
+                                            isOver -> DiligentColors.OverRed
+                                            else -> DiligentColors.White
+                                        }
                                     )
                             )
                         }
@@ -318,7 +421,7 @@ fun ActivityDetailScreen(
                                 Text("−1", fontFamily = DotMatrix)
                             }
 
-                            FilledTonalButton(
+                            if (!isLimit) FilledTonalButton(
                                 onClick = { viewModel.toggleComplete() },
                                 colors = ButtonDefaults.filledTonalButtonColors(
                                     containerColor = if (isCompleted) DiligentColors.CompletedGreen.copy(alpha = 0.2f)
@@ -346,6 +449,20 @@ fun ActivityDetailScreen(
                                 Text("+1", fontFamily = DotMatrix)
                             }
                         }
+
+                        Spacer(modifier = Modifier.height(8.dp))
+                        TextButton(onClick = { viewModel.edit(viewModel.today()) }) {
+                            Text(
+                                text = buildString {
+                                    append(if (todayProgress?.notes.isNullOrBlank()) "NOTE · RATE · SKIP" else "“${todayProgress?.notes}”")
+                                    todayProgress?.rating?.takeIf { it > 0 }?.let { append("  ·  $it/5") }
+                                },
+                                fontFamily = DotMatrix,
+                                fontSize = 11.sp,
+                                color = DiligentColors.Gray600,
+                                maxLines = 2
+                            )
+                        }
                     }
                 }
 
@@ -359,22 +476,64 @@ fun ActivityDetailScreen(
                     StatMiniCard(
                         label = "STREAK",
                         value = "$streak",
-                        suffix = "days",
+                        suffix = history.summary?.streakUnit ?: "days",
                         modifier = Modifier.weight(1f)
                     )
+                    if (isLimit) {
+                        StatMiniCard(
+                            label = "CLEAN",
+                            value = "${history.daysClean}",
+                            suffix = "days",
+                            modifier = Modifier.weight(1f)
+                        )
+                    } else {
+                        StatMiniCard(
+                            label = "COMPLETED",
+                            value = "$totalCompleted",
+                            suffix = "days",
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
                     StatMiniCard(
-                        label = "COMPLETED",
-                        value = "$totalCompleted",
-                        suffix = "days",
-                        modifier = Modifier.weight(1f)
-                    )
-                    StatMiniCard(
-                        label = "TODAY",
-                        value = "${(percent * 100).toInt()}",
+                        label = "STRENGTH",
+                        value = "${history.summary?.let { HabitStrength.percent(it.strength) } ?: 0}",
                         suffix = "%",
                         modifier = Modifier.weight(1f)
                     )
                 }
+
+                Spacer(modifier = Modifier.height(24.dp))
+
+                // ─── Year heatmap: tap a day to edit it ─────
+                Text(
+                    text = "LAST 12 MONTHS",
+                    style = MaterialTheme.typography.labelMedium.copy(
+                        fontFamily = DotMatrix,
+                        letterSpacing = 2.sp
+                    ),
+                    color = DiligentColors.Gray500
+                )
+                Spacer(modifier = Modifier.height(12.dp))
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
+                        .background(DiligentColors.Surface)
+                        .padding(12.dp)
+                ) {
+                    YearHeatmap(
+                        weeks = history.heatmap,
+                        selected = editing,
+                        onDayClick = { viewModel.edit(it) }
+                    )
+                }
+                Text(
+                    text = "tap a day to log, skip, rate or add a note",
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, fontSize = 9.sp),
+                    color = DiligentColors.Gray500,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
 
                 Spacer(modifier = Modifier.height(24.dp))
 

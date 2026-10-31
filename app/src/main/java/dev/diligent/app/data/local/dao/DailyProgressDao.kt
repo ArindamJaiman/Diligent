@@ -76,4 +76,15 @@ interface DailyProgressDao {
         ORDER BY date DESC
     """)
     suspend fun getCompletedDates(activityId: Long): List<String>
+
+    /** Every row of one activity from [startDate] on (streaks, strength, heatmap). */
+    @Query("SELECT * FROM daily_progress WHERE activityId = :activityId AND date >= :startDate ORDER BY date ASC")
+    suspend fun getHistorySnapshot(activityId: Long, startDate: String): List<DailyProgress>
+
+    /** Total ever logged for one activity since [startDate] (long-term targets). */
+    @Query("SELECT COALESCE(SUM(progress), 0) FROM daily_progress WHERE activityId = :activityId AND date >= :startDate")
+    suspend fun getTotalSince(activityId: Long, startDate: String): Float
+
+    @Query("SELECT COALESCE(SUM(progress), 0) FROM daily_progress WHERE activityId = :activityId")
+    suspend fun getLifetimeTotal(activityId: Long): Float
 }

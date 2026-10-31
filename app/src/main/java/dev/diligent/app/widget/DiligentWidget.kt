@@ -33,6 +33,8 @@ import dev.diligent.app.di.WidgetEntryPoint
 import dev.diligent.app.ui.MainActivity
 import dev.diligent.app.widget.quotes.Quote
 import dev.diligent.app.widget.quotes.QuotePresets
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.Privacy
 import kotlin.random.Random
 
 /**
@@ -125,6 +127,7 @@ class DiligentWidget : GlanceAppWidget() {
 private val WidgetBlack = Color(0xFF000000)
 private val WidgetWhite = Color(0xFFFFFFFF)
 private val WidgetGreen = Color(0xFF4ADE80)
+private val WidgetOverRed = Color(0xFFFF6B6B)
 private val WidgetGold = Color(0xFFFFD700)
 private val WidgetGray = Color(0xFF2A2A2A)
 private val WidgetGrayDark = Color(0xFF1A1A1A)
@@ -314,11 +317,15 @@ private fun WidgetActivityRow(
     progress: DailyProgress?
 ) {
     val currentProgress = progress?.progress ?: 0f
-    val isCompleted = progress?.isCompleted == true
-    val progressText = if (isCompleted) {
-        "✓"
-    } else {
-        "${formatWidgetProgress(currentProgress)}/${formatWidgetProgress(activity.dailyGoal)} ${activity.unit}"
+    val isLimit = Goals.isLimit(activity)
+    val isCompleted = !isLimit && progress?.isCompleted == true
+    val isOver = isLimit && !Goals.isMet(activity, currentProgress)
+    val progressText = when {
+        progress?.isSkipped == true -> "skip"
+        isCompleted -> "✓"
+        activity.goalType == Goals.QUIT -> if (isOver) "slip" else "clean"
+        else -> "${formatWidgetProgress(currentProgress)}/${formatWidgetProgress(activity.dailyGoal)} ${activity.unit}" +
+            if (isLimit) " max" else ""
     }
 
     Row(
@@ -354,7 +361,7 @@ private fun WidgetActivityRow(
 
         // Activity name
         Text(
-            text = activity.name.take(10),
+            text = Privacy.publicName(activity).take(10),
             style = TextStyle(
                 color = ColorProvider(WidgetWhite),
                 fontSize = 12.sp,
@@ -369,7 +376,11 @@ private fun WidgetActivityRow(
             text = progressText,
             style = TextStyle(
                 color = ColorProvider(
-                    if (isCompleted) WidgetGreen else WidgetGrayText
+                    when {
+                        isCompleted -> WidgetGreen
+                        isOver -> WidgetOverRed
+                        else -> WidgetGrayText
+                    }
                 ),
                 fontSize = 11.sp,
                 fontWeight = if (isCompleted) FontWeight.Bold else FontWeight.Normal

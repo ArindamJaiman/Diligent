@@ -26,6 +26,7 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -165,7 +166,7 @@ class HealthSync @Inject constructor(
 
         val zone = ZoneId.systemDefault()
         val now = Instant.now()
-        val start = LocalDate.now().atStartOfDay(zone).toInstant()
+        val start = Instant.ofEpochMilli(DayClock.startOf(DayClock.today()))
         return@withLock try {
             val spans = mutableListOf<WorkoutSpan>()
             var token: String? = null

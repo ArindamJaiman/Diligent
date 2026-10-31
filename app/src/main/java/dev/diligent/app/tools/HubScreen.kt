@@ -36,6 +36,8 @@ import dev.diligent.app.leetcode.domain.LeetCodeDay
 import dev.diligent.app.papers.PaperService
 import dev.diligent.app.papers.PapersScreen
 import dev.diligent.app.review.WeeklyReviewScreen
+import dev.diligent.app.routines.RoutineStore
+import dev.diligent.app.routines.RoutinesScreen
 import dev.diligent.app.screentime.ScreenTimeScreen
 import dev.diligent.app.screentime.ScreenTimeService
 import dev.diligent.app.top3.Top3Screen
@@ -43,6 +45,7 @@ import dev.diligent.app.top3.Top3Service
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.versus.VersusScreen
 import dev.diligent.app.versus.VersusSync
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.SharingStarted
@@ -64,12 +67,13 @@ object ToolRoutes {
     const val GOALS = "tools/goals"
     const val HEALTH = "tools/health"
     const val VERSUS = "tools/versus"
+    const val ROUTINES = "tools/routines"
 
     /** Existing screens the Hub links to. */
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -92,6 +96,7 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.GOALS) { GoalsScreen(onBack = back) }
     composable(ToolRoutes.HEALTH) { HealthScreen(onBack = back) }
     composable(ToolRoutes.VERSUS) { VersusScreen(onBack = back) }
+    composable(ToolRoutes.ROUTINES) { RoutinesScreen(onBack = back) }
 }
 
 data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
@@ -107,7 +112,8 @@ class HubViewModel @Inject constructor(
     private val screen: ScreenTimeService,
     private val health: HealthSync,
     private val versus: VersusSync,
-    private val goalsPrefs: GoalsPrefs
+    private val goalsPrefs: GoalsPrefs,
+    private val routines: RoutineStore
 ) : ViewModel() {
 
     val tiles: StateFlow<List<HubTile>?> = flow {
@@ -119,7 +125,7 @@ class HubViewModel @Inject constructor(
 
     private suspend fun build(): List<HubTile> {
         val now = System.currentTimeMillis()
-        val today = LocalDate.now()
+        val today = DayClock.today()
 
         val picks = top3.picks(today)
         val top3Line = if (picks.isEmpty()) "Pick today's three must-dos" else "${picks.count { it.done }}/${picks.size} done today"
@@ -159,8 +165,13 @@ class HubViewModel @Inject constructor(
         val h = health.state.value
         val healthLine = if (h.settings.connected) "${h.lastMinutes} min of workouts today" else "Auto-log Gym from your watch / phone"
 
+        val routineState = routines.state.value
+        val routineLine = routineState.running?.let { "Running: ${it.name} · step ${(routineState.run?.step ?: 0) + 1}/${it.steps.size}" }
+            ?: if (routineState.routines.isEmpty()) "Chain activities into a morning stack" else "${routineState.routines.size} saved · tap to start"
+
         return listOf(
             HubTile(ToolRoutes.TOP3, "Today's Top 3", top3Line, Icons.Outlined.Checklist, highlight = picks.isEmpty()),
+            HubTile(ToolRoutes.ROUTINES, "Routines", routineLine, Icons.Outlined.PlaylistPlay, highlight = routineState.run != null),
             HubTile(ToolRoutes.LEETCODE, "LeetCode", lcLine, Icons.Outlined.Code),
             HubTile(ToolRoutes.VERSUS, "LeetCode Versus", versusLine, Icons.Outlined.EmojiEvents),
             HubTile(ToolRoutes.CONTESTS, "Contest Radar", contestLine, Icons.Outlined.Radar),

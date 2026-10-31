@@ -30,6 +30,8 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.diligent.app.focus.data.FocusSession
 import dev.diligent.app.focus.domain.FocusMath
 import dev.diligent.app.focus.domain.Phase
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.HabitStrength
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
@@ -63,12 +65,14 @@ fun ActivityCard(
 ) {
     val completionPercent = item.completionPercent
     val isCompleted = item.isCompleted
-    val canFocus = FocusMath.isTimeUnit(item.activity.unit)
+    val canFocus = FocusMath.isTimeUnit(item.activity.unit) && !item.isLimit
+    val summary = item.summary
 
-    // Subtle animated border for completed items (and a running timer)
+    // Subtle animated border for completed items (and a running timer, or a limit gone over)
     val borderColor by animateColorAsState(
         targetValue = when {
             isCompleted -> DiligentColors.CompletedGreen.copy(alpha = 0.6f)
+            item.isOver -> DiligentColors.OverRed.copy(alpha = 0.6f)
             focus != null -> DiligentColors.White.copy(alpha = 0.45f)
             else -> DiligentColors.Border
         },
@@ -119,13 +123,28 @@ fun ActivityCard(
 
                 if (streak > 0) {
                     Text(
-                        text = "🔥 $streak",
+                        text = if (summary?.streakUnit == "weeks") "🔥 ${streak}w" else "🔥 $streak",
                         style = MaterialTheme.typography.labelSmall.copy(
                             fontFamily = DotMatrix
                         ),
                         color = DiligentColors.Gray700
                     )
                 }
+            }
+
+            // Schedule line: "rest day", "2/3 this week", "max 2 hrs · 12 days clean"
+            val caption = listOfNotNull(
+                Goals.label(item.activity).takeIf { it.isNotEmpty() }?.let { label ->
+                    if (item.activity.goalType == Goals.QUIT) label else "$label ${formatProgress(item.activity.dailyGoal)} ${item.activity.unit}"
+                },
+                summary?.caption
+            ).joinToString(" · ")
+            if (caption.isNotEmpty()) {
+                Text(
+                    text = caption,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 1.sp),
+                    color = if (item.isOver) DiligentColors.OverRed else DiligentColors.Gray600
+                )
             }
 
             Spacer(modifier = Modifier.height(12.dp))
@@ -153,13 +172,24 @@ fun ActivityCard(
 
                 // Progress display
                 Text(
-                    text = if (isCompleted) "✓" else "${formatProgress(item.currentProgress)}/${formatProgress(item.activity.dailyGoal)} ${item.activity.unit}",
+                    text = when {
+                        item.isSkipped -> "SKIPPED"
+                        isCompleted -> "✓"
+                        item.activity.goalType == Goals.QUIT ->
+                            if (item.currentProgress > 0f) "slipped · ${formatProgress(item.currentProgress)}" else "✓ clean"
+                        else -> "${formatProgress(item.currentProgress)}/${formatProgress(item.activity.dailyGoal)} ${item.activity.unit}"
+                    },
                     style = MaterialTheme.typography.bodyLarge.copy(
                         fontFamily = DotMatrix,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.sp
                     ),
-                    color = if (isCompleted) DiligentColors.CompletedGreen else DiligentColors.White
+                    color = when {
+                        isCompleted -> DiligentColors.CompletedGreen
+                        item.isOver -> DiligentColors.OverRed
+                        item.isSkipped -> DiligentColors.Gray600
+                        else -> DiligentColors.White
+                    }
                 )
 
                 // Increment button
@@ -194,8 +224,11 @@ fun ActivityCard(
                         .fillMaxWidth(animatedProgress)
                         .clip(RoundedCornerShape(1.5.dp))
                         .background(
-                            if (isCompleted) DiligentColors.CompletedGreen
-                            else DiligentColors.White
+                            when {
+                                isCompleted -> DiligentColors.CompletedGreen
+                                item.isOver -> DiligentColors.OverRed
+                                else -> DiligentColors.White
+                            }
                         )
                 )
             }
@@ -209,7 +242,9 @@ fun ActivityCard(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
-                    text = "${(completionPercent * 100).toInt()}%",
+                    // Today's share of the goal, then the habit's strength (see HabitStrength)
+                    text = "${(completionPercent * 100).toInt()}%" +
+                        (summary?.let { " · ◆ ${HabitStrength.percent(it.strength)}" } ?: ""),
                     style = MaterialTheme.typography.labelSmall.copy(
                         fontFamily = DotMatrix,
                         letterSpacing = 1.sp
@@ -238,17 +273,19 @@ fun ActivityCard(
                         )
                     }
 
-                    // Complete toggle
-                    IconButton(
-                        onClick = onToggleComplete,
-                        modifier = Modifier.size(28.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Check,
-                            contentDescription = "Toggle Complete",
-                            tint = if (isCompleted) DiligentColors.CompletedGreen else DiligentColors.Gray500,
-                            modifier = Modifier.size(14.dp)
-                        )
+                    // Complete toggle (limits have nothing to tick off)
+                    if (!item.isLimit) {
+                        IconButton(
+                            onClick = onToggleComplete,
+                            modifier = Modifier.size(28.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Check,
+                                contentDescription = "Toggle Complete",
+                                tint = if (isCompleted) DiligentColors.CompletedGreen else DiligentColors.Gray500,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
                     }
                 }
             }

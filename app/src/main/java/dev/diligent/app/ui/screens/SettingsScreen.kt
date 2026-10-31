@@ -36,6 +36,11 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
+import dev.diligent.app.planning.Commitment
+import dev.diligent.app.tools.ToolChip
+import dev.diligent.app.tools.ToolField
+import dev.diligent.app.tools.ToolToggle
+import dev.diligent.app.tracking.DayBoundary
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
@@ -59,6 +64,9 @@ fun SettingsScreen(
     val githubUsers by viewModel.githubUsers.collectAsStateWithLifecycle()
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val widgetOpacity by viewModel.widgetOpacity.collectAsStateWithLifecycle()
+    val tracking by viewModel.tracking.collectAsStateWithLifecycle()
+    var showDayStart by remember { mutableStateOf(false) }
+    var showPartner by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     // File picker for restore
@@ -93,6 +101,29 @@ fun SettingsScreen(
             onConfirm = { hour, minute ->
                 viewModel.updateReminderTime(hour, minute)
                 showTimePicker = false
+            }
+        )
+    }
+
+    if (showDayStart) {
+        DayStartDialog(
+            minutes = tracking.dayStartMinutes,
+            followSleep = tracking.followSleep,
+            onDismiss = { showDayStart = false },
+            onSave = { minutes, follow ->
+                viewModel.setDayStart(minutes, follow)
+                showDayStart = false
+            }
+        )
+    }
+
+    if (showPartner) {
+        PartnerDialog(
+            config = tracking.commitment,
+            onDismiss = { showPartner = false },
+            onSave = {
+                viewModel.setCommitment(it)
+                showPartner = false
             }
         )
     }
@@ -182,6 +213,27 @@ fun SettingsScreen(
                     if (it) ensureNotificationPermission()
                     viewModel.updateMissedGoalNotification(it)
                 }
+            )
+
+            // ─── Tracking Section ───────────────────────────
+            SettingsSectionHeader("TRACKING")
+
+            SettingsActionItem(
+                icon = Icons.Default.Bedtime,
+                title = "Day starts at · ${DayBoundary.label(tracking.dayStartMinutes)}",
+                subtitle = if (tracking.followSleep) "Learnt from your sleep (Health Connect)"
+                else "Work before this counts for the day before",
+                onClick = { showDayStart = true }
+            )
+
+            SettingsToggleItem(
+                icon = Icons.Default.Lock,
+                title = "Commitment Mode",
+                subtitle = "Easier goals start ${Commitment.DELAY_DAYS} days after you change them" +
+                    (tracking.commitment.partner.takeIf { it.isNotBlank() }?.let { " · partner: $it" } ?: " · tap to name a partner"),
+                checked = tracking.commitment.on,
+                onCheckedChange = { viewModel.setCommitment(tracking.commitment.copy(on = it)) },
+                onClick = { showPartner = true }
             )
 
             // ─── Appearance Section ─────────────────────────
@@ -827,6 +879,86 @@ private fun QuotePresetDialog(
         confirmButton = {
             TextButton(onClick = onDismiss) {
                 Text("CLOSE", color = DiligentColors.Gray600, fontFamily = DotMatrix)
+            }
+        }
+    )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun DayStartDialog(
+    minutes: Int,
+    followSleep: Boolean,
+    onDismiss: () -> Unit,
+    onSave: (Int, Boolean) -> Unit
+) {
+    var chosen by remember { mutableIntStateOf(minutes) }
+    var follow by remember { mutableStateOf(followSleep) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DiligentColors.SurfaceElevated,
+        title = { Text("Day starts at", fontFamily = Cinzel, color = DiligentColors.White) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    "Night owl? Work done after midnight counts for the evening it belongs to until the new day starts.",
+                    fontFamily = DotMatrix, fontSize = 11.sp, color = DiligentColors.Gray700
+                )
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    (0..6).map { it * 60 }.forEach { option ->
+                        ToolChip(DayBoundary.label(option).uppercase(), !follow && chosen == option) {
+                            chosen = option
+                            follow = false
+                        }
+                    }
+                }
+                ToolToggle(
+                    title = "FOLLOW MY SLEEP",
+                    subtitle = "An hour after you usually fall asleep (Health → sleep). Falls back to the time above.",
+                    checked = follow,
+                    onChecked = { follow = it }
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(chosen, follow) }) {
+                Text("SAVE", color = DiligentColors.White, fontFamily = DotMatrix)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = DiligentColors.Gray600, fontFamily = DotMatrix)
+            }
+        }
+    )
+}
+
+@Composable
+private fun PartnerDialog(config: Commitment.Config, onDismiss: () -> Unit, onSave: (Commitment.Config) -> Unit) {
+    var partner by remember { mutableStateOf(config.partner) }
+    var contact by remember { mutableStateOf(config.partnerContact) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DiligentColors.SurfaceElevated,
+        title = { Text("Accountability partner", fontFamily = Cinzel, color = DiligentColors.White) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    "When you miss your goals, the evening alert offers a TELL button that opens a message to them. Nothing is sent without your tap.",
+                    fontFamily = DotMatrix, fontSize = 11.sp, color = DiligentColors.Gray700
+                )
+                ToolField(partner, { partner = it }, "name", Modifier.fillMaxWidth())
+                ToolField(contact, { contact = it }, "phone number or email", Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onSave(config.copy(partner = partner, partnerContact = contact)) }) {
+                Text("SAVE", color = DiligentColors.White, fontFamily = DotMatrix)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) {
+                Text("CANCEL", color = DiligentColors.Gray600, fontFamily = DotMatrix)
             }
         }
     )

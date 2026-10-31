@@ -20,13 +20,12 @@ import dev.diligent.app.screentime.ScreenTimeWidgetReceiver
 import dev.diligent.app.tools.ToolWidgets
 import dev.diligent.app.top3.Top3WidgetReceiver
 import dev.diligent.app.versus.VersusWidgetUpdater
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.ZoneId
 
 /**
  * Event-driven widget refreshes. Widgets are redrawn only when their data actually
@@ -105,11 +104,8 @@ object DayChangeRefresh {
 
     fun schedule(context: Context) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        val nextMidnight = LocalDate.now()
-            .plusDays(1)
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli() + 5_000
+        // The tracking day may start after midnight (Settings → Day starts at).
+        val nextMidnight = DayClock.nextDayStart() + 5_000
         alarmManager.set(AlarmManager.RTC, nextMidnight, pendingIntent(context))
     }
 

@@ -28,6 +28,9 @@ import dev.diligent.app.tools.ToolScaffold
 import dev.diligent.app.tools.ToolSection
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.ui.theme.DiligentColors
+import dev.diligent.app.tracking.DayClock
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.Tracking
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -79,11 +82,22 @@ object GoalsCalculator {
     ): GoalsUi {
         val byActivity = progress.groupBy { it.activityId }
         val streaks = activities.map { activity ->
-            val done = byActivity[activity.id].orEmpty().filter { it.isCompleted }
-                .mapNotNull { runCatching { LocalDate.parse(it.date) }.getOrNull() }
-            ActivityStreak(activity, StreakEngine.compute(done, today))
+            val rows = byActivity[activity.id].orEmpty()
+            val dated = rows.mapNotNull { row -> runCatching { LocalDate.parse(row.date) }.getOrNull()?.let { it to row } }
+            val created = Instant.ofEpochMilli(activity.createdAt).atZone(zone).toLocalDate()
+            val summary = Tracking.summarize(
+                activity,
+                progress = dated.associate { (day, row) -> day to row.progress },
+                skipped = dated.filter { it.second.isSkipped }.mapTo(HashSet()) { it.first },
+                today = today,
+                created = created,
+                completed = dated.filter { it.second.isCompleted && !it.second.isSkipped }.mapTo(HashSet()) { it.first }
+            )
+            ActivityStreak(activity, summary.streak)
         }
         val suggestions = activities.mapNotNull { activity ->
+            // A limit's goal is a ceiling; the coach only sizes goals to reach.
+            if (Goals.isLimit(activity)) return@mapNotNull null
             val until = snoozed[activity.id]
             if (until != null && today.isBefore(until)) return@mapNotNull null
             val values = byActivity[activity.id].orEmpty()
@@ -115,11 +129,11 @@ class GoalsViewModel @Inject constructor(
         viewModelScope.launch {
             val activity = repository.getActivityById(suggestion.activityId) ?: return@launch
             repository.updateActivity(activity.copy(dailyGoal = suggestion.suggested))
-            prefs.snooze(activity.id, LocalDate.now())
+            prefs.snooze(activity.id, DayClock.today())
         }
     }
 
-    fun dismiss(suggestion: GoalSuggestion) = prefs.snooze(suggestion.activityId, LocalDate.now())
+    fun dismiss(suggestion: GoalSuggestion) = prefs.snooze(suggestion.activityId, DayClock.today())
 }
 
 @Composable

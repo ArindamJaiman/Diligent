@@ -15,6 +15,7 @@ import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
 import dev.diligent.app.quotapulse.live.LiveMonitorService
 import dev.diligent.app.tools.ToolsBootstrap
+import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.widget.DayChangeRefresh
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -55,10 +56,15 @@ class DiligentApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // "Today" for every screen, widget and job; read before any of them run.
+        DayClock.init(this)
 
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // Seed default activities on first launch
             seeder.seedIfEmpty()
+
+            // Commitment mode: lowered goals apply once their waiting week is over
+            repository.applyDueGoalChanges()
 
             // Make reminder jobs match the user's settings (keeps already-queued jobs)
             ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)

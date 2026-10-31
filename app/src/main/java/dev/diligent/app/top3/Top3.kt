@@ -20,6 +20,7 @@ import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.tools.ToolFormat
 import dev.diligent.app.tools.ToolRoutes
 import dev.diligent.app.tools.openToolIntent
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
@@ -136,9 +137,9 @@ class Top3Service @Inject constructor(
     fun current(): Top3State = read().also { _state.value = it }
 
     /** Today's ids (empty when the stored picks are from another day). */
-    fun todayIds(today: LocalDate = LocalDate.now()): List<Long> = current().let { if (it.date == today) it.ids else emptyList() }
+    fun todayIds(today: LocalDate = DayClock.today()): List<Long> = current().let { if (it.date == today) it.ids else emptyList() }
 
-    fun setPicks(ids: List<Long>, today: LocalDate = LocalDate.now()) {
+    fun setPicks(ids: List<Long>, today: LocalDate = DayClock.today()) {
         val previous = current()
         val editor = prefs.edit().putString("date", today.toString()).putString("ids", ids.take(MAX).joinToString(","))
         // Remember yesterday's list once, to suggest unfinished picks.
@@ -156,7 +157,7 @@ class Top3Service @Inject constructor(
         _state.value = read()
     }
 
-    suspend fun picks(today: LocalDate = LocalDate.now()): List<Top3Pick> {
+    suspend fun picks(today: LocalDate = DayClock.today()): List<Top3Pick> {
         val ids = todayIds(today)
         if (ids.isEmpty()) return emptyList()
         val active = repository.getAllActiveSnapshot().associateBy { it.id }
@@ -165,7 +166,7 @@ class Top3Service @Inject constructor(
     }
 
     /** Yesterday's unfinished picks first, then everything else in dashboard order. */
-    suspend fun suggestedOrder(activities: List<Activity>, today: LocalDate = LocalDate.now()): List<Long> {
+    suspend fun suggestedOrder(activities: List<Activity>, today: LocalDate = DayClock.today()): List<Long> {
         val prevDate = prefs.getString("prev_date", null)
         val state = current()
         val yesterdayIds = when {

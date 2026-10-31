@@ -17,6 +17,7 @@ import dev.diligent.app.focus.notify.FocusAlarms
 import dev.diligent.app.focus.notify.FocusNotifier
 import dev.diligent.app.focus.tile.FocusTileService
 import dev.diligent.app.focus.widget.FocusWidgetUpdater
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
@@ -172,11 +173,11 @@ class FocusTimer @Inject constructor(
         FocusNotifier.phaseAlert(context, session.activityName, position, now)
     }
 
-    /** Adds [spans] to the activity, one call per local day. Null when the activity was deleted. */
+    /** Adds [spans] to the activity, one call per tracking day. Null when the activity was deleted. */
     private suspend fun log(session: FocusSession, spans: List<Span>): Int? {
         val activity = repository.getActivityById(session.activityId) ?: return null
         var logged = 0
-        FocusMath.minutesPerDay(spans, ZoneId.systemDefault()).forEach { day ->
+        trackingDays(spans).forEach { day ->
             val amount = FocusMath.amountFor(activity.unit, day.minutes) ?: return@forEach
             repository.addProgress(activity.id, amount, day.date.toString())
             logged += day.minutes
@@ -208,8 +209,16 @@ class FocusTimer @Inject constructor(
     private fun unlogged(session: FocusSession, now: Long) =
         FocusMath.unloggedFocus(session.startedAt, session.loggedUntil, session.pomodoro, now)
 
-    private fun minutes(spans: List<Span>) =
-        FocusMath.minutesPerDay(spans, ZoneId.systemDefault()).sumOf { it.minutes }
+    private fun minutes(spans: List<Span>) = trackingDays(spans).sumOf { it.minutes }
+
+    /**
+     * Minutes per tracking day. When the day starts after midnight (DayClock), shifting the
+     * spans back by that much makes the midnight split land on the day start instead.
+     */
+    private fun trackingDays(spans: List<Span>) =
+        DayClock.offsetMillis().let { shift ->
+            FocusMath.minutesPerDay(spans.map { Span(it.start - shift, it.end - shift) }, ZoneId.systemDefault())
+        }
 }
 
 /** Widgets, receivers and the tile can't use constructor injection. */
