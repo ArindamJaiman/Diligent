@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "dev.diligent.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.diligent.app"

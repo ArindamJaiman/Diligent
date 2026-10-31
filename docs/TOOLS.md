@@ -79,5 +79,5 @@ Tests: `app/src/test/java/dev/diligent/app/goals/StreakEngineTest.kt`, `tools/To
 
 ## Notes
 
-- Health Connect is pinned to `1.1.0-beta01`, the newest version that builds with compileSdk 35 and AGP 8.6. Version 1.1.0 needs compileSdk 36 and AGP 8.9.
+- Health Connect is on `1.1.0`, which needs compileSdk 36 and AGP 8.9+ (the app builds with compileSdk 36 and AGP 8.10; targetSdk stays 35).
 - No tool stores settings in Room, so no database migration was needed. Settings and caches live in SharedPreferences, which Android Auto Backup covers.
