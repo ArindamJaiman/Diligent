@@ -7,7 +7,12 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.focus.FocusTimer
+import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.focus.data.FocusState
+import dev.diligent.app.focus.notify.FocusNotifier
+import dev.diligent.app.ui.components.FocusStart
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.TrackingSummary
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -42,13 +47,20 @@ class DashboardViewModel @Inject constructor(
     data class ActivityWithProgress(
         val activity: Activity,
         val progress: DailyProgress?,
-        val streak: Int = 0
+        val streak: Int = 0,
+        /** Streak unit, strength and today's schedule line; null until first computed. */
+        val summary: TrackingSummary? = null
     ) {
         val currentProgress: Float get() = progress?.progress ?: 0f
-        val isCompleted: Boolean get() = progress?.isCompleted == true
+        val isLimit: Boolean get() = Goals.isLimit(activity)
+        /** Limits are never ticked off; their day is good until it goes [isOver]. */
+        val isCompleted: Boolean get() = !isLimit && progress?.isCompleted == true
+        val isOver: Boolean get() = isLimit && !Goals.isMet(activity, currentProgress)
+        val isSkipped: Boolean get() = progress?.isSkipped == true
+        /** Share of the goal reached, or for a limit, share of the allowance used. */
         val completionPercent: Float get() =
             if (activity.dailyGoal > 0) (currentProgress / activity.dailyGoal).coerceIn(0f, 1f)
-            else 0f
+            else if (isOver) 1f else 0f
         val lastUpdated: Long get() = progress?.lastUpdated ?: 0L
     }
 
@@ -59,18 +71,18 @@ class DashboardViewModel @Inject constructor(
      * Streak per activity, recalculated whenever activities or today's progress change
      * (previously it was only computed once, so completing a goal never bumped the streak).
      */
-    private val streakMap: Flow<Map<Long, Int>> =
+    private val summaries: Flow<Map<Long, TrackingSummary>> =
         combine(activities, todayProgress) { list, _ -> list }
-            .mapLatest { list -> list.associate { it.id to repository.calculateStreak(it.id) } }
+            .mapLatest { list -> list.associate { it.id to repository.trackingSummary(it) } }
 
     val activitiesWithProgress: StateFlow<List<ActivityWithProgress>> =
         combine(
             activities,
             todayProgress,
-            streakMap.onStart { emit(emptyMap()) },
+            summaries.onStart { emit(emptyMap()) },
             _sortMode,
             _searchQuery
-        ) { activities, todayProgress, streaks, sort, query ->
+        ) { activities, todayProgress, summaries, sort, query ->
             val progressMap = todayProgress.associateBy { it.activityId }
 
             activities
@@ -79,7 +91,8 @@ class DashboardViewModel @Inject constructor(
                     ActivityWithProgress(
                         activity = activity,
                         progress = progressMap[activity.id],
-                        streak = streaks[activity.id] ?: 0
+                        streak = summaries[activity.id]?.streak?.current ?: 0,
+                        summary = summaries[activity.id]
                     )
                 }
                 .let { list ->
@@ -118,17 +131,37 @@ class DashboardViewModel @Inject constructor(
     /** The running timer (shared with the widget, tile and notification). */
     val focus: StateFlow<FocusState> = focusTimer.state
 
-    fun startFocus(activityId: Long, pomodoro: Boolean) {
+    fun startFocus(activityId: Long, start: FocusStart) {
         viewModelScope.launch {
-            focusTimer.start(activityId, pomodoro)
+            focusTimer.start(activityId, start.pomodoro, start.intention, start.targetMinutes, start.shield)
         }
     }
 
     fun stopFocus() {
         viewModelScope.launch {
-            focusTimer.stop()
+            if (!focusTimer.stop()) {
+                val until = focusTimer.current().session?.lockedUntil ?: 0L
+                _messages.emit("Hard mode · keep going until ${FocusNotifier.formatClock(until)}")
+            }
         }
     }
+
+    fun interruptFocus() {
+        viewModelScope.launch { focusTimer.interrupt() }
+    }
+
+    /** The session that just ended, for the "how focused were you?" prompt. */
+    val finishedFocus: StateFlow<FocusRecord?> = focusTimer.finished
+
+    fun rateFinished(rating: Int) {
+        val record = finishedFocus.value ?: return
+        viewModelScope.launch { focusTimer.rate(record.id, rating) }
+    }
+
+    fun dismissFinished() = focusTimer.dismissFinished()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     fun setSortMode(mode: SortMode) {
         _sortMode.value = mode

@@ -7,12 +7,16 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.DayLogDao
+import dev.diligent.app.data.local.dao.FocusRecordDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.DayLog
+import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.Settings
@@ -36,9 +40,11 @@ import dev.diligent.app.quotapulse.data.UsageSourceStatus
         UsageSnapshot::class,
         UsageSourceStatus::class,
         LeetCodeReview::class,
-        GithubUser::class
+        GithubUser::class,
+        FocusRecord::class,
+        DayLog::class
     ],
-    version = 6,
+    version = 7,
     exportSchema = true
 )
 abstract class DiligentDatabase : RoomDatabase() {
@@ -50,6 +56,8 @@ abstract class DiligentDatabase : RoomDatabase() {
     abstract fun quotaPulseDao(): QuotaPulseDao
     abstract fun leetCodeReviewDao(): LeetCodeReviewDao
     abstract fun githubUserDao(): GithubUserDao
+    abstract fun focusRecordDao(): FocusRecordDao
+    abstract fun dayLogDao(): DayLogDao
 
     companion object {
         const val DATABASE_NAME = "diligent_db"
@@ -153,6 +161,63 @@ abstract class DiligentDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6)
+        /** Columns v7 appends to activities: (definition, default for existing rows). */
+        internal val ACTIVITY_COLUMNS_V7 = listOf(
+            "`scheduleType` TEXT NOT NULL" to "'daily'",
+            "`scheduleDays` INTEGER NOT NULL" to "127",
+            "`scheduleCount` INTEGER NOT NULL" to "1",
+            "`goalType` TEXT NOT NULL" to "'at_least'",
+            "`targetTotal` REAL NOT NULL" to "0",
+            "`targetDate` TEXT NOT NULL" to "''",
+            "`pendingGoal` REAL NOT NULL" to "0",
+            "`pendingGoalDate` TEXT NOT NULL" to "''",
+            "`isPrivate` INTEGER NOT NULL" to "0"
+        )
+
+        /** Columns v7 appends to daily_progress. */
+        internal val PROGRESS_COLUMNS_V7 = listOf(
+            "`rating` INTEGER NOT NULL" to "0",
+            "`isSkipped` INTEGER NOT NULL" to "0"
+        )
+
+        /** Same SQL as the exported schema 7.json; DatabaseSchemaTest keeps the two in step. */
+        internal const val CREATE_FOCUS_SESSIONS =
+            "CREATE TABLE IF NOT EXISTS `focus_sessions` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, " +
+                "`activityId` INTEGER NOT NULL, `startedAt` INTEGER NOT NULL, `endedAt` INTEGER NOT NULL, " +
+                "`focusMinutes` INTEGER NOT NULL, `pomodoro` INTEGER NOT NULL, `intention` TEXT NOT NULL, " +
+                "`rating` INTEGER NOT NULL, `interruptions` INTEGER NOT NULL, `broken` INTEGER NOT NULL, " +
+                "FOREIGN KEY(`activityId`) REFERENCES `activities`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )"
+
+        internal val FOCUS_SESSIONS_INDICES = listOf(
+            "CREATE INDEX IF NOT EXISTS `index_focus_sessions_activityId` ON `focus_sessions` (`activityId`)",
+            "CREATE INDEX IF NOT EXISTS `index_focus_sessions_startedAt` ON `focus_sessions` (`startedAt`)"
+        )
+
+        internal const val CREATE_DAY_LOGS =
+            "CREATE TABLE IF NOT EXISTS `day_logs` (`date` TEXT NOT NULL, `mood` INTEGER NOT NULL, " +
+                "`energy` INTEGER NOT NULL, `sleepMinutes` INTEGER, `sleepStart` INTEGER, `steps` INTEGER, " +
+                "`mindfulMinutes` INTEGER, `distractingMinutes` INTEGER, `note` TEXT NOT NULL, " +
+                "`shutdownAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, PRIMARY KEY(`date`))"
+
+        /**
+         * v7: schedules, limit goals, long-term targets, commitment and privacy on activities;
+         * ratings and skips on daily progress; the focus session log and whole-day measurements.
+         */
+        val MIGRATION_6_7 = object : Migration(6, 7) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                ACTIVITY_COLUMNS_V7.forEach { (column, default) ->
+                    db.execSQL("ALTER TABLE `activities` ADD COLUMN $column DEFAULT $default")
+                }
+                PROGRESS_COLUMNS_V7.forEach { (column, default) ->
+                    db.execSQL("ALTER TABLE `daily_progress` ADD COLUMN $column DEFAULT $default")
+                }
+                db.execSQL(CREATE_FOCUS_SESSIONS)
+                FOCUS_SESSIONS_INDICES.forEach { db.execSQL(it) }
+                db.execSQL(CREATE_DAY_LOGS)
+            }
+        }
+
+        val ALL_MIGRATIONS =
+            arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4, MIGRATION_4_5, MIGRATION_5_6, MIGRATION_6_7)
     }
 }

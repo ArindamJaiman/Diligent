@@ -20,9 +20,13 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.EntryPointAccessors
 import dev.diligent.app.R
+import dev.diligent.app.automation.AutoLogService
+import dev.diligent.app.cloud.CloudService
+import dev.diligent.app.cloud.SocialService
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.health.HealthSync
 import dev.diligent.app.papers.PaperService
+import dev.diligent.app.planning.PlanService
 import dev.diligent.app.review.WeeklyReviewService
 import dev.diligent.app.screentime.ScreenTimeService
 import dev.diligent.app.top3.Top3Service
@@ -47,9 +51,14 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
     SCREEN_NUDGE(true, false),
     HEALTH_EVENING(true, false),
     VERSUS_EVENING(true, true),
+    AUTOLOG_EVENING(true, false),
+    PLAN_MORNING(true, false),
+    SHUTDOWN_PROMPT(true, false),
+    CLOUD_NIGHTLY(true, true),
     CONTESTS_SYNC(false, true),
     PAPERS_SYNC(false, true),
-    VERSUS_SYNC(false, true);
+    VERSUS_SYNC(false, true),
+    AUTOLOG_SYNC(false, true);
 
     val workName: String get() = "tool_" + name.lowercase()
 }
@@ -63,7 +72,11 @@ class ToolServices @Inject constructor(
     val top3: Top3Service,
     val screenTime: ScreenTimeService,
     val health: HealthSync,
-    val versus: VersusSync
+    val versus: VersusSync,
+    val autoLog: AutoLogService,
+    val plans: PlanService,
+    val cloud: CloudService,
+    val social: SocialService
 ) {
     suspend fun run(job: ToolJob) {
         when (job) {
@@ -77,6 +90,14 @@ class ToolServices @Inject constructor(
             ToolJob.HEALTH_EVENING -> health.runEvening()
             ToolJob.VERSUS_EVENING -> versus.runEvening()
             ToolJob.VERSUS_SYNC -> versus.sync(force = true)
+            ToolJob.AUTOLOG_EVENING -> autoLog.runEvening()
+            ToolJob.AUTOLOG_SYNC -> autoLog.sync()
+            ToolJob.PLAN_MORNING -> plans.runMorning()
+            ToolJob.SHUTDOWN_PROMPT -> plans.runShutdownPrompt()
+            ToolJob.CLOUD_NIGHTLY -> {
+                cloud.runAll()
+                social.pushAllScores()
+            }
         }
     }
 
@@ -89,6 +110,10 @@ class ToolServices @Inject constructor(
         ToolJob.SCREEN_NUDGE -> screenTime.nextRun(now)
         ToolJob.HEALTH_EVENING -> health.nextRun(now)
         ToolJob.VERSUS_EVENING -> versus.nextRun(now)
+        ToolJob.AUTOLOG_EVENING -> autoLog.nextRun(now)
+        ToolJob.PLAN_MORNING -> plans.nextMorning(now)
+        ToolJob.SHUTDOWN_PROMPT -> plans.nextShutdown(now)
+        ToolJob.CLOUD_NIGHTLY -> cloud.nextRun(now)
         else -> null
     }
 }

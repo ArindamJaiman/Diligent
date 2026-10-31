@@ -88,6 +88,9 @@ jobs:
         run: |
           APK="Diligent-${NAME}.apk"
           mv app/build/outputs/apk/release/app-release.apk "$APK"
+          # The Wear OS tile app (wear module), installed on the watch separately
+          WEAR=$(ls wear/build/outputs/apk/release/*.apk 2>/dev/null | head -1)
+          if [ -n "$WEAR" ]; then mv "$WEAR" "Diligent-wear-${NAME}.apk"; fi
           jq -n \
             --argjson versionCode "$CODE" \
             --arg versionName "$NAME" \

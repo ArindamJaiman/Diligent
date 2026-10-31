@@ -1,0 +1,17 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Progress ring, three quarters full (alternate launcher icon) -->
+    <path
+        android:pathData="M34.00,54.00a20.00,20.00 0 1,0 40.00,0a20.00,20.00 0 1,0 -40.00,0Z"
+        android:strokeColor="#2A2A2A"
+        android:strokeWidth="6" />
+    <path
+        android:pathData="M54.00,34.00A20,20 0 1,1 34.00,54.00"
+        android:strokeColor="#4ADE80"
+        android:strokeLineCap="round"
+        android:strokeWidth="6" />
+    <path android:fillColor="#FFFFFF" android:pathData="M50.00,54.00a4.00,4.00 0 1,0 8.00,0a4.00,4.00 0 1,0 -8.00,0Z" />
+</vector>

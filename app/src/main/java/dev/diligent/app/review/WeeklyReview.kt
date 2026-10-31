@@ -22,6 +22,7 @@ import dev.diligent.app.leetcode.data.LeetCodeSnapshot
 import dev.diligent.app.tools.ToolFormat
 import dev.diligent.app.tools.ToolRoutes
 import dev.diligent.app.tools.openToolIntent
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.time.DayOfWeek
@@ -176,7 +177,7 @@ class WeeklyReviewService @Inject constructor(
     )
 
     /** @param weeksAgo 0 = this week (Monday to today), 1 = last week. */
-    suspend fun build(weeksAgo: Long = 0, today: LocalDate = LocalDate.now()): WeeklyReviewData {
+    suspend fun build(weeksAgo: Long = 0, today: LocalDate = DayClock.today()): WeeklyReviewData {
         val start = WeeklyReviewBuilder.weekStart(today).minusWeeks(weeksAgo)
         val activities = repository.getAllActiveSnapshot()
         val history = repository.getAllProgressRangeSnapshot(start.minusDays(GoalCoach.WINDOW_DAYS + 1).toString(), start.plusDays(6).toString())

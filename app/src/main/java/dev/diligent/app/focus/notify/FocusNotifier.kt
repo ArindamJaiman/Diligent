@@ -7,6 +7,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.os.Build
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
 import dev.diligent.app.R
@@ -54,6 +55,7 @@ object FocusNotifier {
     }
 
     fun running(context: Context, session: FocusSession, now: Long) {
+        val locked = session.lockedUntil > now
         val builder = base(context, CHANNEL_TIMER)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
@@ -63,24 +65,61 @@ object FocusNotifier {
             .setShowWhen(true)
             .setUsesChronometer(true)
             .setContentIntent(openApp(context))
-            .addAction(0, "STOP", FocusReceiver.broadcast(context, FocusReceiver.ACTION_STOP))
+        if (!locked) builder.addAction(0, "STOP", FocusReceiver.broadcast(context, FocusReceiver.ACTION_STOP))
+        builder.addAction(0, "INTERRUPTED", FocusReceiver.broadcast(context, FocusReceiver.ACTION_INTERRUPT))
 
+        val (title, text) = lines(session, now)
+        builder.setContentTitle(title).setContentText(text)
         if (session.pomodoro) {
-            val position = FocusMath.pomodoroAt(session.startedAt, now)
-            builder.setWhen(position.phaseEnd).setChronometerCountDown(true)
-            if (position.phase == Phase.FOCUS) {
-                builder.setContentTitle("Focus ${position.block} · ${session.activityName}")
-                    .setContentText("Pomodoro · break at ${formatClock(position.phaseEnd)} · STOP logs the time")
-            } else {
-                builder.setContentTitle("Break · ${session.activityName}")
-                    .setContentText("Block ${position.block} done · back to focus at ${formatClock(position.phaseEnd)}")
-            }
+            builder.setWhen(FocusMath.pomodoroAt(session.startedAt, now).phaseEnd).setChronometerCountDown(true)
         } else {
             builder.setWhen(session.startedAt)
-                .setContentTitle("Focus · ${session.activityName}")
-                .setContentText("Since ${formatClock(session.startedAt)} · STOP logs the time")
         }
-        post(context, ID_TIMER, builder.build())
+
+        // Android 16+: a Live Update (status-bar chip, prominent on the lock screen).
+        val notification = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.BAKLAVA) {
+            LiveFocus.build(context, session, now, title, text, locked) ?: builder.build()
+        } else {
+            builder.build()
+        }
+        post(context, ID_TIMER, notification)
+    }
+
+    /** Title and text for the running notification (shared by the classic and Live Update forms). */
+    internal fun lines(session: FocusSession, now: Long): Pair<String, String> {
+        val locked = session.lockedUntil > now
+        val extras = listOfNotNull(
+            session.intention.takeIf { it.isNotBlank() }?.let { "“$it”" },
+            if (locked) "hard mode · locked until ${formatClock(session.lockedUntil)}" else null,
+            if (session.broken) "✕ stake broken" else null,
+            session.interruptions.takeIf { it > 0 }?.let { "⚡ $it" }
+        )
+        return if (session.pomodoro) {
+            val position = FocusMath.pomodoroAt(session.startedAt, now)
+            if (position.phase == Phase.FOCUS) {
+                "Focus ${position.block} · ${session.activityName}" to
+                    (listOf("break at ${formatClock(position.phaseEnd)}") + extras).joinToString(" · ")
+            } else {
+                "Break · ${session.activityName}" to
+                    (listOf("block ${position.block} done · back at ${formatClock(position.phaseEnd)}") + extras).joinToString(" · ")
+            }
+        } else {
+            "Focus · ${session.activityName}" to
+                (listOf("since ${formatClock(session.startedAt)}") + extras + if (locked) emptyList() else listOf("STOP logs the time"))
+                    .joinToString(" · ")
+        }
+    }
+
+    /** STOP was refused by hard mode. */
+    fun locked(context: Context, session: FocusSession) {
+        val notification = base(context, CHANNEL_POMODORO)
+            .setContentTitle("Hard mode · keep going")
+            .setContentText("${session.activityName} is locked until ${formatClock(session.lockedUntil)}")
+            .setAutoCancel(true)
+            .setTimeoutAfter(10_000L)
+            .setContentIntent(openApp(context))
+            .build()
+        post(context, ID_PHASE, notification)
     }
 
     /** Pomodoro boundary. Fades out when the phase it announces is over. */
@@ -141,7 +180,7 @@ object FocusNotifier {
     }
 
     /** Brings the app forward as it was, like tapping its launcher icon. */
-    private fun openApp(context: Context): PendingIntent =
+    internal fun openApp(context: Context): PendingIntent =
         PendingIntent.getActivity(
             context,
             REQUEST_OPEN,

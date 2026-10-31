@@ -29,7 +29,15 @@ object StreakEngine {
     const val DAYS_PER_FREEZE = 7
     const val MAX_FREEZES = 2
 
-    fun compute(completed: Collection<LocalDate>, today: LocalDate): StreakState {
+    /**
+     * @param neutral days that neither add to nor break the streak: rest days of a schedule
+     *   and skipped days (see Schedule.neutralDays)
+     */
+    fun compute(
+        completed: Collection<LocalDate>,
+        today: LocalDate,
+        neutral: (LocalDate) -> Boolean = { false }
+    ): StreakState {
         val done = completed.filter { !it.isAfter(today) }.toSortedSet()
         if (done.isEmpty()) return StreakState(0, 0, emptyList(), DAYS_PER_FREEZE)
 
@@ -46,7 +54,7 @@ object StreakEngine {
                     run++
                     if (run % DAYS_PER_FREEZE == 0 && freezes < MAX_FREEZES) freezes++
                 }
-                day == today -> Unit
+                day == today || neutral(day) -> Unit
                 streak > 0 && freezes > 0 -> {
                     freezes--
                     saved += day

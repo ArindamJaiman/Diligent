@@ -62,6 +62,8 @@ import dev.diligent.app.tools.rememberNotificationAsker
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.tools.wText
 import dev.diligent.app.ui.theme.DiligentColors
+import dev.diligent.app.tracking.DayClock
+import dev.diligent.app.tracking.Privacy
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -90,7 +92,7 @@ class Top3Widget : GlanceAppWidget() {
     override suspend fun provideGlance(context: Context, id: GlanceId) {
         val service = EntryPointAccessors.fromApplication(context.applicationContext, ToolsEntryPoint::class.java).top3Service()
         val picks = service.picks()
-        val today = LocalDate.now()
+        val today = DayClock.today()
         val busy = CalendarBusy.read(context, today)?.let { CalendarBusy.summarize(it, System.currentTimeMillis(), today, ZoneId.systemDefault()) }
         provideContent { Top3Content(picks, busy) }
     }
@@ -161,7 +163,7 @@ private fun Top3Content(picks: List<Top3Pick>, busy: BusySummary?) {
                     WDot(if (p.done) WidgetPalette.Good else WidgetPalette.Dim, 5)
                     Spacer(GlanceModifier.width(6.dp))
                     Column(modifier = GlanceModifier.defaultWeight()) {
-                        GText(p.activity.name.uppercase(), style = wText(8.sp, if (p.done) WidgetPalette.Good else WidgetPalette.White, bold = true), maxLines = 1)
+                        GText(Privacy.publicName(p.activity).uppercase(), style = wText(8.sp, if (p.done) WidgetPalette.Good else WidgetPalette.White, bold = true), maxLines = 1)
                         GText(
                             "${ToolFormat.amount(p.progress, p.activity.unit)} / ${ToolFormat.amount(p.activity.dailyGoal, p.activity.unit)}",
                             style = wText(7.sp, WidgetPalette.Gray), maxLines = 1

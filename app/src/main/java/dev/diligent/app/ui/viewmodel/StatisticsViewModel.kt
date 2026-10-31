@@ -5,6 +5,7 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
@@ -65,7 +66,7 @@ class StatisticsViewModel @Inject constructor(
 
             // Weekly chart data (last 7 days, daily completion %)
             val chartData = (6 downTo 0).map { daysAgo ->
-                val date = LocalDate.now().minusDays(daysAgo.toLong())
+                val date = DayClock.today().minusDays(daysAgo.toLong())
                 val dateStr = date.format(dateFormatter)
                 val rate = repository.getCompletionRate(dateStr, dateStr)
                 val label = date.dayOfWeek.name.take(3)

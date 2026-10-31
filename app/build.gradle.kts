@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "dev.diligent.app"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "dev.diligent.app"
@@ -83,6 +83,13 @@ android {
         compose = true
         buildConfig = true
     }
+
+    packaging {
+        resources {
+            // Duplicate metadata from the Claude SDK's Jackson / OkHttp dependencies
+            excludes += setOf("META-INF/INDEX.LIST", "META-INF/DEPENDENCIES", "META-INF/LICENSE*", "META-INF/NOTICE*", "META-INF/*.version")
+        }
+    }
 }
 
 dependencies {
@@ -139,8 +146,22 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Health Connect (reads today's exercise sessions for Gym auto-log)
+    // Health Connect (exercise for Gym auto-log; sleep, steps and mindfulness for insights)
     implementation(libs.androidx.health.connect.client)
+
+    // Geofences: "arrive at the gym → start the Gym timer"
+    implementation(libs.play.services.location)
+
+    // Wear OS tile: today's goals go to the watch, its + buttons come back
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
+
+    // Claude API for the weekly coach letter (Insights), called with the user's own API key
+    implementation(libs.anthropic.java)
+
+    // Optional vendor SDKs dropped into app/libs, e.g. Nothing's Glyph Matrix kit (docs/GLYPH.md).
+    // The app reaches them through reflection, so it builds the same without them.
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar", "*.jar"))))
 
     // Testing
     testImplementation(libs.junit)

@@ -36,6 +36,9 @@ object DiligentColors {
 
     // Accent — subtle dot-matrix green for completion indicators
     val CompletedGreen = Color(0xFF4ADE80)
+
+    // A limit gone over (max / quit activities)
+    val OverRed = Color(0xFFFF6B6B)
     val ProgressWhite = White
 
     // Borders & dividers

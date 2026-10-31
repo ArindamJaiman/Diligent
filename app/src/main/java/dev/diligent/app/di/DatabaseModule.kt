@@ -11,6 +11,8 @@ import dev.diligent.app.data.local.DiligentDatabase
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.DayLogDao
+import dev.diligent.app.data.local.dao.FocusRecordDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
@@ -62,4 +64,10 @@ object DatabaseModule {
 
     @Provides
     fun provideLeetCodeReviewDao(db: DiligentDatabase): LeetCodeReviewDao = db.leetCodeReviewDao()
+
+    @Provides
+    fun provideFocusRecordDao(db: DiligentDatabase): FocusRecordDao = db.focusRecordDao()
+
+    @Provides
+    fun provideDayLogDao(db: DiligentDatabase): DayLogDao = db.dayLogDao()
 }

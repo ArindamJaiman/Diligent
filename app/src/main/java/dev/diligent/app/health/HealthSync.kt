@@ -1,3 +1,6 @@
+// Mindfulness sessions are still marked experimental in Health Connect 1.1.0.
+@file:OptIn(ExperimentalMindfulnessSessionApi::class)
+
 package dev.diligent.app.health
 
 import android.content.Context
@@ -17,8 +20,13 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.HealthConnectClient
 import androidx.health.connect.client.HealthConnectFeatures
+import androidx.health.connect.client.feature.ExperimentalMindfulnessSessionApi
 import androidx.health.connect.client.permission.HealthPermission
 import androidx.health.connect.client.records.ExerciseSessionRecord
+import androidx.health.connect.client.records.MindfulnessSessionRecord
+import androidx.health.connect.client.records.SleepSessionRecord
+import androidx.health.connect.client.records.StepsRecord
+import androidx.health.connect.client.request.AggregateRequest
 import androidx.health.connect.client.request.ReadRecordsRequest
 import androidx.health.connect.client.time.TimeRangeFilter
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,6 +34,8 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.ui.theme.DiligentColors
 import dev.diligent.app.ui.theme.DotMatrix
+import dev.diligent.app.tracking.DayBoundary
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.sync.Mutex
@@ -92,14 +102,27 @@ object HealthMath {
     }
 }
 
-data class HealthSettings(val connected: Boolean = false, val activityId: Long = 0L, val gymOnly: Boolean = true)
+data class HealthSettings(
+    val connected: Boolean = false,
+    val activityId: Long = 0L,
+    val gymOnly: Boolean = true,
+    /** Also read sleep, steps and mindfulness into the day log (insights, readiness). */
+    val wellbeing: Boolean = false,
+    /** Steps today raise this activity (a count unit such as "steps"); 0 for none. */
+    val stepsActivityId: Long = 0L,
+    /** Mindfulness minutes raise this time activity (e.g. Meditation); 0 for none. */
+    val mindfulActivityId: Long = 0L
+)
 
 data class HealthState(
     val settings: HealthSettings,
     val lastSyncAt: Long,
     val lastMinutes: Long,
     val lastSessions: Int,
-    val error: String?
+    val error: String?,
+    val lastSleepMinutes: Int = 0,
+    val lastSteps: Long = 0,
+    val lastMindfulMinutes: Int = 0
 )
 
 /**
@@ -120,6 +143,10 @@ class HealthSync @Inject constructor(
     val state: StateFlow<HealthState> = _state
 
     val readPermissions: Set<String> = setOf(HealthPermission.getReadPermission(ExerciseSessionRecord::class))
+    val sleepPermission = HealthPermission.getReadPermission(SleepSessionRecord::class)
+    val stepsPermission = HealthPermission.getReadPermission(StepsRecord::class)
+    val mindfulPermission = HealthPermission.getReadPermission(MindfulnessSessionRecord::class)
+    val wellbeingPermissions: Set<String> = setOf(sleepPermission, stepsPermission, mindfulPermission)
     val backgroundPermission: String = HealthPermission.PERMISSION_READ_HEALTH_DATA_IN_BACKGROUND
 
     fun sdkStatus(): Int = HealthConnectClient.getSdkStatus(context)
@@ -147,6 +174,9 @@ class HealthSync @Inject constructor(
             .putBoolean("connected", next.connected)
             .putLong("activity", next.activityId)
             .putBoolean("gym_only", next.gymOnly)
+            .putBoolean("wellbeing", next.wellbeing)
+            .putLong("steps_activity", next.stepsActivityId)
+            .putLong("mindful_activity", next.mindfulActivityId)
             .apply()
         _state.value = read()
     }
@@ -165,7 +195,7 @@ class HealthSync @Inject constructor(
 
         val zone = ZoneId.systemDefault()
         val now = Instant.now()
-        val start = LocalDate.now().atStartOfDay(zone).toInstant()
+        val start = Instant.ofEpochMilli(DayClock.startOf(DayClock.today()))
         return@withLock try {
             val spans = mutableListOf<WorkoutSpan>()
             var token: String? = null
@@ -201,15 +231,113 @@ class HealthSync @Inject constructor(
         }
     }
 
+    /**
+     * Sleep that ended this tracking day, steps and mindfulness minutes since it began → the
+     * day log; linked activities are raised. With "day starts when I sleep" on, the day start
+     * follows the last two weeks of sleep (see DayBoundary.fromSleep).
+     */
+    suspend fun syncWellbeing(): String? = mutex.withLock {
+        val settings = _state.value.settings
+        if (!settings.wellbeing) return@withLock null
+        val client = client() ?: return@withLock fail("Health Connect isn't available on this phone")
+        val granted = granted()
+        if (granted.intersect(wellbeingPermissions).isEmpty()) return@withLock fail("Allow sleep, steps or mindfulness in Health Connect")
+
+        val zone = ZoneId.systemDefault()
+        val now = System.currentTimeMillis()
+        val dayStart = DayClock.startOf(DayClock.today())
+        return@withLock try {
+            var sleepMinutes: Int? = null
+            var sleepStart: Long? = null
+            if (sleepPermission in granted) {
+                val spans = readAll(client, SleepSessionRecord::class, now - 15 * DAY_MS, now) { SleepSpan(it.startTime.toEpochMilli(), it.endTime.toEpochMilli()) }
+                val night = SleepMath.nightWindowStart(dayStart)
+                sleepMinutes = SleepMath.minutesEndingBetween(spans, night, now).takeIf { it > 0 }
+                sleepStart = SleepMath.mainStart(spans, night, now)
+                if (DayClock.followsSleep()) {
+                    val start = DayBoundary.fromSleep(SleepMath.onsets(spans, zone))
+                    if (start != DayClock.startMinutes()) DayClock.set(context, start, followSleep = true)
+                }
+            }
+            val steps = if (stepsPermission in granted) {
+                client.aggregate(
+                    AggregateRequest(setOf(StepsRecord.COUNT_TOTAL), TimeRangeFilter.between(Instant.ofEpochMilli(dayStart), Instant.ofEpochMilli(now)))
+                )[StepsRecord.COUNT_TOTAL]
+            } else null
+            val mindful = if (mindfulPermission in granted && mindfulnessSupported(client)) {
+                val spans = readAll(client, MindfulnessSessionRecord::class, dayStart, now) { WorkoutSpan(0, it.startTime.toEpochMilli(), it.endTime.toEpochMilli()) }
+                HealthMath.minutes(spans, dayStart, now, gymOnly = false).toInt()
+            } else null
+
+            repository.updateDayLog { log ->
+                log.copy(
+                    sleepMinutes = sleepMinutes ?: log.sleepMinutes,
+                    sleepStart = sleepStart ?: log.sleepStart,
+                    steps = steps?.toInt() ?: log.steps,
+                    mindfulMinutes = mindful ?: log.mindfulMinutes
+                )
+            }
+            val active = repository.getAllActiveSnapshot()
+            if (steps != null && steps > 0) {
+                active.firstOrNull { it.id == settings.stepsActivityId }?.let { repository.raiseProgressTo(it, steps.toFloat()) }
+            }
+            if (mindful != null && mindful > 0) {
+                active.firstOrNull { it.id == settings.mindfulActivityId }?.let { a ->
+                    repository.raiseProgressTo(a, HealthMath.progress(a.unit, mindful.toLong(), 1))
+                }
+            }
+            prefs.edit()
+                .putInt("last_sleep", sleepMinutes ?: 0)
+                .putLong("last_steps", steps ?: 0L)
+                .putInt("last_mindful", mindful ?: 0)
+                .remove("error")
+                .apply()
+            _state.value = read()
+            null
+        } catch (e: SecurityException) {
+            fail("Health Connect permission was revoked")
+        } catch (e: Exception) {
+            if (e is kotlinx.coroutines.CancellationException) throw e
+            fail(e.message ?: "Couldn't read Health Connect")
+        }
+    }
+
+    private suspend fun mindfulnessSupported(client: HealthConnectClient): Boolean = try {
+        client.features.getFeatureStatus(HealthConnectFeatures.FEATURE_MINDFULNESS_SESSION) ==
+            HealthConnectFeatures.FEATURE_STATUS_AVAILABLE
+    } catch (e: Exception) {
+        false
+    }
+
+    /** Every record of [type] in [from, to), all pages. */
+    private suspend fun <R : androidx.health.connect.client.records.Record, T> readAll(
+        client: HealthConnectClient,
+        type: kotlin.reflect.KClass<R>,
+        from: Long,
+        to: Long,
+        map: (R) -> T
+    ): List<T> {
+        val out = mutableListOf<T>()
+        var token: String? = null
+        do {
+            val response = client.readRecords(
+                ReadRecordsRequest(type, timeRangeFilter = TimeRangeFilter.between(Instant.ofEpochMilli(from), Instant.ofEpochMilli(to)), pageToken = token)
+            )
+            response.records.forEach { out += map(it) }
+            token = response.pageToken
+        } while (token != null)
+        return out
+    }
+
     /** Evening background read, only when Android grants background access. */
     suspend fun runEvening() {
-        if (!_state.value.settings.connected) return
         if (backgroundPermission !in granted()) return
-        sync()
+        if (_state.value.settings.connected) sync()
+        syncWellbeing()
     }
 
     fun nextRun(now: ZonedDateTime): ZonedDateTime? {
-        if (!_state.value.settings.connected) return null
+        if (!_state.value.settings.connected && !_state.value.settings.wellbeing) return null
         var next = now.with(LocalTime.of(20, 50)).withSecond(0).withNano(0)
         if (!next.isAfter(now.plusSeconds(30))) next = next.plusDays(1)
         return next
@@ -225,13 +353,23 @@ class HealthSync @Inject constructor(
         settings = HealthSettings(
             connected = prefs.getBoolean("connected", false),
             activityId = prefs.getLong("activity", 0L),
-            gymOnly = prefs.getBoolean("gym_only", true)
+            gymOnly = prefs.getBoolean("gym_only", true),
+            wellbeing = prefs.getBoolean("wellbeing", false),
+            stepsActivityId = prefs.getLong("steps_activity", 0L),
+            mindfulActivityId = prefs.getLong("mindful_activity", 0L)
         ),
         lastSyncAt = prefs.getLong("last_sync", 0L),
         lastMinutes = prefs.getLong("last_minutes", 0L),
         lastSessions = prefs.getInt("last_sessions", 0),
-        error = prefs.getString("error", null)
+        error = prefs.getString("error", null),
+        lastSleepMinutes = prefs.getInt("last_sleep", 0),
+        lastSteps = prefs.getLong("last_steps", 0L),
+        lastMindfulMinutes = prefs.getInt("last_mindful", 0)
     )
+
+    private companion object {
+        const val DAY_MS = 24 * 3_600_000L
+    }
 }
 
 /**

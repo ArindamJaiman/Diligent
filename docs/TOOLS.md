@@ -11,7 +11,17 @@ Open the **Hub** with the grid icon on the dashboard. Each tool keeps working of
 | **Streaks & Goals** | Streak freezes and the goal coach (see below) | – | none |
 | **Weekly Review** | Sunday 20:00 notification and a screen: % of goals hit, hours, best day, per-activity bars, LeetCode/GitHub, one tip. **SHARE AS IMAGE** creates a 1080×1350 card. | – | none |
 | **Screen vs Focus** | Hours logged on time-based activities vs time in apps you mark as distracting (Android usage data, read on the phone). Evening nudge if scrolling wins. | ✓ | none |
-| **Health → Gym** | Reads today's exercise sessions from Health Connect and raises your Gym activity | – | none (on-device) |
+| **Health → Gym** | Reads today's exercise sessions from Health Connect and raises your Gym activity; optionally sleep, steps and mindfulness into the day log | – | none (on-device) |
+| **Plan** | Auto-plans what's left today around calendar events; deep work goes into your energy peak; START runs a timed session; optional calendar blocks; morning plan | Now | none |
+| **Shutdown** | Evening close: done/open, mood and energy, a note, tomorrow's Top 3 | Now | none |
+| **Routines** | Ordered activity chains; timed steps run the focus timer | – | none |
+| **Focus** | Shield, mindful pause, hard mode, DND, calendar log, 30-day focus stats and best hours | Focus Timer | none |
+| **Automations** | WakaTime, GitHub contribution days, Codeforces + AtCoder solves, app time; NFC tags, Tasker and `diligent://` links; places | – | WakaTime, GitHub, CF/AtCoder when synced |
+| **Insights** | Readiness and burnout check, patterns, period comparison, weekly coach letter (Claude, your key) | – | api.anthropic.com only when you ask for a letter |
+| **Achievements** | Level, badges, mastery ladder | – | none |
+| **Reports** | Wrap-up images, PDF report, README card (shared through the system share sheet) | – | none |
+| **Quick log / Desk mode / Glyph Matrix** | Natural-language logging; dot-matrix clock and screen saver; Phone (3) back matrix | QS tile, shortcuts | none |
+| **Study room / Challenges / Cloud** | Live rooms, leaderboards, backup, sync, export (docs/CLOUD.md) | – | your Supabase / GitHub / webhook / Notion, only once set up |
 
 ## Streak freezes
 
@@ -36,6 +46,13 @@ The coach looks at the last 14 finished days. It needs at least 7 days since the
 | Calendar (read) | Top 3 | Timed busy events for today only. Read locally. |
 | Usage access | Screen vs Focus | Special access, granted in Settings → Usage access |
 | Health Connect: exercise (+ background read) | Health → Gym | Today's sessions only. Nothing is written. |
+| Health Connect: sleep, steps, mindfulness | Health, Insights, Plan, day start | Last two weeks of sleep, today's steps and mindfulness. Nothing is written. |
+| Calendar (write) | Focus → calendar log, Plan blocks | Only into the calendar you pick; events are marked free. |
+| Accessibility service | Focus Shield | Window changes only (which app is in front), never screen content. |
+| Do Not Disturb access | Focus | Priority-only while a session runs, restored after. |
+| Location (+ background) | Automations → places | Geofences around places you save; no location history. |
+| NFC | Automations → write a tag | Reader mode only while the "hold a tag" dialog is open. |
+| Biometric | App lock | System prompt; Diligent never sees biometrics. |
 
 ## Scheduled jobs
 
@@ -50,6 +67,11 @@ All of them are one-time WorkManager jobs that schedule the next run when they f
 | Health evening read | 20:50 | connected and background read allowed |
 | Screen-time nudge | 21:30 | usage access, nudge on, 30+ min distracting > focus |
 | Weekly review | Sun 20:00 | enabled |
+| Auto-log | 20:45 | a source is linked (Automations) |
+| Morning plan | 07:30 | "Plan every morning" on |
+| Shutdown prompt | 21:30 | on, and the day isn't closed |
+| Cloud nightly | 23:40 | backup, sync or export set up |
+| Activity reminders (+ nags) | per reminder | the activity is still open today |
 
 Contest heads-ups use `setAndAllowWhileIdle` alarms, which every sync and app start re-arm. LeetCode contests keep their own reminder from the LeetCode tracker.
 
@@ -79,5 +101,5 @@ Tests: `app/src/test/java/dev/diligent/app/goals/StreakEngineTest.kt`, `tools/To
 
 ## Notes
 
-- Health Connect is pinned to `1.1.0-beta01`, the newest version that builds with compileSdk 35 and AGP 8.6. Version 1.1.0 needs compileSdk 36 and AGP 8.9.
+- Health Connect is on `1.1.0`, which needs compileSdk 36 and AGP 8.9+ (the app builds with compileSdk 36 and AGP 8.10; targetSdk stays 35).
 - No tool stores settings in Room, so no database migration was needed. Settings and caches live in SharedPreferences, which Android Auto Backup covers.

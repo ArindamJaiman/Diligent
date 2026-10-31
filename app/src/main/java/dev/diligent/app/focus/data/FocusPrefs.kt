@@ -21,7 +21,19 @@ data class FocusSession(
     val startedAt: Long,
     val pomodoro: Boolean,
     /** Focus before this moment is already in DailyProgress (finished Pomodoro blocks). */
-    val loggedUntil: Long = startedAt
+    val loggedUntil: Long = startedAt,
+    /** What the session is for, typed before starting (optional). */
+    val intention: String = "",
+    /** Taps on "interrupted" during the session. */
+    val interruptions: Int = 0,
+    /** The stake broke: a blocked app was opened anyway. */
+    val broken: Boolean = false,
+    /** Planned length in minutes (0 = open-ended); sets the hard-mode lock and the progress bar. */
+    val targetMinutes: Int = 0,
+    /** Hard mode: STOP is refused before this moment (0 = not locked). */
+    val lockedUntil: Long = 0L,
+    /** Focus Shield blocks distracting apps while this session runs. */
+    val shield: Boolean = false
 )
 
 data class FocusState(
@@ -57,6 +69,12 @@ class FocusPrefs @Inject constructor(@ApplicationContext context: Context) {
                 putLong(KEY_STARTED_AT, session.startedAt)
                 putBoolean(KEY_SESSION_POMODORO, session.pomodoro)
                 putLong(KEY_LOGGED_UNTIL, session.loggedUntil)
+                putString(KEY_INTENTION, session.intention)
+                putInt(KEY_INTERRUPTIONS, session.interruptions)
+                putBoolean(KEY_BROKEN, session.broken)
+                putInt(KEY_TARGET, session.targetMinutes)
+                putLong(KEY_LOCKED_UNTIL, session.lockedUntil)
+                putBoolean(KEY_SHIELD, session.shield)
             }
             putLong(KEY_SELECTED_ID, state.selectedActivityId)
             putString(KEY_SELECTED_NAME, state.selectedActivityName)
@@ -74,7 +92,13 @@ class FocusPrefs @Inject constructor(@ApplicationContext context: Context) {
                 unit = prefs.getString(KEY_UNIT, null) ?: "hrs",
                 startedAt = startedAt,
                 pomodoro = prefs.getBoolean(KEY_SESSION_POMODORO, false),
-                loggedUntil = prefs.getLong(KEY_LOGGED_UNTIL, startedAt)
+                loggedUntil = prefs.getLong(KEY_LOGGED_UNTIL, startedAt),
+                intention = prefs.getString(KEY_INTENTION, null).orEmpty(),
+                interruptions = prefs.getInt(KEY_INTERRUPTIONS, 0),
+                broken = prefs.getBoolean(KEY_BROKEN, false),
+                targetMinutes = prefs.getInt(KEY_TARGET, 0),
+                lockedUntil = prefs.getLong(KEY_LOCKED_UNTIL, 0L),
+                shield = prefs.getBoolean(KEY_SHIELD, false)
             )
         } else {
             null
@@ -98,9 +122,16 @@ class FocusPrefs @Inject constructor(@ApplicationContext context: Context) {
         const val KEY_SELECTED_ID = "selected_id"
         const val KEY_SELECTED_NAME = "selected_name"
         const val KEY_POMODORO = "pomodoro"
+        const val KEY_INTENTION = "intention"
+        const val KEY_INTERRUPTIONS = "interruptions"
+        const val KEY_BROKEN = "broken"
+        const val KEY_TARGET = "target_minutes"
+        const val KEY_LOCKED_UNTIL = "locked_until"
+        const val KEY_SHIELD = "shield"
 
         val SESSION_KEYS = listOf(
-            KEY_ACTIVITY_ID, KEY_ACTIVITY_NAME, KEY_UNIT, KEY_STARTED_AT, KEY_SESSION_POMODORO, KEY_LOGGED_UNTIL
+            KEY_ACTIVITY_ID, KEY_ACTIVITY_NAME, KEY_UNIT, KEY_STARTED_AT, KEY_SESSION_POMODORO, KEY_LOGGED_UNTIL,
+            KEY_INTENTION, KEY_INTERRUPTIONS, KEY_BROKEN, KEY_TARGET, KEY_LOCKED_UNTIL, KEY_SHIELD
         )
     }
 }

@@ -22,6 +22,7 @@ import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.tools.ToolFormat
 import dev.diligent.app.tools.ToolRoutes
 import dev.diligent.app.tools.openToolIntent
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDate
@@ -152,8 +153,7 @@ class ScreenTimeService @Inject constructor(
 
     /** Today's split, computed on the phone from Android's usage events (no network). */
     suspend fun today(now: Long = System.currentTimeMillis()): ScreenSummary {
-        val day = LocalDate.now()
-        val from = day.atStartOfDay(ZoneId.systemDefault()).toInstant().toEpochMilli()
+        val from = DayClock.startOf(DayClock.today())
         val focus = UsageCounter.focusMillis(repository.getAllActiveSnapshot(), repository.getTodayProgressSnapshot())
         if (!hasAccess()) return ScreenSummary(false, focus, 0, 0, emptyList(), now)
         val usage = UsageCounter.foregroundTime(readEvents(from, now), from, now)
@@ -168,6 +168,21 @@ class ScreenTimeService @Inject constructor(
             apps = apps,
             at = now
         )
+    }
+
+    /** Foreground time per app package in [from, to) (Automations: app time → activities). */
+    fun appUsage(from: Long, to: Long): Map<String, Long> =
+        if (!hasAccess()) emptyMap() else UsageCounter.foregroundTime(readEvents(from, to), from, to)
+
+    /** Apps with a launcher icon, for picking which ones count towards an activity. */
+    fun launchableApps(): List<Pair<String, String>> {
+        val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        return context.packageManager.queryIntentActivities(intent, 0)
+            .map { it.activityInfo.packageName }
+            .distinct()
+            .filter { it != context.packageName }
+            .map { it to label(it) }
+            .sortedBy { it.second.lowercase() }
     }
 
     private fun readEvents(from: Long, to: Long): List<UsageEvent> {

@@ -18,6 +18,8 @@ import kotlinx.serialization.Serializable
  * @param isCompleted Whether the daily goal was met or manually marked done.
  * @param lastUpdated Epoch millis of the last progress update.
  * @param notes Optional user note for the day.
+ * @param rating How the day went for this activity, 1–5; 0 when not rated.
+ * @param isSkipped Skipped on purpose (ill, travelling): neither counts nor breaks the streak.
  */
 @Serializable
 @Entity(
@@ -43,5 +45,7 @@ data class DailyProgress(
     val progress: Float = 0f,
     val isCompleted: Boolean = false,
     val lastUpdated: Long = System.currentTimeMillis(),
-    val notes: String = ""
+    val notes: String = "",
+    val rating: Int = 0,
+    val isSkipped: Boolean = false
 )

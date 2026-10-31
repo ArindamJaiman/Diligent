@@ -14,6 +14,7 @@ import dagger.assisted.AssistedInject
 import dev.diligent.app.R
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.ui.MainActivity
+import dev.diligent.app.planning.Commitment
 
 /**
  * WorkManager worker for sending daily reminder notifications.
@@ -36,7 +37,8 @@ class ReminderWorker @AssistedInject constructor(
         try {
             when (type) {
                 TYPE_DAILY -> if (settings.dailyReminderEnabled) sendDailyReminder()
-                TYPE_ACTIVITY -> sendActivityReminder(activityName ?: "Activity")
+                TYPE_ACTIVITY -> if (inputData.getLong(KEY_ACTIVITY_ID, 0L) > 0L) sendActivityReminder()
+                    else sendActivityReminder(activityName ?: "Activity")
                 TYPE_MISSED_GOAL -> if (settings.missedGoalNotification) sendMissedGoalNotification()
             }
         } finally {
@@ -48,13 +50,13 @@ class ReminderWorker @AssistedInject constructor(
     }
 
     private suspend fun sendDailyReminder() {
-        val activities = repository.getAllActiveSnapshot()
-        val todayProgress = repository.getTodayProgressSnapshot()
-        val completed = todayProgress.count { it.isCompleted }
-        val total = activities.size
+        // Due today by each activity's schedule: rest days, met weekly targets and limits don't count.
+        val open = repository.openToday()
+        val completed = repository.getTodayProgressSnapshot().count { it.isCompleted }
+        val total = open.size + completed
 
         if (total == 0) return
-        if (completed == total) return // All done, no need to remind
+        if (open.isEmpty()) return // All done, no need to remind
 
         val intent = Intent(applicationContext, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
@@ -86,6 +88,27 @@ class ReminderWorker @AssistedInject constructor(
         }
     }
 
+    /**
+     * A reminder set on an activity (or a nag / snooze for it). Queues the reminder's next
+     * occurrence, then notifies only while the activity is still open today.
+     */
+    private suspend fun sendActivityReminder() {
+        val reminderId = inputData.getLong(KEY_REMINDER_ID, 0L)
+        val activityId = inputData.getLong(KEY_ACTIVITY_ID, 0L)
+        val attempt = inputData.getInt(KEY_ATTEMPT, 0)
+        if (reminderId > 0L) {
+            repository.getAllRemindersSnapshot().firstOrNull { it.id == reminderId && it.isEnabled }
+                ?.let { ActivityReminders.schedule(applicationContext, it, ExistingWorkPolicy.APPEND_OR_REPLACE) }
+        }
+        val activity = repository.getActivityById(activityId)?.takeIf { !it.isArchived } ?: return
+        if (repository.openToday().none { it.id == activity.id }) return
+        val progress = repository.getProgressOn(activity.id, repository.today())?.progress ?: 0f
+        ActivityReminders.post(applicationContext, activity, progress, attempt)
+        val nag = ActivityReminders.nag(applicationContext)
+        if (ActivityReminders.nagFits(nag)) ActivityReminders.scheduleNag(applicationContext, activity.id, attempt + 1, nag.minutes)
+    }
+
+    /** Older queued jobs carry only a name. */
     private fun sendActivityReminder(activityName: String) {
         val intent = Intent(applicationContext, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
@@ -110,14 +133,7 @@ class ReminderWorker @AssistedInject constructor(
     }
 
     private suspend fun sendMissedGoalNotification() {
-        val activities = repository.getAllActiveSnapshot()
-        val todayProgress = repository.getTodayProgressSnapshot()
-        val progressMap = todayProgress.associateBy { it.activityId }
-
-        val missed = activities.filter { activity ->
-            val progress = progressMap[activity.id]
-            progress == null || !progress.isCompleted
-        }
+        val missed = repository.openToday()
 
         if (missed.isEmpty()) return
 
@@ -130,7 +146,7 @@ class ReminderWorker @AssistedInject constructor(
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val notification = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(applicationContext, CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle("Diligent · Missed Goals")
             .setContentText("Incomplete: $missedNames$extra")
@@ -138,7 +154,17 @@ class ReminderWorker @AssistedInject constructor(
             .setContentIntent(pendingIntent)
             .setAutoCancel(true)
             .setColor(0xFFFFFFFF.toInt())
-            .build()
+
+        // Commitment mode: offer to tell the accountability partner (opens a draft, never sends).
+        val commitment = Commitment.config(applicationContext)
+        Commitment.tellIntent(commitment, "I missed today: $missedNames$extra. Hold me to it tomorrow.")?.let { tell ->
+            val tellPending = PendingIntent.getActivity(
+                applicationContext, 7, tell,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+            )
+            builder.addAction(0, "TELL ${commitment.partner.uppercase()}", tellPending)
+        }
+        val notification = builder.build()
 
         try {
             NotificationManagerCompat.from(applicationContext)
@@ -164,6 +190,9 @@ class ReminderWorker @AssistedInject constructor(
         const val NOTIFICATION_ID_MISSED = 1002
         const val KEY_REMINDER_TYPE = "reminder_type"
         const val KEY_ACTIVITY_NAME = "activity_name"
+        const val KEY_ACTIVITY_ID = "activity_id"
+        const val KEY_REMINDER_ID = "reminder_id"
+        const val KEY_ATTEMPT = "attempt"
         const val TYPE_DAILY = "daily"
         const val TYPE_ACTIVITY = "activity"
         const val TYPE_MISSED_GOAL = "missed_goal"

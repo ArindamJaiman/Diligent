@@ -51,6 +51,7 @@ import dev.diligent.app.tools.rememberNotificationAsker
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.tools.wText
 import dev.diligent.app.ui.theme.DiligentColors
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -99,7 +100,7 @@ class Top3ViewModel @Inject constructor(
         calendarTick,
         ticker
     ) { state, activities, progress, _, now ->
-        val today = LocalDate.now()
+        val today = DayClock.today()
         val byId = progress.associateBy(DailyProgress::activityId)
         val ids = if (state.date == today) state.ids else emptyList()
         val events = CalendarBusy.read(context, today)

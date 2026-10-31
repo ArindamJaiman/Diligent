@@ -5,18 +5,27 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.dao.ActivityDao
 import dev.diligent.app.data.local.dao.ActivityReminderDao
 import dev.diligent.app.data.local.dao.DailyProgressDao
+import dev.diligent.app.data.local.dao.DayLogDao
+import dev.diligent.app.data.local.dao.FocusRecordDao
 import dev.diligent.app.data.local.dao.GithubContributionDao
 import dev.diligent.app.data.local.dao.GithubUserDao
 import dev.diligent.app.data.local.dao.SettingsDao
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.local.entity.DailyProgress
+import dev.diligent.app.data.local.entity.DayLog
+import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.local.entity.GithubContribution
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.goals.StreakEngine
 import dev.diligent.app.goals.StreakState
+import dev.diligent.app.tracking.DayClock
+import dev.diligent.app.tracking.Goals
+import dev.diligent.app.tracking.Schedule
+import dev.diligent.app.tracking.Tracking
+import dev.diligent.app.tracking.TrackingSummary
 import dev.diligent.app.widget.WidgetUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -32,11 +41,8 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.Semaphore
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.sync.withPermit
-import java.time.Duration
 import java.time.LocalDate
-import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-import java.time.temporal.ChronoUnit
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -52,7 +58,9 @@ class DiligentRepository @Inject constructor(
     private val settingsDao: SettingsDao,
     private val activityReminderDao: ActivityReminderDao,
     private val githubContributionDao: GithubContributionDao,
-    private val githubUserDao: GithubUserDao
+    private val githubUserDao: GithubUserDao,
+    private val focusRecordDao: FocusRecordDao,
+    private val dayLogDao: DayLogDao
 ) {
     private val dateFormatter = DateTimeFormatter.ISO_LOCAL_DATE
 
@@ -80,10 +88,10 @@ class DiligentRepository @Inject constructor(
     suspend fun updateActivity(activity: Activity) {
         val previous = activityDao.getById(activity.id)
         activityDao.update(activity)
-        if (previous != null && previous.dailyGoal != activity.dailyGoal) {
+        if (previous != null && (previous.dailyGoal != activity.dailyGoal || previous.goalType != activity.goalType)) {
             dailyProgressDao.getProgressForActivityOnDate(activity.id, today())?.let { progress ->
                 dailyProgressDao.update(
-                    progress.copy(isCompleted = progress.progress >= activity.dailyGoal)
+                    progress.copy(isCompleted = !progress.isSkipped && Goals.isMet(activity, progress.progress))
                 )
             }
         }
@@ -107,7 +115,7 @@ class DiligentRepository @Inject constructor(
 
     // ─── Daily Progress ─────────────────────────────────────────
 
-    /** Today's progress; switches to the new day at midnight while observed. */
+    /** Today's progress; switches to the new day when the tracking day rolls over while observed. */
     @OptIn(ExperimentalCoroutinesApi::class)
     fun getTodayProgress(): Flow<List<DailyProgress>> =
         todayFlow().flatMapLatest { dailyProgressDao.getProgressForDate(it) }
@@ -127,10 +135,13 @@ class DiligentRepository @Inject constructor(
     suspend fun getAllProgressRangeSnapshot(startDate: String, endDate: String): List<DailyProgress> =
         dailyProgressDao.getAllProgressRangeSnapshot(startDate, endDate)
 
+    suspend fun getProgressOn(activityId: Long, date: String): DailyProgress? =
+        dailyProgressDao.getProgressForActivityOnDate(activityId, date)
+
     /**
      * Increment progress for an activity today.
      * Creates a new DailyProgress row if none exists.
-     * Automatically marks complete when progress >= dailyGoal.
+     * Automatically marks complete when the goal is met.
      */
     /** @param refreshWidgets false when a widget tap redraws the widgets itself (tapped one first) */
     suspend fun incrementProgress(activityId: Long, amount: Float = 1f, refreshWidgets: Boolean = true) =
@@ -139,114 +150,95 @@ class DiligentRepository @Inject constructor(
     /**
      * Adds [amount] (in the activity's own unit) to its progress on [date], creating the row
      * if needed and marking it complete once the goal is met. The focus timer calls this once
-     * per local day, so a session that crosses midnight counts towards both days.
+     * per tracking day, so a session that crosses the day start counts towards both days.
      */
     suspend fun addProgress(activityId: Long, amount: Float, date: String = today(), refreshWidgets: Boolean = true) {
-        val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date)
         val activity = activityDao.getById(activityId) ?: return
-
-        if (existing != null) {
-            val newProgress = existing.progress + amount
-            dailyProgressDao.update(
-                existing.copy(
-                    progress = newProgress,
-                    isCompleted = newProgress >= activity.dailyGoal,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
-        } else {
-            dailyProgressDao.insert(
-                DailyProgress(
-                    activityId = activityId,
-                    date = date,
-                    progress = amount,
-                    isCompleted = amount >= activity.dailyGoal,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
-        }
-        if (refreshWidgets) trackerChanged()
+        writeDay(activity, date, refreshWidgets) { it.copy(progress = (it.progress + amount).coerceAtLeast(0f)) }
     }
 
     /**
-     * Raises today's progress for [activity] to at least [value] (used by LeetCode auto-log).
-     * Never lowers it, and never un-completes a day.
+     * Raises today's progress for [activity] to at least [value] (LeetCode, Health and other
+     * auto-logs). Never lowers it, and never un-completes a day.
      */
-    suspend fun raiseProgressTo(activity: Activity, value: Float) {
-        val date = today()
+    suspend fun raiseProgressTo(activity: Activity, value: Float, date: String = today()) {
         val existing = dailyProgressDao.getProgressForActivityOnDate(activity.id, date)
         if (existing != null && existing.progress >= value) return
-
-        if (existing != null) {
-            dailyProgressDao.update(
-                existing.copy(
-                    progress = value,
-                    isCompleted = existing.isCompleted || value >= activity.dailyGoal,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
-        } else {
-            dailyProgressDao.insert(
-                DailyProgress(
-                    activityId = activity.id,
-                    date = date,
-                    progress = value,
-                    isCompleted = value >= activity.dailyGoal,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
+        writeDay(activity, date, recompute = false) {
+            it.copy(progress = value, isCompleted = it.isCompleted || Goals.isMet(activity, value))
         }
-        trackerChanged()
     }
 
     /**
-     * Decrement progress for an activity today.
+     * Decrement progress for an activity on [date] (today by default).
      * Clamps to 0 — never goes negative.
      */
-    suspend fun decrementProgress(activityId: Long, amount: Float = 1f, refreshWidgets: Boolean = true) {
-        val date = today()
-        val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date) ?: return
+    suspend fun decrementProgress(
+        activityId: Long,
+        amount: Float = 1f,
+        refreshWidgets: Boolean = true,
+        date: String = today()
+    ) {
+        dailyProgressDao.getProgressForActivityOnDate(activityId, date) ?: return
         val activity = activityDao.getById(activityId) ?: return
-        val newProgress = (existing.progress - amount).coerceAtLeast(0f)
+        writeDay(activity, date, refreshWidgets) { it.copy(progress = (it.progress - amount).coerceAtLeast(0f)) }
+    }
 
-        dailyProgressDao.update(
-            existing.copy(
-                progress = newProgress,
-                isCompleted = newProgress >= activity.dailyGoal,
-                lastUpdated = System.currentTimeMillis()
-            )
-        )
-        if (refreshWidgets) trackerChanged()
+    /** Sets [date]'s progress outright (editing a past day). */
+    suspend fun setProgress(activityId: Long, date: String, value: Float) {
+        val activity = activityDao.getById(activityId) ?: return
+        writeDay(activity, date) { it.copy(progress = value.coerceAtLeast(0f)) }
     }
 
     /**
-     * Toggle completion for an activity today.
+     * Toggle completion for an activity on [date]. Limits have nothing to tick off: their days
+     * are good until they go over.
      */
-    suspend fun toggleComplete(activityId: Long) {
-        val date = today()
-        val existing = dailyProgressDao.getProgressForActivityOnDate(activityId, date)
+    suspend fun toggleComplete(activityId: Long, date: String = today()) {
         val activity = activityDao.getById(activityId) ?: return
-
-        if (existing != null) {
-            dailyProgressDao.update(
-                existing.copy(
-                    isCompleted = !existing.isCompleted,
-                    progress = if (!existing.isCompleted) activity.dailyGoal else existing.progress,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
-        } else {
-            dailyProgressDao.insert(
-                DailyProgress(
-                    activityId = activityId,
-                    date = date,
-                    progress = activity.dailyGoal,
-                    isCompleted = true,
-                    lastUpdated = System.currentTimeMillis()
-                )
-            )
+        if (Goals.isLimit(activity)) return
+        writeDay(activity, date, recompute = false) {
+            if (it.isCompleted) it.copy(isCompleted = false)
+            else it.copy(isCompleted = true, isSkipped = false, progress = maxOf(it.progress, activity.dailyGoal))
         }
-        trackerChanged()
+    }
+
+    /** Marks [date] as skipped (ill, travelling): it neither counts nor breaks the streak. */
+    suspend fun setSkipped(activityId: Long, date: String, skipped: Boolean) {
+        val activity = activityDao.getById(activityId) ?: return
+        writeDay(activity, date) { it.copy(isSkipped = skipped) }
+    }
+
+    suspend fun setDayNote(activityId: Long, date: String, note: String) {
+        val activity = activityDao.getById(activityId) ?: return
+        writeDay(activity, date, recompute = false) { it.copy(notes = note.trim()) }
+    }
+
+    /** 1–5, or 0 to clear. */
+    suspend fun setDayRating(activityId: Long, date: String, rating: Int) {
+        val activity = activityDao.getById(activityId) ?: return
+        writeDay(activity, date, recompute = false) { it.copy(rating = rating.coerceIn(0, 5)) }
+    }
+
+    /**
+     * Applies [change] to [activity]'s row for [date], creating it when missing. With
+     * [recompute], completion follows the goal (a skipped day is never complete).
+     */
+    private suspend fun writeDay(
+        activity: Activity,
+        date: String,
+        refreshWidgets: Boolean = true,
+        recompute: Boolean = true,
+        change: (DailyProgress) -> DailyProgress
+    ) {
+        val existing = dailyProgressDao.getProgressForActivityOnDate(activity.id, date)
+        val changed = change(existing ?: DailyProgress(activityId = activity.id, date = date))
+        val row = changed.copy(
+            isCompleted = if (recompute) !changed.isSkipped && Goals.isMet(activity, changed.progress) else changed.isCompleted,
+            lastUpdated = System.currentTimeMillis()
+        )
+        if (existing != null) dailyProgressDao.update(row) else dailyProgressDao.insert(row)
+        if (refreshWidgets) trackerChanged()
     }
 
     suspend fun getAllDailyProgressSnapshot(): List<DailyProgress> =
@@ -257,45 +249,97 @@ class DiligentRepository @Inject constructor(
         trackerChanged()
     }
 
+    /** Rows for one activity over the last [days] days (heatmap, strength, editing). */
+    suspend fun getHistory(activityId: Long, days: Long = Tracking.HISTORY_DAYS): List<DailyProgress> =
+        dailyProgressDao.getHistorySnapshot(activityId, daysAgo(days))
+
+    suspend fun getTotalSince(activityId: Long, date: String): Float = dailyProgressDao.getTotalSince(activityId, date)
+
+    suspend fun getLifetimeTotal(activityId: Long): Float = dailyProgressDao.getLifetimeTotal(activityId)
+
     // ─── Streaks ────────────────────────────────────────────────
 
     /**
-     * Calculates the current streak for an activity: consecutive completed days ending
-     * today or yesterday, where banked streak freezes cover single missed days
-     * (see [StreakEngine]).
+     * The current streak for an activity: consecutive good days (or weeks, for a weekly
+     * target) ending today or yesterday, where rest days and skipped days are neutral and
+     * banked streak freezes cover single missed days (see [StreakEngine], [Tracking]).
      */
     suspend fun calculateStreak(activityId: Long): Int = streakState(activityId).current
 
     /** Streak plus freezes banked and days saved by a freeze. */
     suspend fun streakState(activityId: Long): StreakState {
-        val completedDates = dailyProgressDao.getCompletedDates(activityId)
-            .mapNotNull { runCatching { LocalDate.parse(it, dateFormatter) }.getOrNull() }
-        return StreakEngine.compute(completedDates, LocalDate.now())
+        val activity = activityDao.getById(activityId) ?: return StreakEngine.compute(emptyList(), DayClock.today())
+        return trackingSummary(activity).streak
+    }
+
+    /** Streak, habit strength and today's schedule caption. */
+    suspend fun trackingSummary(activity: Activity): TrackingSummary =
+        trackingSummary(activity, getHistory(activity.id))
+
+    fun trackingSummary(activity: Activity, history: List<DailyProgress>): TrackingSummary {
+        val days = split(history)
+        return Tracking.summarize(activity, days.progress, days.skipped, DayClock.today(), createdDate(activity), days.completed)
+    }
+
+    /** One activity's rows by day. */
+    data class DayHistory(
+        val progress: Map<LocalDate, Float>,
+        val skipped: Set<LocalDate>,
+        /** Days stored as complete (a day ticked off by hand counts even under the goal). */
+        val completed: Set<LocalDate>
+    )
+
+    fun split(history: List<DailyProgress>): DayHistory {
+        val progress = HashMap<LocalDate, Float>(history.size)
+        val skipped = HashSet<LocalDate>()
+        val completed = HashSet<LocalDate>()
+        history.forEach { row ->
+            val day = runCatching { LocalDate.parse(row.date, dateFormatter) }.getOrNull() ?: return@forEach
+            progress[day] = row.progress
+            if (row.isSkipped) skipped += day
+            if (row.isCompleted && !row.isSkipped) completed += day
+        }
+        return DayHistory(progress, skipped, completed)
+    }
+
+    fun createdDate(activity: Activity): LocalDate = DayClock.dateOf(activity.createdAt)
+
+    /**
+     * Activities still to do today: due by their schedule, and not yet done or skipped.
+     * Limits never appear: there's nothing to do for them.
+     */
+    suspend fun openToday(): List<Activity> {
+        val today = DayClock.today()
+        return activityDao.getAllActiveSnapshot().filter { activity ->
+            if (Goals.isLimit(activity)) return@filter false
+            val days = split(dailyProgressDao.getHistorySnapshot(activity.id, daysAgo(14)))
+            today !in days.completed && Schedule.isDue(activity, days.completed, days.skipped, today)
+        }
     }
 
     // ─── Statistics ─────────────────────────────────────────────
 
     /**
-     * Calculate completion rate for a given date range.
-     * Returns a value between 0.0 and 1.0.
+     * Calculate completion rate for a given date range: good days over due days, following
+     * each activity's schedule and goal type. Returns a value between 0.0 and 1.0.
      */
     suspend fun getCompletionRate(startDate: String, endDate: String): Float {
-        val progress = dailyProgressDao.getAllProgressRangeSnapshot(startDate, endDate)
         val activities = activityDao.getAllActiveSnapshot()
         if (activities.isEmpty()) return 0f
-
         val start = LocalDate.parse(startDate, dateFormatter)
-        val end = LocalDate.parse(endDate, dateFormatter)
-        val totalDays = ChronoUnit.DAYS.between(start, end) + 1
-        val totalPossible = activities.size * totalDays
+        val end = minOf(LocalDate.parse(endDate, dateFormatter), DayClock.today())
+        val rows = dailyProgressDao.getAllProgressRangeSnapshot(startDate, endDate).groupBy { it.activityId }
 
-        if (totalPossible == 0L) return 0f
-
-        // Only count completions of activities that are still active, so archived
-        // history can't push the rate past what the denominator allows.
-        val activeIds = activities.mapTo(HashSet()) { it.id }
-        val completed = progress.count { it.isCompleted && it.activityId in activeIds }
-        return (completed.toFloat() / totalPossible.toFloat()).coerceIn(0f, 1f)
+        var met = 0.0
+        var due = 0.0
+        activities.forEach { activity ->
+            val days = split(rows[activity.id].orEmpty())
+            val (m, d) = Tracking.completion(activity, days.progress, days.skipped, start, end, createdDate(activity), days.completed)
+            met += m
+            due += d
+        }
+        if (due <= 0.0) return 0f
+        return (met / due).toFloat().coerceIn(0f, 1f)
     }
 
     /**
@@ -307,13 +351,53 @@ class DiligentRepository @Inject constructor(
         val activities = activityDao.getAllActiveSnapshot().associateBy { it.id }
         return progress
             .sumOf { p ->
-                when (activities[p.activityId]?.unit) {
-                    "hrs" -> p.progress.toDouble()
-                    "mins" -> p.progress / 60.0
+                val activity = activities[p.activityId]
+                when {
+                    activity == null || Goals.isLimit(activity) -> 0.0
+                    activity.unit == "hrs" -> p.progress.toDouble()
+                    activity.unit == "mins" -> p.progress / 60.0
                     else -> 0.0
                 }
             }
             .toFloat()
+    }
+
+    // ─── Commitment ─────────────────────────────────────────────
+
+    /**
+     * Applies lowered goals whose waiting week is over (commitment mode, see
+     * dev.diligent.app.planning.Commitment). Runs on app start and from the daily jobs.
+     */
+    suspend fun applyDueGoalChanges() {
+        val today = today()
+        activityDao.getAllSnapshot()
+            .filter { it.pendingGoalDate.isNotEmpty() && it.pendingGoalDate <= today && it.pendingGoal > 0f }
+            .forEach { updateActivity(it.copy(dailyGoal = it.pendingGoal, pendingGoal = 0f, pendingGoalDate = "")) }
+    }
+
+    // ─── Focus sessions & day logs ──────────────────────────────
+
+    suspend fun saveFocusRecord(record: FocusRecord): Long = focusRecordDao.insert(record)
+    suspend fun updateFocusRecord(record: FocusRecord) = focusRecordDao.update(record)
+    suspend fun getFocusRecord(id: Long): FocusRecord? = focusRecordDao.getById(id)
+    fun observeFocusRecordsSince(from: Long): Flow<List<FocusRecord>> = focusRecordDao.observeSince(from)
+    suspend fun getFocusRecords(from: Long, to: Long): List<FocusRecord> = focusRecordDao.between(from, to)
+    suspend fun getAllFocusRecords(): List<FocusRecord> = focusRecordDao.getAll()
+    suspend fun insertAllFocusRecords(records: List<FocusRecord>) = focusRecordDao.insertAll(records)
+
+    suspend fun getDayLog(date: String = today()): DayLog = dayLogDao.get(date) ?: DayLog(date)
+    fun observeDayLog(date: String): Flow<DayLog?> = dayLogDao.observe(date)
+    suspend fun getDayLogs(startDate: String, endDate: String): List<DayLog> = dayLogDao.range(startDate, endDate)
+    fun observeDayLogs(startDate: String, endDate: String): Flow<List<DayLog>> = dayLogDao.observeRange(startDate, endDate)
+    suspend fun getAllDayLogs(): List<DayLog> = dayLogDao.getAll()
+    suspend fun insertAllDayLogs(logs: List<DayLog>) = dayLogDao.insertAll(logs)
+
+    private val dayLogMutex = Mutex()
+
+    /** Read-modify-write of one day's log, so the health sync and the mood picker can't clobber each other. */
+    suspend fun updateDayLog(date: String = today(), change: (DayLog) -> DayLog) = dayLogMutex.withLock {
+        val current = dayLogDao.get(date) ?: DayLog(date)
+        dayLogDao.upsert(change(current).copy(date = date, updatedAt = System.currentTimeMillis()))
     }
 
     // ─── Settings ───────────────────────────────────────────────
@@ -422,29 +506,29 @@ class DiligentRepository @Inject constructor(
 
     // ─── Helpers ────────────────────────────────────────────────
 
-    fun today(): String = LocalDate.now().format(dateFormatter)
+    /** Today's tracking date (see [DayClock]: the day may start after midnight). */
+    fun today(): String = DayClock.todayString()
 
     /**
-     * Emits today's date, then again just after each local midnight.
+     * Emits today's date, then again just after each tracking-day start.
      * Only one suspended delay per day — no polling.
      */
     fun todayFlow(): Flow<String> = flow {
         while (true) {
-            val now = LocalDateTime.now()
-            emit(now.toLocalDate().format(dateFormatter))
-            val nextMidnight = now.toLocalDate().plusDays(1).atStartOfDay()
-            delay(Duration.between(now, nextMidnight).toMillis() + 1_000)
+            val now = System.currentTimeMillis()
+            emit(DayClock.dateOf(now).format(dateFormatter))
+            delay(DayClock.nextDayStart(now) - now + 1_000)
         }
     }.distinctUntilChanged()
 
     fun daysAgo(days: Long): String =
-        LocalDate.now().minusDays(days).format(dateFormatter)
+        DayClock.today().minusDays(days).format(dateFormatter)
 
     fun startOfWeek(): String =
-        LocalDate.now().with(java.time.DayOfWeek.MONDAY).format(dateFormatter)
+        DayClock.today().with(java.time.DayOfWeek.MONDAY).format(dateFormatter)
 
     fun startOfMonth(): String =
-        LocalDate.now().withDayOfMonth(1).format(dateFormatter)
+        DayClock.today().withDayOfMonth(1).format(dateFormatter)
 
     /** Keeps the home-screen tracker widget in sync with in-app changes. */
     private suspend fun trackerChanged() {

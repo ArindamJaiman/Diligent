@@ -14,19 +14,21 @@ import androidx.glance.appwidget.updateAll
 import dev.diligent.app.contests.ContestWidgetUpdater
 import dev.diligent.app.focus.widget.FocusWidgetUpdater
 import dev.diligent.app.leetcode.widget.LeetCodeWidgetUpdater
+import dev.diligent.app.now.NowWidgetUpdater
+import dev.diligent.app.automation.automation
+import dev.diligent.app.wear.WearSync
 import dev.diligent.app.papers.PaperWidgetUpdater
 import dev.diligent.app.quotapulse.widget.QuotaPulseWidgetUpdater
 import dev.diligent.app.screentime.ScreenTimeWidgetReceiver
 import dev.diligent.app.tools.ToolWidgets
 import dev.diligent.app.top3.Top3WidgetReceiver
 import dev.diligent.app.versus.VersusWidgetUpdater
+import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
-import java.time.LocalDate
-import java.time.ZoneId
 
 /**
  * Event-driven widget refreshes. Widgets are redrawn only when their data actually
@@ -39,8 +41,10 @@ object WidgetUpdater {
     /** @param except a widget a tap already redrew */
     suspend fun refreshTracker(context: Context, except: GlanceId? = null) = safely {
         DiligentWidget().updateAllExcept(context, except)
-        // Top 3 and Focus-vs-Scroll show tracker progress too
+        // Top 3, Focus-vs-Scroll and Now show tracker progress too, and so does the watch tile
         ToolWidgets.refreshLocal(context, except)
+        NowWidgetUpdater.refresh(context, except)
+        WearSync.publish(context, automation(context).repository())
     }
 
     /**
@@ -105,11 +109,8 @@ object DayChangeRefresh {
 
     fun schedule(context: Context) {
         val alarmManager = context.getSystemService(AlarmManager::class.java) ?: return
-        val nextMidnight = LocalDate.now()
-            .plusDays(1)
-            .atStartOfDay(ZoneId.systemDefault())
-            .toInstant()
-            .toEpochMilli() + 5_000
+        // The tracking day may start after midnight (Settings → Day starts at).
+        val nextMidnight = DayClock.nextDayStart() + 5_000
         alarmManager.set(AlarmManager.RTC, nextMidnight, pendingIntent(context))
     }
 

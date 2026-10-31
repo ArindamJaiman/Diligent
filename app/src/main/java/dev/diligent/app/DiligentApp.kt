@@ -10,11 +10,14 @@ import dev.diligent.app.focus.FocusTimer
 import dev.diligent.app.leetcode.data.LeetCodePrefs
 import dev.diligent.app.leetcode.notify.LeetCodeAlarms
 import dev.diligent.app.leetcode.notify.LeetCodeReminders
+import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.quicklog.Shortcuts
 import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
 import dev.diligent.app.quotapulse.live.LiveMonitorService
 import dev.diligent.app.tools.ToolsBootstrap
+import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.widget.DayChangeRefresh
 import javax.inject.Inject
 import kotlinx.coroutines.CoroutineScope
@@ -55,13 +58,22 @@ class DiligentApp : Application(), Configuration.Provider {
 
     override fun onCreate() {
         super.onCreate()
+        // "Today" for every screen, widget and job; read before any of them run.
+        DayClock.init(this)
 
         CoroutineScope(SupervisorJob() + Dispatchers.IO).launch {
             // Seed default activities on first launch
             seeder.seedIfEmpty()
 
+            // Commitment mode: lowered goals apply once their waiting week is over
+            repository.applyDueGoalChanges()
+
             // Make reminder jobs match the user's settings (keeps already-queued jobs)
             ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)
+            ActivityReminders.syncAll(this@DiligentApp, repository, replace = false)
+
+            // Launcher long-press shortcuts follow the activity list
+            Shortcuts.publish(this@DiligentApp, repository.getAllActiveSnapshot())
 
             // LeetCode checks (kept if already queued) and contest alarms, which a reboot clears
             val leetCode = leetCodePrefs.current()

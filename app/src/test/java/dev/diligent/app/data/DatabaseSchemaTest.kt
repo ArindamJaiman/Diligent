@@ -32,6 +32,11 @@ class DatabaseSchemaTest {
             name to entity.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", name)
         }
 
+    private fun indices(version: Int, table: String): List<String> =
+        entity(version, table)["indices"]?.jsonArray
+            ?.map { it.jsonObject.getValue("createSql").jsonPrimitive.content.replace("\${TABLE_NAME}", table) }
+            ?: emptyList()
+
     @Test
     fun `migration 4 to 5 creates leetcode_reviews exactly as Room exports it`() {
         assertEquals(5, database(5).getValue("version").jsonPrimitive.int)
@@ -60,5 +65,37 @@ class DatabaseSchemaTest {
     @Test
     fun `version 6 changes only settings and github_users`() {
         assertEquals(tables(5) - "settings", tables(6) - "settings" - "github_users")
+    }
+
+    @Test
+    fun `migration 6 to 7 appends columns exactly as Room exports them`() {
+        assertEquals(7, database(7).getValue("version").jsonPrimitive.int)
+        val activities = tables(6).getValue("activities")
+        assertEquals(
+            activities.removeSuffix(")") + ", " + DiligentDatabase.ACTIVITY_COLUMNS_V7.joinToString(", ") { it.first } + ")",
+            tables(7).getValue("activities")
+        )
+        val progress = tables(6).getValue("daily_progress")
+        val foreignKey = progress.indexOf(", FOREIGN KEY")
+        assertEquals(
+            progress.substring(0, foreignKey) + ", " + DiligentDatabase.PROGRESS_COLUMNS_V7.joinToString(", ") { it.first } +
+                progress.substring(foreignKey),
+            tables(7).getValue("daily_progress")
+        )
+        assertEquals(indices(6, "daily_progress"), indices(7, "daily_progress"))
+    }
+
+    @Test
+    fun `migration 6 to 7 creates focus_sessions and day_logs exactly as Room exports them`() {
+        assertEquals(tables(7).getValue("focus_sessions"), DiligentDatabase.CREATE_FOCUS_SESSIONS)
+        assertEquals(indices(7, "focus_sessions"), DiligentDatabase.FOCUS_SESSIONS_INDICES)
+        assertEquals(tables(7).getValue("day_logs"), DiligentDatabase.CREATE_DAY_LOGS)
+        assertEquals(0, entity(7, "day_logs")["indices"]?.jsonArray?.size ?: 0)
+    }
+
+    @Test
+    fun `version 7 changes only activities and daily_progress and adds two tables`() {
+        val changed = setOf("activities", "daily_progress")
+        assertEquals(tables(6) - changed, tables(7) - changed - "focus_sessions" - "day_logs")
     }
 }
