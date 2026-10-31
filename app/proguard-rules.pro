@@ -30,3 +30,11 @@
 -dontwarn org.conscrypt.**
 -dontwarn org.bouncycastle.**
 -dontwarn org.openjsse.**
+# Referenced by the SDK's dependencies but absent on Android and never reached by the coach:
+# AutoValue is a compile-time annotation (OpenTelemetry), and the JSON-schema generator
+# (structured outputs from Java classes, unused here) reads java.lang.reflect.AnnotatedType.
+-dontwarn com.google.auto.value.**
+-dontwarn java.lang.reflect.AnnotatedType
+-dontwarn java.lang.reflect.AnnotatedParameterizedType
+-dontwarn com.github.victools.jsonschema.**
+-dontwarn io.opentelemetry.**
