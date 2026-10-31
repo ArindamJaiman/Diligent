@@ -152,6 +152,10 @@ dependencies {
     // Geofences: "arrive at the gym → start the Gym timer"
     implementation(libs.play.services.location)
 
+    // Wear OS tile: today's goals go to the watch, its + buttons come back
+    implementation(libs.play.services.wearable)
+    implementation(libs.kotlinx.coroutines.play.services)
+
     // Claude API for the weekly coach letter (Insights), called with the user's own API key
     implementation(libs.anthropic.java)
 

@@ -20,6 +20,15 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - Increment/decrement progress directly from widget
 - Mark activities complete with one tap
 - Daily goal tracking with completion percentages
+- **Schedules:** every day, chosen weekdays, N times a week or every N days; rest days and skipped days never break a streak, weekly targets count met weeks
+- **Goal types:** at least (reach it), at most (a limit, e.g. max 1 h of YouTube) and quit (days clean)
+- **Habit strength** (Loop-style 0–100%) next to the streak
+- **Year heatmap** per activity: tap any day to change its progress, mark it done, skip it, rate it 1–5 or add a note
+- **Long-term targets** ("200 h by 31 Dec") with ahead/behind, pace needed and projected finish
+- **Day starts at** midnight to 6 AM, or follows your sleep, so 1 AM work counts for the evening before
+- **Commitment mode:** easier goals start a week later; optional accountability partner on the missed-goal alert
+- **Private activities** show as dots on widgets and the lock screen
+- **Reminders per activity** that only ring while it's still open, can nag every 15/30/60 min until done, and have log / start timer / done / snooze buttons
 
 ### Widget
 - Resizable Jetpack Glance widget
@@ -79,6 +88,27 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - On stop, the time is added to that day's progress, rounded to the nearest minute (under 30 s logs nothing). A session that runs past midnight is split between the two days
 - Optional Pomodoro 25/5. Each 25-minute block is logged when it ends, and breaks aren't counted. The widget and tile start the last-timed activity in the last-used mode; on the widget, tap the name to change the activity or tap the mode to switch to 25/5
 - Battery: nothing in the app ticks. The widget clock is a launcher-side `Chronometer`, and the ongoing notification (with STOP) uses the system chronometer. Pomodoro sets one non-wakeup alarm per block. The running session is just a start time in SharedPreferences, so it survives the app being killed and is picked up again on the next start
+
+### Focus
+- Start dialog: intention, timer or Pomodoro, planned length, shield; INTERRUPTED button; rate each session 1–5
+- **Focus Shield** (accessibility service, window changes only): blocks apps marked distracting during a session; opening one anyway breaks the session's **stake**; a **mindful pause** before them the rest of the time
+- **Hard mode:** a session with a planned length can't be stopped early; **Do Not Disturb** while focusing
+- Every session is kept: best hours of the day, average length, stakes held; optional **calendar log**
+- **Android 16 Live Update:** the running timer as a status-bar chip with progress
+
+### More tools (Hub)
+- **Plan:** auto-plans what's left today around your calendar, deep work in your energy peak; optional calendar blocks; morning plan notification
+- **Shutdown:** evening close: mood, energy, a note, tomorrow's Top 3
+- **Routines:** chains of activities run through the focus timer
+- **Automations:** WakaTime, GitHub contribution days, Codeforces + AtCoder solves, app time (AnkiDroid, Kindle…), NFC tags, Tasker / `diligent://` links, places (geofences); Health Connect sleep, steps, mindfulness
+- **Insights:** readiness score and burnout warning, what goes with your good days, period comparison, a **weekly coach letter written by Claude** with your own API key
+- **Achievements:** level, badges, 10 → 10,000 h mastery ladder
+- **Reports:** month / year wrap-up images, PDF report for any range, README stats card
+- **Quick log:** "2h quantum", "+3 lc", "gym done yesterday", typed or spoken; QS tile and launcher shortcuts
+- **Desk mode** and screen saver; **Glyph Matrix** toy for the Nothing Phone (3) ([docs/GLYPH.md](docs/GLYPH.md))
+- **Cloud:** nightly backup to Drive / Dropbox / a private GitHub repo, Supabase sync, web dashboard, laptop browser extension, **study rooms** and **challenges**, webhook / Notion export ([docs/CLOUD.md](docs/CLOUD.md))
+- **Now widget** (the card that fits the moment) and a **Wear OS tile** (`wear` module)
+- Look & feel: red night and paper themes, four launcher icons, haptics and chimes, app lock
 
 ### Hub: productivity tools
 The grid icon on the dashboard opens the Hub. Details: [docs/TOOLS.md](docs/TOOLS.md)

@@ -22,3 +22,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "Diligent"
 include(":app")
+include(":wear")

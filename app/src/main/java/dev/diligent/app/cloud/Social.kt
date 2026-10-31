@@ -88,6 +88,16 @@ class SocialService @Inject constructor(
 
     private fun name(): String = cloud.state.value.displayName.ifBlank { "Me" }
 
+    /**
+     * Your id in rooms and challenges. Derived from the owner id but not reversible, so other
+     * members never learn the owner id that guards your synced rows.
+     */
+    private fun memberId(): String =
+        java.security.MessageDigest.getInstance("SHA-256")
+            .digest(("member:" + cloud.state.value.ownerId).toByteArray())
+            .joinToString("") { "%02x".format(it) }
+            .take(20)
+
     private fun db(code: String) = cloud.supabase(mapOf("x-diligent-room" to code))
 
     fun newCode(): String = (1..6).map { "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Random.nextInt(32)] }.joinToString("")
@@ -101,7 +111,7 @@ class SocialService @Inject constructor(
 
     suspend fun leave() = withContext(Dispatchers.IO) {
         val code = room
-        if (code.isNotBlank()) runCatching { db(code)?.delete("diligent_presence", "room=eq.$code&member=eq.${cloud.state.value.ownerId}") }
+        if (code.isNotBlank()) runCatching { db(code)?.delete("diligent_presence", "room=eq.$code&member=eq.${memberId()}") }
         save(_data.value.copy(room = ""))
     }
 
@@ -115,7 +125,7 @@ class SocialService @Inject constructor(
             db.upsert("diligent_presence", "room,member", buildJsonArray {
                 add(buildJsonObject {
                     put("room", code)
-                    put("member", cloud.state.value.ownerId)
+                    put("member", memberId())
                     put("name", name())
                     put("activity", session?.activityName)
                     put("started_at", session?.startedAt ?: 0L)
@@ -197,7 +207,7 @@ class SocialService @Inject constructor(
         val total = myTotal(challenge)
         db.upsert("diligent_scores", "code,member", buildJsonArray {
             add(buildJsonObject {
-                put("code", challenge.code); put("member", cloud.state.value.ownerId); put("name", name())
+                put("code", challenge.code); put("member", memberId()); put("name", name())
                 put("total", total); put("updated_at", System.currentTimeMillis())
             })
         })

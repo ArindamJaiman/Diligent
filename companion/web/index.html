@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diligent Dashboard</title>
+<style>
+  :root { --bg: #000; --surface: #141414; --border: #2a2a2a; --text: #fff; --dim: #7a7a7a; --green: #4ade80; }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 ui-monospace, "SF Mono", Menlo, monospace; }
+  main { max-width: 980px; margin: 0 auto; padding: 24px 16px 64px; }
+  h1 { font-weight: 700; letter-spacing: .12em; margin: 0 0 4px; }
+  .sub { color: var(--dim); margin: 0 0 24px; }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 16px; margin-bottom: 16px; }
+  label { display: block; color: var(--dim); font-size: 11px; letter-spacing: .1em; margin: 8px 0 4px; }
+  input { width: 100%; background: #000; color: var(--text); border: 1px solid var(--border); border-radius: 8px; padding: 10px; font: inherit; }
+  button { margin-top: 12px; background: var(--text); color: #000; border: 0; border-radius: 8px; padding: 10px 16px; font: inherit; font-weight: 700; cursor: pointer; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
+  .stat b { display: block; font-size: 28px; }
+  .stat span { color: var(--dim); font-size: 11px; letter-spacing: .1em; }
+  .grid { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 11px); gap: 3px; overflow-x: auto; padding-bottom: 6px; }
+  .cell { width: 11px; height: 11px; border-radius: 3px; background: #1e1e1e; }
+  table { width: 100%; border-collapse: collapse; }
+  td { padding: 6px 0; border-bottom: 1px solid var(--border); }
+  td.num { text-align: right; color: var(--dim); }
+  .bar { height: 6px; background: var(--border); border-radius: 3px; overflow: hidden; }
+  .bar i { display: block; height: 100%; background: var(--green); }
+  .err { color: #ff6b6b; }
+</style>
+</head>
+<body>
+<main>
+  <h1>DILIGENT</h1>
+  <p class="sub">Your synced days, read straight from your own Supabase project. <a href="#" id="change" hidden style="color:var(--dim)">change project</a></p>
+
+  <section class="card" id="login">
+    <label for="url">SUPABASE PROJECT URL</label><input id="url" placeholder="https://xxxx.supabase.co">
+    <label for="key">ANON KEY</label><input id="key" placeholder="eyJ…">
+    <label for="owner">OWNER ID (Hub → Cloud in the app)</label><input id="owner" placeholder="uuid">
+    <button id="go">SHOW MY DASHBOARD</button>
+    <p class="sub">Kept in this browser only (localStorage).</p>
+    <p class="err" id="error"></p>
+  </section>
+
+  <section id="dash" hidden>
+    <div class="card stats" id="stats"></div>
+    <div class="card"><label>LAST 12 MONTHS · SHARE OF GOALS HIT</label><div class="grid" id="heat"></div></div>
+    <div class="card"><label>LAST 30 DAYS BY ACTIVITY</label><table id="acts"></table></div>
+  </section>
+</main>
+<script>
+  const $ = (id) => document.getElementById(id);
+  const saved = (() => { try { return JSON.parse(localStorage.getItem("diligent") || "{}"); } catch { return {}; } })();
+  $("url").value = saved.url || ""; $("key").value = saved.key || ""; $("owner").value = saved.owner || "";
+  const day = (d) => d.toISOString().slice(0, 10);
+
+  async function load() {
+    const url = $("url").value.trim().replace(/\/$/, ""), key = $("key").value.trim(), owner = $("owner").value.trim();
+    try { localStorage.setItem("diligent", JSON.stringify({ url, key, owner })); } catch {}
+    const since = day(new Date(Date.now() - 371 * 864e5));
+    $("error").textContent = "";
+    try {
+      const res = await fetch(`${url}/rest/v1/diligent_days?owner=eq.${encodeURIComponent(owner)}&date=gte.${since}&select=date,activity,unit,progress,goal,completed`, {
+        headers: { apikey: key, Authorization: `Bearer ${key}`, "x-diligent-owner": owner }
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      render(await res.json());
+    } catch (e) { $("error").textContent = "Couldn't load: " + e.message; }
+  }
+
+  function render(rows) {
+    $("dash").hidden = false;
+    $("login").hidden = true;
+    $("change").hidden = false;
+    const byDate = {};
+    rows.forEach((r) => { (byDate[r.date] ||= []).push(r); });
+    const today = new Date();
+    const share = (d) => { const list = byDate[d]; return list ? list.filter((r) => r.completed).length / list.length : null; };
+
+    // Heatmap, Monday-first columns
+    const heat = $("heat"); heat.innerHTML = "";
+    const start = new Date(today); start.setDate(start.getDate() - 364 - ((today.getDay() + 6) % 7));
+    for (let d = new Date(start); d <= today; d.setDate(d.getDate() + 1)) {
+      const s = share(day(d)), cell = document.createElement("div");
+      cell.className = "cell"; cell.title = `${day(d)}: ${s == null ? "–" : Math.round(s * 100) + "%"}`;
+      if (s != null) cell.style.background = s >= 0.999 ? "var(--green)" : `rgba(255,255,255,${0.15 + 0.6 * s})`;
+      heat.appendChild(cell);
+    }
+    heat.scrollLeft = heat.scrollWidth; // newest week in view
+
+    const last30 = rows.filter((r) => r.date >= day(new Date(Date.now() - 29 * 864e5)));
+    const hours = last30.reduce((n, r) => n + (r.unit === "hrs" ? r.progress : r.unit === "mins" ? r.progress / 60 : 0), 0);
+    const days30 = [...new Set(last30.map((r) => r.date))];
+    const perfect = days30.filter((d) => share(d) >= 0.999).length;
+    let streak = 0;
+    for (let d = new Date(today); ; d.setDate(d.getDate() - 1)) { const s = share(day(d)); if (s != null && s > 0) streak++; else if (day(d) !== day(today)) break; if (streak > 400) break; }
+    $("stats").innerHTML = [
+      [hours.toFixed(1), "HOURS · 30 DAYS"], [perfect, "PERFECT DAYS · 30"], [streak, "DAYS ACTIVE IN A ROW"], [rows.length, "ROWS SYNCED"]
+    ].map(([v, l]) => `<div class="stat"><b>${v}</b><span>${l}</span></div>`).join("");
+
+    const acts = {};
+    last30.forEach((r) => { const a = (acts[r.activity] ||= { unit: r.unit, total: 0, goal: r.goal, done: 0 }); a.total += r.progress; if (r.completed) a.done++; });
+    $("acts").innerHTML = Object.entries(acts).sort((a, b) => b[1].done - a[1].done).map(([name, a]) =>
+      `<tr><td>${name.replace(/</g, "&lt;")}<div class="bar"><i style="width:${Math.min(100, a.done / 30 * 100)}%"></i></div></td>` +
+      `<td class="num">${a.total.toFixed(1)} ${a.unit} · ${a.done}/30 days</td></tr>`).join("");
+  }
+
+  $("go").onclick = load;
+  $("change").onclick = (e) => { e.preventDefault(); $("login").hidden = false; $("change").hidden = true; };
+  if (saved.url && saved.key && saved.owner) load();
+</script>
+</body>
+</html>

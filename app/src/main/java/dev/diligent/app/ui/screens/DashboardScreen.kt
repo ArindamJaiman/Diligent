@@ -21,6 +21,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.focus.shield.RatingDots
+import dev.diligent.app.quicklog.QuickLogActivity
 import dev.diligent.app.ui.components.ActivityCard
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
@@ -115,6 +116,14 @@ fun DashboardScreen(
                     )
 
                     Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                        val context = androidx.compose.ui.platform.LocalContext.current
+                        IconButton(onClick = { context.startActivity(QuickLogActivity.intent(context)) }) {
+                            Icon(
+                                imageVector = Icons.Outlined.KeyboardVoice,
+                                contentDescription = "Quick log",
+                                tint = DiligentColors.White
+                            )
+                        }
                         IconButton(onClick = onNavigateToHub) {
                             Icon(
                                 imageVector = Icons.Outlined.Apps,
