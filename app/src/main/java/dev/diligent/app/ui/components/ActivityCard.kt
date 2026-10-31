@@ -22,6 +22,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -33,6 +34,7 @@ import dev.diligent.app.focus.data.FocusSession
 import dev.diligent.app.focus.domain.FocusMath
 import dev.diligent.app.focus.domain.Phase
 import dev.diligent.app.focus.shield.FocusShield
+import dev.diligent.app.premium.Feel
 import dev.diligent.app.tools.ToolChip
 import dev.diligent.app.tools.ToolField
 import dev.diligent.app.tools.ToolToggle
@@ -75,6 +77,19 @@ fun ActivityCard(
     val isCompleted = item.isCompleted
     val canFocus = FocusMath.isTimeUnit(item.activity.unit) && !item.isLimit
     val summary = item.summary
+    val view = LocalView.current
+    val context = LocalContext.current
+
+    // A goal met just now (not on first draw): dot burst + haptics, a bigger one on milestones.
+    var wasCompleted by remember(item.activity.id) { mutableStateOf(isCompleted) }
+    var burst by remember { mutableStateOf<Long?>(null) }
+    LaunchedEffect(isCompleted) {
+        if (isCompleted && !wasCompleted) {
+            burst = System.currentTimeMillis()
+            if (streak in MILESTONES) Feel.milestone(context) else Feel.goalMet(context)
+        }
+        wasCompleted = isCompleted
+    }
 
     // Subtle animated border for completed items (and a running timer, or a limit gone over)
     val borderColor by animateColorAsState(
@@ -165,7 +180,10 @@ fun ActivityCard(
             ) {
                 // Decrement button
                 IconButton(
-                    onClick = onDecrement,
+                    onClick = {
+                        Feel.tick(view)
+                        onDecrement()
+                    },
                     modifier = Modifier.size(32.dp),
                     colors = IconButtonDefaults.iconButtonColors(
                         contentColor = DiligentColors.Gray600
@@ -178,8 +196,10 @@ fun ActivityCard(
                     )
                 }
 
-                // Progress display
-                Text(
+                // Progress display (digits roll as they change)
+                Box(contentAlignment = Alignment.Center) {
+                DotBurst(burst, DiligentColors.CompletedGreen, Modifier.matchParentSize())
+                RollingText(
                     text = when {
                         item.isSkipped -> "SKIPPED"
                         isCompleted -> "✓"
@@ -199,10 +219,14 @@ fun ActivityCard(
                         else -> DiligentColors.White
                     }
                 )
+                }
 
                 // Increment button
                 IconButton(
-                    onClick = onIncrement,
+                    onClick = {
+                        Feel.tick(view)
+                        onIncrement()
+                    },
                     modifier = Modifier.size(32.dp),
                     colors = IconButtonDefaults.iconButtonColors(
                         contentColor = DiligentColors.White
@@ -311,6 +335,9 @@ fun ActivityCard(
         }
     }
 }
+
+/** Streak lengths that get the milestone haptic. */
+private val MILESTONES = setOf(7, 30, 50, 100, 200, 365, 500, 1000)
 
 /** What the focus start dialog chose. [shield] null keeps the Focus Shield setting. */
 data class FocusStart(

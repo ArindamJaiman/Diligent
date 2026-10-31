@@ -7,6 +7,11 @@
     <!-- In-app updates from GitHub releases; Android still asks before installing -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Nothing Phone (3) Glyph Matrix (used only when the Glyph SDK is bundled, docs/GLYPH.md) -->
+    <uses-permission android:name="com.nothing.ketchum.permission.ENABLE" />
+    <!-- Look & feel: app lock and haptics -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    <uses-permission android:name="android.permission.VIBRATE" />
     <!-- QuotaPulse live mode: user-started foreground service (dataSync) -->
     <!-- Focus timer as an Android 16 Live Update (status-bar chip) -->
     <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
@@ -52,10 +57,7 @@
             android:name=".ui.MainActivity"
             android:exported="true"
             android:theme="@style/Theme.Diligent">
-            <intent-filter>
-                <action android:name="android.intent.action.MAIN" />
-                <category android:name="android.intent.category.LAUNCHER" />
-            </intent-filter>
+            <!-- The launcher entry lives on the aliases below, so Settings can swap the icon -->
             <!-- Long-press on the focus Quick Settings tile opens the app -->
             <intent-filter>
                 <action android:name="android.service.quicksettings.action.QS_TILE_PREFERENCES" />
@@ -66,6 +68,56 @@
         <receiver
             android:name=".notifications.ReminderActionReceiver"
             android:exported="false" />
+
+        <!-- Launcher icons (Settings → Look & feel → Icon); exactly one is enabled -->
+        <activity-alias
+            android:name="dev.diligent.app.LauncherClassic"
+            android:enabled="true"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher"
+            android:roundIcon="@mipmap/ic_launcher"
+            android:targetActivity=".ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name="dev.diligent.app.LauncherDots"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_dots"
+            android:roundIcon="@mipmap/ic_launcher_dots"
+            android:targetActivity=".ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name="dev.diligent.app.LauncherRing"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_ring"
+            android:roundIcon="@mipmap/ic_launcher_ring"
+            android:targetActivity=".ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
+        <activity-alias
+            android:name="dev.diligent.app.LauncherPaper"
+            android:enabled="false"
+            android:exported="true"
+            android:icon="@mipmap/ic_launcher_paper"
+            android:roundIcon="@mipmap/ic_launcher_paper"
+            android:targetActivity=".ui.MainActivity">
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity-alias>
 
         <!-- Install results for in-app updates; only the system reaches it, via our PendingIntent -->
         <receiver
@@ -339,6 +391,40 @@
         <receiver
             android:name=".automation.PlaceTriggerReceiver"
             android:exported="false" />
+
+        <!-- "Now" widget: the card that fits the moment (timer, Top 3, next block, shutdown) -->
+        <receiver
+            android:name=".now.NowWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_now_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/now_widget_info" />
+        </receiver>
+
+        <!-- Glyph Toy for the Nothing Phone (3) back matrix: focus ring, goals done, streak -->
+        <service
+            android:name=".glyph.GlyphToyService"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="com.nothing.glyph.TOY" />
+            </intent-filter>
+            <meta-data
+                android:name="com.nothing.glyph.toy.name"
+                android:value="Diligent" />
+            <meta-data
+                android:name="com.nothing.glyph.toy.image"
+                android:resource="@drawable/ic_launcher_ring_foreground" />
+            <meta-data
+                android:name="com.nothing.glyph.toy.summary"
+                android:value="Focus timer ring, goals done today; long press for your best streak" />
+            <meta-data
+                android:name="com.nothing.glyph.toy.longpress"
+                android:value="1" />
+        </service>
 
         <!-- Quick log: type or say "2h quantum"; opened from the tile, shortcuts and the dashboard -->
         <activity

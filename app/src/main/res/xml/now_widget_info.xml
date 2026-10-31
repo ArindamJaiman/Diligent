@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Redrawn after data changes and the timer; every 30 minutes as well, so the card follows
+     the time of day (morning Top 3, evening shutdown). -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="70dp"
+    android:maxResizeWidth="560dp"
+    android:maxResizeHeight="400dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:widgetCategory="home_screen|keyguard"
+    android:updatePeriodMillis="1800000"
+    android:initialLayout="@layout/widget_loading"
+    android:previewLayout="@layout/widget_top3_preview"
+    android:description="@string/widget_now_description" />

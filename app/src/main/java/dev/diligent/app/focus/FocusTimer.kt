@@ -6,6 +6,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
+import dev.diligent.app.cloud.SocialService
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.repository.DiligentRepository
@@ -20,6 +21,7 @@ import dev.diligent.app.focus.shield.FocusCalendar
 import dev.diligent.app.focus.shield.FocusShield
 import dev.diligent.app.focus.tile.FocusTileService
 import dev.diligent.app.focus.widget.FocusWidgetUpdater
+import dev.diligent.app.now.NowWidgetUpdater
 import dev.diligent.app.tracking.DayClock
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -306,7 +308,10 @@ class FocusTimer @Inject constructor(
 
     private suspend fun redrawSurfaces() {
         FocusWidgetUpdater.refresh(context)
+        NowWidgetUpdater.refresh(context)
         FocusTileService.requestUpdate(context)
+        // Study room status (looked up here: SocialService depends on this timer)
+        EntryPointAccessors.fromApplication(context.applicationContext, FocusSocialEntryPoint::class.java).social().pushPresenceAsync()
     }
 
     private fun unlogged(session: FocusSession, now: Long) =
@@ -329,6 +334,12 @@ class FocusTimer @Inject constructor(
 @InstallIn(SingletonComponent::class)
 interface FocusEntryPoint {
     fun focusTimer(): FocusTimer
+}
+
+@EntryPoint
+@InstallIn(SingletonComponent::class)
+interface FocusSocialEntryPoint {
+    fun social(): SocialService
 }
 
 fun focusTimer(context: Context): FocusTimer =

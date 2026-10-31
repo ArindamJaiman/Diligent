@@ -14,10 +14,13 @@ import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
+import dev.diligent.app.cloud.BackupData
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.planning.Commitment
+import dev.diligent.app.premium.LookAndFeel
+import dev.diligent.app.quicklog.Shortcuts
 import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.widget.DayChangeRefresh
 import dev.diligent.app.update.AppUpdater
@@ -100,6 +103,22 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             DayChangeRefresh.scheduleIfWidgetsExist(context)
             WidgetUpdater.refreshAll(context)
+        }
+    }
+
+    // ─── Look & feel ────────────────────────────────────────────
+
+    private val _look = MutableStateFlow(LookAndFeel.read(context))
+    val look: StateFlow<LookAndFeel.Prefs> = _look.asStateFlow()
+
+    fun setLook(next: LookAndFeel.Prefs) {
+        val iconChanged = next.icon != _look.value.icon
+        LookAndFeel.save(context, next)
+        _look.value = next
+        if (iconChanged) {
+            LookAndFeel.applyIcon(context, next.icon)
+            // Shortcuts belong to the launcher entry; publish them again on the new one.
+            viewModelScope.launch { Shortcuts.publish(context, repository.getAllActiveSnapshot()) }
         }
     }
 
@@ -216,25 +235,6 @@ class SettingsViewModel @Inject constructor(
 
     // ─── Backup & Restore ───────────────────────────────────────
 
-    /**
-     * Data model for JSON backup. Missing fields fall back to defaults, so backups
-     * made by older versions (or containing fields added later) still restore.
-     *
-     * [githubUsers] is null in backups from before the developer list; those carry the
-     * three old slots inside settings instead (see [GithubUsers.fromLegacySettings]).
-     */
-    @Serializable
-    data class BackupData(
-        val activities: List<Activity> = emptyList(),
-        val dailyProgress: List<DailyProgress> = emptyList(),
-        val settings: Settings = Settings(),
-        val reminders: List<ActivityReminder> = emptyList(),
-        val githubUsers: List<GithubUser>? = null,
-        val focusRecords: List<FocusRecord> = emptyList(),
-        val dayLogs: List<DayLog> = emptyList(),
-        val backupTime: String = ""
-    )
-
     private val backupJson = Json {
         prettyPrint = true
         ignoreUnknownKeys = true
@@ -245,17 +245,7 @@ class SettingsViewModel @Inject constructor(
     fun backupToJson() {
         viewModelScope.launch {
             try {
-                val backup = BackupData(
-                    // Include archived activities too: their progress rows reference them.
-                    activities = repository.getAllActivitiesSnapshot(),
-                    dailyProgress = repository.getAllDailyProgressSnapshot(),
-                    settings = repository.getSettingsSnapshot(),
-                    reminders = repository.getAllRemindersSnapshot(),
-                    githubUsers = repository.getGithubUsersSnapshot(),
-                    focusRecords = repository.getAllFocusRecords(),
-                    dayLogs = repository.getAllDayLogs(),
-                    backupTime = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
-                )
+                val backup = BackupData.snapshot(repository)
 
                 val json = backupJson.encodeToString(backup)
                 val file = withContext(Dispatchers.IO) {

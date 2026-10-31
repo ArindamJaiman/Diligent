@@ -10,21 +10,35 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.height
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.premium.AppLock
+import dev.diligent.app.premium.LookAndFeel
+import dev.diligent.app.premium.themeFilter
+import dev.diligent.app.tools.ToolButton
 import dev.diligent.app.quotapulse.data.Provider
 import dev.diligent.app.tools.ToolRoutes
 import dev.diligent.app.ui.navigation.DiligentNavGraph
 import dev.diligent.app.ui.navigation.DiligentScreen
+import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
+import dev.diligent.app.ui.theme.DotMatrix
 import dev.diligent.app.ui.theme.DiligentTheme
 import dev.diligent.app.update.AppUpdater
 import dev.diligent.app.update.UpdateHost
@@ -49,6 +63,20 @@ class MainActivity : ComponentActivity() {
     /** Screen requested by an external tap (e.g. a QuotaPulse widget cell). */
     private val pendingRoute = mutableStateOf<String?>(null)
 
+    /** App lock: true while the unlock screen covers the app. */
+    private val locked = mutableStateOf(false)
+
+    /** Look & feel, re-read on each start so Settings changes apply on return. */
+    private val look = mutableStateOf(LookAndFeel.Prefs())
+
+    private val confirmCredential =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+            if (result.resultCode == RESULT_OK) {
+                AppLock.markUnlocked()
+                locked.value = false
+            }
+        }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
@@ -61,16 +89,22 @@ class MainActivity : ComponentActivity() {
 
             DiligentTheme(dynamicColor = settings?.dynamicColor == true) {
                 Surface(
-                    modifier = Modifier.fillMaxSize(),
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .themeFilter(look.value.theme, java.time.LocalTime.now().hour),
                     color = DiligentColors.Black
                 ) {
-                    val navController = rememberNavController()
-                    DiligentNavGraph(
-                        navController = navController,
-                        pendingRoute = pendingRoute.value,
-                        onRouteConsumed = { pendingRoute.value = null }
-                    )
-                    UpdateHost(updater)
+                    if (locked.value) {
+                        LockScreen(onUnlock = ::unlock)
+                    } else {
+                        val navController = rememberNavController()
+                        DiligentNavGraph(
+                            navController = navController,
+                            pendingRoute = pendingRoute.value,
+                            onRouteConsumed = { pendingRoute.value = null }
+                        )
+                        UpdateHost(updater)
+                    }
                 }
             }
         }
@@ -78,6 +112,11 @@ class MainActivity : ComponentActivity() {
 
     override fun onStart() {
         super.onStart()
+        look.value = LookAndFeel.read(this)
+        if (AppLock.needsUnlock(this)) {
+            locked.value = true
+            unlock()
+        }
         updater.inForeground = true
         // Opening the app is the only time it looks for an update (at most every 6 h).
         updater.checkIfDue()
@@ -85,7 +124,25 @@ class MainActivity : ComponentActivity() {
 
     override fun onStop() {
         updater.inForeground = false
+        AppLock.onBackground()
         super.onStop()
+    }
+
+    private fun unlock() {
+        AppLock.authenticate(
+            this,
+            onResult = { ok -> if (ok) locked.value = false },
+            fallback = {
+                // Android 8.x: the lock-screen credential instead of the biometric prompt
+                val keyguard = getSystemService(android.app.KeyguardManager::class.java)
+                @Suppress("DEPRECATION")
+                val intent = keyguard?.createConfirmDeviceCredentialIntent("Unlock Diligent", null)
+                if (intent != null) confirmCredential.launch(intent) else {
+                    AppLock.markUnlocked()
+                    locked.value = false
+                }
+            }
+        )
     }
 
     override fun onNewIntent(intent: Intent) {
@@ -134,5 +191,20 @@ class MainActivity : ComponentActivity() {
 
         /** Opens the LeetCode screen (widget and notification taps). */
         const val ROUTE_URI_LEETCODE = "diligent://leetcode"
+    }
+}
+
+@Composable
+private fun LockScreen(onUnlock: () -> Unit) {
+    Column(
+        modifier = Modifier.fillMaxSize(),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text("·  ·  ·", fontFamily = DotMatrix, color = DiligentColors.Gray500)
+        Spacer(Modifier.height(16.dp))
+        Text("Diligent is locked", fontFamily = Cinzel, color = DiligentColors.White)
+        Spacer(Modifier.height(24.dp))
+        ToolButton("UNLOCK", onClick = onUnlock)
     }
 }

@@ -52,7 +52,36 @@ private fun range(period: Period, today: LocalDate): Pair<LocalDate, LocalDate> 
 // ─── Insights ───────────────────────────────────────────────────
 
 @HiltViewModel
-class InsightsViewModel @Inject constructor(private val service: InsightsService) : ViewModel() {
+class InsightsViewModel @Inject constructor(
+    private val service: InsightsService,
+    private val coach: AiCoach
+) : ViewModel() {
+
+    data class Coach(val hasKey: Boolean, val working: Boolean = false, val letter: String? = null, val error: String? = null, val preview: String? = null)
+
+    private val _coach = MutableStateFlow(Coach(coach.hasKey()))
+    val coachState: StateFlow<Coach> = _coach.asStateFlow()
+
+    fun setKey(key: String) {
+        coach.setKey(key)
+        _coach.value = _coach.value.copy(hasKey = coach.hasKey(), error = null)
+    }
+
+    /** What would be sent, shown before anything leaves the phone. */
+    fun preview() = viewModelScope.launch(Dispatchers.Default) {
+        _coach.value = _coach.value.copy(preview = kotlinx.serialization.json.Json { prettyPrint = true }
+            .encodeToString(kotlinx.serialization.json.JsonObject.serializer(), coach.summary()))
+    }
+
+    fun writeLetter() = viewModelScope.launch {
+        _coach.value = _coach.value.copy(working = true, error = null)
+        val result = coach.weeklyLetter(coach.summary())
+        _coach.value = _coach.value.copy(
+            working = false,
+            letter = result.getOrNull() ?: _coach.value.letter,
+            error = result.exceptionOrNull()?.message
+        )
+    }
 
     data class Ui(
         val readiness: Readiness,
@@ -79,7 +108,34 @@ class InsightsViewModel @Inject constructor(private val service: InsightsService
 @Composable
 fun InsightsScreen(onBack: () -> Unit, viewModel: InsightsViewModel = hiltViewModel()) {
     val ui by viewModel.ui.collectAsStateWithLifecycle()
+    val coach by viewModel.coachState.collectAsStateWithLifecycle()
+    var key by remember { mutableStateOf("") }
     ToolScaffold(title = "Insights", onBack = onBack) {
+        ToolSection("WEEKLY COACH · CLAUDE")
+        ToolCard {
+            if (!coach.hasKey) {
+                Text("A short letter on your last two weeks, written by Claude with your own Anthropic API key.", style = toolLabel(11.sp), color = DiligentColors.White)
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    dev.diligent.app.tools.ToolField(key, { key = it }, "sk-ant-… API key", Modifier.weight(1f))
+                    ToolButton("SAVE", enabled = key.isNotBlank()) { viewModel.setKey(key); key = "" }
+                }
+                ToolNote("console.anthropic.com → API keys. Stored encrypted (Android Keystore) and sent only to api.anthropic.com.")
+            } else {
+                coach.letter?.let { Text(it, style = toolLabel(12.sp), color = DiligentColors.White) }
+                coach.error?.let { Text(it, style = toolLabel(10.sp), color = ToolColors.Warn) }
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToolButton(if (coach.working) "WRITING…" else if (coach.letter == null) "WRITE MY LETTER" else "WRITE AGAIN", Modifier.weight(1f), enabled = !coach.working) {
+                        viewModel.writeLetter()
+                    }
+                    ToolButton("WHAT'S SENT", outlined = true) { viewModel.preview() }
+                }
+                coach.preview?.let { Text(it, style = toolLabel(8.sp), color = DiligentColors.Gray600, maxLines = 40) }
+                ToolNote("Model ${AiCoach.MODEL}. Sends numbers and activity names only, never notes. Uses your API credit.")
+            }
+        }
+
         val state = ui ?: run {
             ToolNote("Reading your history…")
             return@ToolScaffold

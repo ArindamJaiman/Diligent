@@ -19,10 +19,14 @@ coroutines = "1.9.0"
 material3 = "1.3.1"
 healthConnect = "1.1.0"
 playServicesLocation = "21.3.0"
+anthropic = "3.2.0"
 
 [libraries]
 # Health Connect (Health → Gym auto-log)
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+
+# Claude API (Insights → weekly coach letter, with the user's own key)
+anthropic-java = { group = "com.anthropic", name = "anthropic-java", version.ref = "anthropic" }
 
 # Geofences for place triggers (Hub → Automations)
 play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }

@@ -37,6 +37,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.planning.Commitment
+import dev.diligent.app.premium.LookAndFeel
 import dev.diligent.app.tools.ToolChip
 import dev.diligent.app.tools.ToolField
 import dev.diligent.app.tools.ToolToggle
@@ -65,6 +66,7 @@ fun SettingsScreen(
     val updateState by viewModel.updateState.collectAsStateWithLifecycle()
     val widgetOpacity by viewModel.widgetOpacity.collectAsStateWithLifecycle()
     val tracking by viewModel.tracking.collectAsStateWithLifecycle()
+    val look by viewModel.look.collectAsStateWithLifecycle()
     var showDayStart by remember { mutableStateOf(false) }
     var showPartner by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
@@ -250,6 +252,11 @@ fun SettingsScreen(
                 onCheckedChange = { viewModel.setCommitment(tracking.commitment.copy(on = it)) },
                 onClick = { showPartner = true }
             )
+
+            // ─── Look & Feel Section ────────────────────────
+            SettingsSectionHeader("LOOK & FEEL")
+
+            LookAndFeelCard(look = look, onChange = viewModel::setLook)
 
             // ─── Appearance Section ─────────────────────────
             SettingsSectionHeader("APPEARANCE")
@@ -977,4 +984,32 @@ private fun PartnerDialog(config: Commitment.Config, onDismiss: () -> Unit, onSa
             }
         }
     )
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LookAndFeelCard(look: LookAndFeel.Prefs, onChange: (LookAndFeel.Prefs) -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
+            .background(DiligentColors.Surface)
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("THEME", fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray500)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LookAndFeel.Theme.entries.forEach { theme -> ToolChip(theme.label, look.theme == theme) { onChange(look.copy(theme = theme)) } }
+        }
+        Text("Red night keeps dark-adapted eyes; paper flips to black on white.", fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray600)
+        Text("ICON", fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray500)
+        FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            LookAndFeel.Icon.entries.forEach { icon -> ToolChip(icon.label, look.icon == icon) { onChange(look.copy(icon = icon)) } }
+        }
+        Text("The launcher may take a few seconds to show the new icon.", fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray600)
+        ToolToggle("HAPTICS", "Tick on +1, double click on a goal met, thud on a milestone streak", look.haptics, { onChange(look.copy(haptics = it)) })
+        ToolToggle("SOUNDS", "Tiny chimes on goals and milestones", look.sounds, { onChange(look.copy(sounds = it)) })
+        ToolToggle("APP LOCK", "Fingerprint, face or screen lock after a minute away", look.appLock, { onChange(look.copy(appLock = it)) })
+    }
 }

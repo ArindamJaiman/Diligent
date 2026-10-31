@@ -25,6 +25,11 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.automation.AutoLogService
 import dev.diligent.app.automation.AutomationsScreen
+import dev.diligent.app.cloud.ChallengesScreen
+import dev.diligent.app.cloud.CloudScreen
+import dev.diligent.app.cloud.CloudService
+import dev.diligent.app.cloud.RoomsScreen
+import dev.diligent.app.cloud.SocialService
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.contests.ContestRadarScreen
 import dev.diligent.app.data.repository.DiligentRepository
@@ -32,6 +37,8 @@ import dev.diligent.app.desk.DeskActivity
 import dev.diligent.app.quicklog.QuickLogActivity
 import dev.diligent.app.focus.shield.FocusScreen
 import dev.diligent.app.focus.shield.FocusShield
+import dev.diligent.app.glyph.GlyphBridge
+import dev.diligent.app.glyph.GlyphScreen
 import dev.diligent.app.goals.GoalsCalculator
 import dev.diligent.app.goals.GoalsPrefs
 import dev.diligent.app.goals.GoalsScreen
@@ -87,6 +94,10 @@ object ToolRoutes {
     const val INSIGHTS = "tools/insights"
     const val ACHIEVEMENTS = "tools/achievements"
     const val REPORTS = "tools/reports"
+    const val GLYPH = "tools/glyph"
+    const val CLOUD = "tools/cloud"
+    const val ROOMS = "tools/rooms"
+    const val CHALLENGES = "tools/challenges"
 
     /** Not screens: the Hub opens these activities directly. */
     const val DESK = "desk"
@@ -96,7 +107,7 @@ object ToolRoutes {
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN, INSIGHTS, ACHIEVEMENTS, REPORTS)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN, INSIGHTS, ACHIEVEMENTS, REPORTS, GLYPH, CLOUD, ROOMS, CHALLENGES)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -127,9 +138,32 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.INSIGHTS) { InsightsScreen(onBack = back) }
     composable(ToolRoutes.ACHIEVEMENTS) { AchievementsScreen(onBack = back) }
     composable(ToolRoutes.REPORTS) { ReportsScreen(onBack = back) }
+    composable(ToolRoutes.GLYPH) { GlyphScreen(onBack = back) }
+    composable(ToolRoutes.CLOUD) { CloudScreen(onBack = back) }
+    composable(ToolRoutes.ROOMS) { RoomsScreen(onBack = back) }
+    composable(ToolRoutes.CHALLENGES) { ChallengesScreen(onBack = back) }
 }
 
-data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
+data class HubTile(
+    val route: String,
+    val title: String,
+    val line: String,
+    val icon: ImageVector,
+    val highlight: Boolean = false,
+    /** Hub section header the tile sits under. */
+    val section: String = HubSections.TRACK
+)
+
+/** The Hub's groups, in display order. */
+object HubSections {
+    const val TODAY = "TODAY"
+    const val FOCUS = "FOCUS"
+    const val INSIGHTS = "INSIGHTS"
+    const val TRACK = "TRACK & AUTOMATE"
+    const val COMPETE = "COMPETE"
+    const val CONNECT = "CONNECT"
+    val ORDER = listOf(TODAY, FOCUS, INSIGHTS, TRACK, COMPETE, CONNECT)
+}
 
 @HiltViewModel
 class HubViewModel @Inject constructor(
@@ -145,7 +179,9 @@ class HubViewModel @Inject constructor(
     private val goalsPrefs: GoalsPrefs,
     private val routines: RoutineStore,
     private val autoLog: AutoLogService,
-    private val plans: PlanService
+    private val plans: PlanService,
+    private val cloud: CloudService,
+    private val social: SocialService
 ) : ViewModel() {
 
     val tiles: StateFlow<List<HubTile>?> = flow {
@@ -214,6 +250,13 @@ class HubViewModel @Inject constructor(
             java.time.LocalTime.now().isAfter(java.time.LocalTime.of(planSettings.shutdownHour, planSettings.shutdownMinute))
         val shutdownLine = if (log.shutdownAt > 0L) "Closed at ${ToolFormat.clock(log.shutdownAt)} ✓" else "Close the day, pick tomorrow's top 3"
 
+        val cloudState = cloud.state.value
+        val cloudLine = listOfNotNull(
+            "backup".takeIf { cloudState.backupFolder.isNotBlank() || cloudState.githubRepo.isNotBlank() },
+            "sync".takeIf { cloudState.supabaseUrl.isNotBlank() },
+            "export".takeIf { cloudState.webhookUrl.isNotBlank() || cloudState.notionDatabase.isNotBlank() }
+        ).joinToString(" · ").ifEmpty { "Backup, sync, web dashboard, Notion/Sheets" }
+
         val shield = FocusShield.config(context)
         val focusLine = listOfNotNull(
             "shield".takeIf { shield.shieldDuringFocus },
@@ -227,26 +270,30 @@ class HubViewModel @Inject constructor(
             ?: if (routineState.routines.isEmpty()) "Chain activities into a morning stack" else "${routineState.routines.size} saved · tap to start"
 
         return listOf(
-            HubTile(ToolRoutes.TOP3, "Today's Top 3", top3Line, Icons.Outlined.Checklist, highlight = picks.isEmpty()),
-            HubTile(ToolRoutes.PLAN, "Plan", planLine, Icons.Outlined.ViewTimeline),
-            HubTile(ToolRoutes.FOCUS, "Focus", focusLine, Icons.Outlined.CenterFocusStrong),
-            HubTile(ToolRoutes.SHUTDOWN, "Shutdown", shutdownLine, Icons.Outlined.Bedtime, highlight = shutdownDue),
-            HubTile(ToolRoutes.ROUTINES, "Routines", routineLine, Icons.Outlined.PlaylistPlay, highlight = routineState.run != null),
-            HubTile(ToolRoutes.LEETCODE, "LeetCode", lcLine, Icons.Outlined.Code),
-            HubTile(ToolRoutes.VERSUS, "LeetCode Versus", versusLine, Icons.Outlined.EmojiEvents),
-            HubTile(ToolRoutes.CONTESTS, "Contest Radar", contestLine, Icons.Outlined.Radar),
-            HubTile(ToolRoutes.PAPERS, "Paper of the Day", paperLine, Icons.Outlined.Article),
-            HubTile(ToolRoutes.GOALS, "Streaks & Goals", goalsLine, Icons.Outlined.AcUnit, highlight = goals.suggestions.isNotEmpty()),
-            HubTile(ToolRoutes.INSIGHTS, "Insights", "Readiness, what helps you, this vs last", Icons.Outlined.Lightbulb),
-            HubTile(ToolRoutes.WEEKLY, "Weekly Review", "Your week in numbers, shareable", Icons.Outlined.Insights),
-            HubTile(ToolRoutes.ACHIEVEMENTS, "Achievements", "Level, badges, 10 → 10,000 h mastery", Icons.Outlined.MilitaryTech),
-            HubTile(ToolRoutes.REPORTS, "Reports", "Month & year wrap-ups, PDF, README card", Icons.Outlined.PictureAsPdf),
-            HubTile(ToolRoutes.SCREEN_TIME, "Screen vs Focus", screenLine, Icons.Outlined.PhoneAndroid),
-            HubTile(ToolRoutes.HEALTH, "Health → Gym", healthLine, Icons.Outlined.FitnessCenter),
-            HubTile(ToolRoutes.AUTOMATIONS, "Automations", automationLine, Icons.Outlined.AutoMode),
-            HubTile(ToolRoutes.QUICK_LOG, "Quick log", "Type or say \"2h quantum\", \"+3 lc\"", Icons.Outlined.KeyboardVoice),
-            HubTile(ToolRoutes.DESK, "Desk mode", "Dot-matrix clock, timer and goals; also a screen saver", Icons.Outlined.Nightlight),
-            HubTile(ToolRoutes.QUOTAPULSE, "QuotaPulse", "AI usage: Claude, Codex, Gemini", Icons.Outlined.Speed)
+            HubTile(ToolRoutes.TOP3, "Today's Top 3", top3Line, Icons.Outlined.Checklist, highlight = picks.isEmpty(), section = HubSections.TODAY),
+            HubTile(ToolRoutes.PLAN, "Plan", planLine, Icons.Outlined.ViewTimeline, section = HubSections.TODAY),
+            HubTile(ToolRoutes.FOCUS, "Focus", focusLine, Icons.Outlined.CenterFocusStrong, section = HubSections.FOCUS),
+            HubTile(ToolRoutes.SHUTDOWN, "Shutdown", shutdownLine, Icons.Outlined.Bedtime, highlight = shutdownDue, section = HubSections.TODAY),
+            HubTile(ToolRoutes.ROUTINES, "Routines", routineLine, Icons.Outlined.PlaylistPlay, highlight = routineState.run != null, section = HubSections.TODAY),
+            HubTile(ToolRoutes.LEETCODE, "LeetCode", lcLine, Icons.Outlined.Code, section = HubSections.TRACK),
+            HubTile(ToolRoutes.VERSUS, "LeetCode Versus", versusLine, Icons.Outlined.EmojiEvents, section = HubSections.COMPETE),
+            HubTile(ToolRoutes.CONTESTS, "Contest Radar", contestLine, Icons.Outlined.Radar, section = HubSections.COMPETE),
+            HubTile(ToolRoutes.PAPERS, "Paper of the Day", paperLine, Icons.Outlined.Article, section = HubSections.TRACK),
+            HubTile(ToolRoutes.GOALS, "Streaks & Goals", goalsLine, Icons.Outlined.AcUnit, highlight = goals.suggestions.isNotEmpty(), section = HubSections.INSIGHTS),
+            HubTile(ToolRoutes.INSIGHTS, "Insights", "Readiness, what helps you, this vs last", Icons.Outlined.Lightbulb, section = HubSections.INSIGHTS),
+            HubTile(ToolRoutes.WEEKLY, "Weekly Review", "Your week in numbers, shareable", Icons.Outlined.Insights, section = HubSections.INSIGHTS),
+            HubTile(ToolRoutes.ACHIEVEMENTS, "Achievements", "Level, badges, 10 → 10,000 h mastery", Icons.Outlined.MilitaryTech, section = HubSections.INSIGHTS),
+            HubTile(ToolRoutes.REPORTS, "Reports", "Month & year wrap-ups, PDF, README card", Icons.Outlined.PictureAsPdf, section = HubSections.INSIGHTS),
+            HubTile(ToolRoutes.SCREEN_TIME, "Screen vs Focus", screenLine, Icons.Outlined.PhoneAndroid, section = HubSections.FOCUS),
+            HubTile(ToolRoutes.HEALTH, "Health → Gym", healthLine, Icons.Outlined.FitnessCenter, section = HubSections.TRACK),
+            HubTile(ToolRoutes.AUTOMATIONS, "Automations", automationLine, Icons.Outlined.AutoMode, section = HubSections.TRACK),
+            HubTile(ToolRoutes.QUICK_LOG, "Quick log", "Type or say \"2h quantum\", \"+3 lc\"", Icons.Outlined.KeyboardVoice, section = HubSections.TODAY),
+            HubTile(ToolRoutes.DESK, "Desk mode", "Dot-matrix clock, timer and goals; also a screen saver", Icons.Outlined.Nightlight, section = HubSections.FOCUS),
+            HubTile(ToolRoutes.GLYPH, "Glyph Matrix", if (GlyphBridge.isNothingPhone()) "Focus ring on the back of your Phone (3)" else "Preview the Phone (3) back matrix", Icons.Outlined.GridOn, section = HubSections.FOCUS),
+            HubTile(ToolRoutes.QUOTAPULSE, "QuotaPulse", "AI usage: Claude, Codex, Gemini", Icons.Outlined.Speed, section = HubSections.TRACK),
+            HubTile(ToolRoutes.ROOMS, "Study room", if (social.room.isBlank()) "Focus together with friends, live" else "In room ${social.room}", Icons.Outlined.Groups, section = HubSections.COMPETE),
+            HubTile(ToolRoutes.CHALLENGES, "Challenges", "e.g. Quantum 100 h in November, with friends", Icons.Outlined.Flag, section = HubSections.COMPETE),
+            HubTile(ToolRoutes.CLOUD, "Cloud", cloudLine, Icons.Outlined.Cloud, section = HubSections.CONNECT)
         )
     }
 }
@@ -264,19 +311,28 @@ fun HubScreen(onBack: () -> Unit, onOpen: (String) -> Unit, viewModel: HubViewMo
     }
     ToolScaffold(title = "Hub", onBack = onBack) {
         val list = tiles ?: return@ToolScaffold
-        list.forEach { tile ->
-            ToolCard(onClick = { open(tile.route) }) {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Icon(tile.icon, null, tint = if (tile.highlight) ToolColors.Accent else DiligentColors.Gray700, modifier = Modifier.size(22.dp))
-                    Spacer(Modifier.width(14.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(tile.title, style = toolLabel(13.sp, bold = true), color = DiligentColors.White)
-                        Text(tile.line, style = toolLabel(10.sp), color = if (tile.highlight) ToolColors.Accent else DiligentColors.Gray600, maxLines = 1)
-                    }
-                    Text("›", style = toolLabel(18.sp), color = DiligentColors.Gray500)
-                }
-            }
+        val grouped = list.groupBy { it.section }
+        HubSections.ORDER.forEach { section ->
+            val tilesIn = grouped[section].orEmpty()
+            if (tilesIn.isEmpty()) return@forEach
+            ToolSection(section)
+            tilesIn.forEach { tile -> HubTileCard(tile, open) }
         }
         ToolNote("Every tool works offline from cached data and only goes online when you tap SYNC, open its screen, or at its scheduled time.")
+    }
+}
+
+@Composable
+private fun HubTileCard(tile: HubTile, open: (String) -> Unit) {
+    ToolCard(onClick = { open(tile.route) }) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(tile.icon, null, tint = if (tile.highlight) ToolColors.Accent else DiligentColors.Gray700, modifier = Modifier.size(22.dp))
+            Spacer(Modifier.width(14.dp))
+            Column(Modifier.weight(1f)) {
+                Text(tile.title, style = toolLabel(13.sp, bold = true), color = DiligentColors.White)
+                Text(tile.line, style = toolLabel(10.sp), color = if (tile.highlight) ToolColors.Accent else DiligentColors.Gray600, maxLines = 1)
+            }
+            Text("›", style = toolLabel(18.sp), color = DiligentColors.Gray500)
+        }
     }
 }

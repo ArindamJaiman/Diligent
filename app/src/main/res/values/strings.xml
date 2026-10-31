@@ -24,6 +24,8 @@
     <string name="widget_top3_description">Your three must-dos for today with + buttons, plus calendar busy time.</string>
     <string name="widget_screentime_name">Focus vs Scroll</string>
     <string name="widget_screentime_description">Hours logged today vs time in distracting apps. Computed on the phone, no network.</string>
+    <string name="widget_now_name">Now</string>
+    <string name="widget_now_description">The card that fits the moment: the running timer, this morning\'s Top 3, the next planned block, what\'s still open, or the evening shutdown.</string>
     <string name="tile_quicklog_label">Quick log</string>
     <string name="desk_dream_label">Diligent desk clock</string>
     <string name="shield_service_label">Diligent Focus Shield</string>

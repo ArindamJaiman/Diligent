@@ -21,6 +21,8 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.EntryPointAccessors
 import dev.diligent.app.R
 import dev.diligent.app.automation.AutoLogService
+import dev.diligent.app.cloud.CloudService
+import dev.diligent.app.cloud.SocialService
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.health.HealthSync
 import dev.diligent.app.papers.PaperService
@@ -52,6 +54,7 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
     AUTOLOG_EVENING(true, false),
     PLAN_MORNING(true, false),
     SHUTDOWN_PROMPT(true, false),
+    CLOUD_NIGHTLY(true, true),
     CONTESTS_SYNC(false, true),
     PAPERS_SYNC(false, true),
     VERSUS_SYNC(false, true),
@@ -71,7 +74,9 @@ class ToolServices @Inject constructor(
     val health: HealthSync,
     val versus: VersusSync,
     val autoLog: AutoLogService,
-    val plans: PlanService
+    val plans: PlanService,
+    val cloud: CloudService,
+    val social: SocialService
 ) {
     suspend fun run(job: ToolJob) {
         when (job) {
@@ -89,6 +94,10 @@ class ToolServices @Inject constructor(
             ToolJob.AUTOLOG_SYNC -> autoLog.sync()
             ToolJob.PLAN_MORNING -> plans.runMorning()
             ToolJob.SHUTDOWN_PROMPT -> plans.runShutdownPrompt()
+            ToolJob.CLOUD_NIGHTLY -> {
+                cloud.runAll()
+                social.pushAllScores()
+            }
         }
     }
 
@@ -104,6 +113,7 @@ class ToolServices @Inject constructor(
         ToolJob.AUTOLOG_EVENING -> autoLog.nextRun(now)
         ToolJob.PLAN_MORNING -> plans.nextMorning(now)
         ToolJob.SHUTDOWN_PROMPT -> plans.nextShutdown(now)
+        ToolJob.CLOUD_NIGHTLY -> cloud.nextRun(now)
         else -> null
     }
 }

@@ -14,6 +14,7 @@ import androidx.glance.appwidget.updateAll
 import dev.diligent.app.contests.ContestWidgetUpdater
 import dev.diligent.app.focus.widget.FocusWidgetUpdater
 import dev.diligent.app.leetcode.widget.LeetCodeWidgetUpdater
+import dev.diligent.app.now.NowWidgetUpdater
 import dev.diligent.app.papers.PaperWidgetUpdater
 import dev.diligent.app.quotapulse.widget.QuotaPulseWidgetUpdater
 import dev.diligent.app.screentime.ScreenTimeWidgetReceiver
@@ -38,8 +39,9 @@ object WidgetUpdater {
     /** @param except a widget a tap already redrew */
     suspend fun refreshTracker(context: Context, except: GlanceId? = null) = safely {
         DiligentWidget().updateAllExcept(context, except)
-        // Top 3 and Focus-vs-Scroll show tracker progress too
+        // Top 3, Focus-vs-Scroll and Now show tracker progress too
         ToolWidgets.refreshLocal(context, except)
+        NowWidgetUpdater.refresh(context, except)
     }
 
     /**
