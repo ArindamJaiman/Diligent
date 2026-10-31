@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.Stop
@@ -20,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -30,6 +32,11 @@ import androidx.lifecycle.repeatOnLifecycle
 import dev.diligent.app.focus.data.FocusSession
 import dev.diligent.app.focus.domain.FocusMath
 import dev.diligent.app.focus.domain.Phase
+import dev.diligent.app.focus.shield.FocusShield
+import dev.diligent.app.tools.ToolChip
+import dev.diligent.app.tools.ToolField
+import dev.diligent.app.tools.ToolToggle
+import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.HabitStrength
 import dev.diligent.app.ui.theme.Cinzel
@@ -60,8 +67,9 @@ fun ActivityCard(
     modifier: Modifier = Modifier,
     /** The running timer when it is timing this activity. */
     focus: FocusSession? = null,
-    onStartFocus: (pomodoro: Boolean) -> Unit = {},
-    onStopFocus: () -> Unit = {}
+    onStartFocus: (FocusStart) -> Unit = {},
+    onStopFocus: () -> Unit = {},
+    onInterrupt: () -> Unit = {}
 ) {
     val completionPercent = item.completionPercent
     val isCompleted = item.isCompleted
@@ -265,8 +273,19 @@ fun ActivityCard(
                 }
 
                 Row(verticalAlignment = Alignment.CenterVertically) {
+                    if (focus != null) {
+                        IconButton(onClick = onInterrupt, modifier = Modifier.size(28.dp)) {
+                            Icon(
+                                imageVector = Icons.Default.Bolt,
+                                contentDescription = "Interrupted",
+                                tint = DiligentColors.Gray600,
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
                     if (canFocus || focus != null) {
                         FocusButton(
+                            activityName = item.activity.name,
                             running = focus != null,
                             onStart = onStartFocus,
                             onStop = onStopFocus
@@ -293,49 +312,99 @@ fun ActivityCard(
     }
 }
 
-/** Stop while running; otherwise a menu to pick a plain timer or Pomodoro 25/5. */
+/** What the focus start dialog chose. [shield] null keeps the Focus Shield setting. */
+data class FocusStart(
+    val pomodoro: Boolean,
+    val intention: String = "",
+    val targetMinutes: Int = 0,
+    val shield: Boolean? = null
+)
+
+/** Stop while running; otherwise the start dialog (intention, plain or Pomodoro, planned length). */
 @Composable
 private fun FocusButton(
+    activityName: String,
     running: Boolean,
-    onStart: (pomodoro: Boolean) -> Unit,
+    onStart: (FocusStart) -> Unit,
     onStop: () -> Unit
 ) {
-    var showMenu by remember { mutableStateOf(false) }
-    Box {
-        IconButton(
-            onClick = { if (running) onStop() else showMenu = true },
-            modifier = Modifier.size(28.dp)
-        ) {
-            Icon(
-                imageVector = if (running) Icons.Default.Stop else Icons.Outlined.Timer,
-                contentDescription = if (running) "Stop focus timer" else "Start focus timer",
-                tint = if (running) DiligentColors.White else DiligentColors.Gray500,
-                modifier = Modifier.size(14.dp)
-            )
-        }
-
-        DropdownMenu(
-            expanded = showMenu,
-            onDismissRequest = { showMenu = false },
-            containerColor = DiligentColors.SurfaceElevated
-        ) {
-            listOf(false to "FOCUS TIMER", true to "POMODORO 25/5").forEach { (pomodoro, label) ->
-                DropdownMenuItem(
-                    text = {
-                        Text(
-                            text = label,
-                            style = MaterialTheme.typography.bodySmall.copy(fontFamily = DotMatrix),
-                            color = DiligentColors.White
-                        )
-                    },
-                    onClick = {
-                        showMenu = false
-                        onStart(pomodoro)
-                    }
-                )
-            }
-        }
+    var showStart by remember { mutableStateOf(false) }
+    IconButton(
+        onClick = { if (running) onStop() else showStart = true },
+        modifier = Modifier.size(28.dp)
+    ) {
+        Icon(
+            imageVector = if (running) Icons.Default.Stop else Icons.Outlined.Timer,
+            contentDescription = if (running) "Stop focus timer" else "Start focus timer",
+            tint = if (running) DiligentColors.White else DiligentColors.Gray500,
+            modifier = Modifier.size(14.dp)
+        )
     }
+    if (showStart) {
+        FocusStartDialog(
+            activityName = activityName,
+            onDismiss = { showStart = false },
+            onStart = {
+                showStart = false
+                onStart(it)
+            }
+        )
+    }
+}
+
+@Composable
+private fun FocusStartDialog(activityName: String, onDismiss: () -> Unit, onStart: (FocusStart) -> Unit) {
+    val context = LocalContext.current
+    val config = remember { FocusShield.config(context) }
+    val serviceOn = remember { FocusShield.serviceEnabled(context) }
+    var intention by remember { mutableStateOf("") }
+    var pomodoro by remember { mutableStateOf(false) }
+    var minutes by remember { mutableIntStateOf(if (config.hardMode) 50 else 0) }
+    var shield by remember { mutableStateOf(config.shieldDuringFocus) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = DiligentColors.SurfaceElevated,
+        title = { Text(activityName, fontFamily = Cinzel, color = DiligentColors.White) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                ToolField(intention, { intention = it }, "what will you do? (optional)", Modifier.fillMaxWidth())
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToolChip("TIMER", !pomodoro) { pomodoro = false }
+                    ToolChip("POMODORO 25/5", pomodoro) { pomodoro = true }
+                }
+                Text("PLANNED LENGTH", style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(0 to "OPEN", 25 to "25m", 50 to "50m", 90 to "90m").forEach { (m, label) ->
+                        ToolChip(label, minutes == m) { minutes = m }
+                    }
+                }
+                if (serviceOn) {
+                    ToolToggle(
+                        title = "Shield",
+                        subtitle = "Block distracting apps until you stop",
+                        checked = shield,
+                        onChecked = { shield = it },
+                        compact = true
+                    )
+                }
+                if (config.hardMode && minutes > 0) {
+                    Text(
+                        "Hard mode: STOP unlocks after $minutes min.",
+                        style = toolLabel(10.sp), color = DiligentColors.Gray700
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onStart(FocusStart(pomodoro, intention, minutes, if (serviceOn) shield else null)) }) {
+                Text("START", color = DiligentColors.White, fontFamily = DotMatrix)
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("CANCEL", color = DiligentColors.Gray600, fontFamily = DotMatrix) }
+        }
+    )
 }
 
 /** Elapsed time, or time left in the Pomodoro phase. */
@@ -343,11 +412,13 @@ private fun FocusButton(
 private fun FocusClock(session: FocusSession) {
     val now = rememberTickingNow()
     val position = if (session.pomodoro) FocusMath.pomodoroAt(session.startedAt, now) else null
+    val stake = if (session.broken) " ✕" else " ◆"
+    val lock = if (session.lockedUntil > now) " 🔒" else ""
     val text = when {
         position == null -> "● ${FocusMath.formatClock(now - session.startedAt)}"
         position.phase == Phase.FOCUS -> "● FOCUS ${position.block} · ${FocusMath.formatClock(position.phaseEnd - now)}"
         else -> "◌ BREAK · ${FocusMath.formatClock(position.phaseEnd - now)}"
-    }
+    } + stake + lock
     Text(
         text = text,
         style = MaterialTheme.typography.labelSmall.copy(

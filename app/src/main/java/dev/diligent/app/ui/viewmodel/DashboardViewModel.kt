@@ -7,7 +7,10 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.focus.FocusTimer
+import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.focus.data.FocusState
+import dev.diligent.app.focus.notify.FocusNotifier
+import dev.diligent.app.ui.components.FocusStart
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.TrackingSummary
 import kotlinx.coroutines.ExperimentalCoroutinesApi
@@ -128,17 +131,37 @@ class DashboardViewModel @Inject constructor(
     /** The running timer (shared with the widget, tile and notification). */
     val focus: StateFlow<FocusState> = focusTimer.state
 
-    fun startFocus(activityId: Long, pomodoro: Boolean) {
+    fun startFocus(activityId: Long, start: FocusStart) {
         viewModelScope.launch {
-            focusTimer.start(activityId, pomodoro)
+            focusTimer.start(activityId, start.pomodoro, start.intention, start.targetMinutes, start.shield)
         }
     }
 
     fun stopFocus() {
         viewModelScope.launch {
-            focusTimer.stop()
+            if (!focusTimer.stop()) {
+                val until = focusTimer.current().session?.lockedUntil ?: 0L
+                _messages.emit("Hard mode · keep going until ${FocusNotifier.formatClock(until)}")
+            }
         }
     }
+
+    fun interruptFocus() {
+        viewModelScope.launch { focusTimer.interrupt() }
+    }
+
+    /** The session that just ended, for the "how focused were you?" prompt. */
+    val finishedFocus: StateFlow<FocusRecord?> = focusTimer.finished
+
+    fun rateFinished(rating: Int) {
+        val record = finishedFocus.value ?: return
+        viewModelScope.launch { focusTimer.rate(record.id, rating) }
+    }
+
+    fun dismissFinished() = focusTimer.dismissFinished()
+
+    private val _messages = MutableSharedFlow<String>()
+    val messages: SharedFlow<String> = _messages.asSharedFlow()
 
     fun setSortMode(mode: SortMode) {
         _sortMode.value = mode

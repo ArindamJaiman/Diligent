@@ -28,6 +28,8 @@ import dev.diligent.app.automation.AutomationsScreen
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.contests.ContestRadarScreen
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.focus.shield.FocusScreen
+import dev.diligent.app.focus.shield.FocusShield
 import dev.diligent.app.goals.GoalsCalculator
 import dev.diligent.app.goals.GoalsPrefs
 import dev.diligent.app.goals.GoalsScreen
@@ -71,12 +73,13 @@ object ToolRoutes {
     const val VERSUS = "tools/versus"
     const val ROUTINES = "tools/routines"
     const val AUTOMATIONS = "tools/automations"
+    const val FOCUS = "tools/focus"
 
     /** Existing screens the Hub links to. */
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -101,6 +104,7 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.VERSUS) { VersusScreen(onBack = back) }
     composable(ToolRoutes.ROUTINES) { RoutinesScreen(onBack = back) }
     composable(ToolRoutes.AUTOMATIONS) { AutomationsScreen(onBack = back) }
+    composable(ToolRoutes.FOCUS) { FocusScreen(onBack = back) }
 }
 
 data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
@@ -176,12 +180,21 @@ class HubViewModel @Inject constructor(
         val automationLine = if (linkedSources == 0) "WakaTime, GitHub, app time, NFC, places"
         else "$linkedSources source${if (linkedSources > 1) "s" else ""} logging" + (auto.lastSyncAt.takeIf { it > 0 }?.let { " · ${ToolFormat.clock(it)}" } ?: "")
 
+        val shield = FocusShield.config(context)
+        val focusLine = listOfNotNull(
+            "shield".takeIf { shield.shieldDuringFocus },
+            "pause".takeIf { shield.mindfulPause },
+            "hard mode".takeIf { shield.hardMode },
+            "DND".takeIf { shield.dnd }
+        ).joinToString(" · ").ifEmpty { "Block apps, hard mode, best hours" }
+
         val routineState = routines.state.value
         val routineLine = routineState.running?.let { "Running: ${it.name} · step ${(routineState.run?.step ?: 0) + 1}/${it.steps.size}" }
             ?: if (routineState.routines.isEmpty()) "Chain activities into a morning stack" else "${routineState.routines.size} saved · tap to start"
 
         return listOf(
             HubTile(ToolRoutes.TOP3, "Today's Top 3", top3Line, Icons.Outlined.Checklist, highlight = picks.isEmpty()),
+            HubTile(ToolRoutes.FOCUS, "Focus", focusLine, Icons.Outlined.CenterFocusStrong),
             HubTile(ToolRoutes.ROUTINES, "Routines", routineLine, Icons.Outlined.PlaylistPlay, highlight = routineState.run != null),
             HubTile(ToolRoutes.LEETCODE, "LeetCode", lcLine, Icons.Outlined.Code),
             HubTile(ToolRoutes.VERSUS, "LeetCode Versus", versusLine, Icons.Outlined.EmojiEvents),

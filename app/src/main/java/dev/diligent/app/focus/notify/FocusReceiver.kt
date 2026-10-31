@@ -22,6 +22,7 @@ class FocusReceiver : BroadcastReceiver() {
             try {
                 when (action) {
                     ACTION_STOP -> timer.stop(announce = true)
+                    ACTION_INTERRUPT -> timer.interrupt()
                     ACTION_BOUNDARY -> timer.refresh()
                 }
             } finally {
@@ -33,13 +34,19 @@ class FocusReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION_STOP = "dev.diligent.app.focus.STOP"
         const val ACTION_BOUNDARY = "dev.diligent.app.focus.BOUNDARY"
+        const val ACTION_INTERRUPT = "dev.diligent.app.focus.INTERRUPT"
 
         private const val REQUEST_STOP = 5110
+        private const val REQUEST_INTERRUPT = 5112
 
         fun broadcast(context: Context, action: String): PendingIntent =
             PendingIntent.getBroadcast(
                 context,
-                if (action == ACTION_STOP) REQUEST_STOP else FocusAlarms.REQUEST_BOUNDARY,
+                when (action) {
+                    ACTION_STOP -> REQUEST_STOP
+                    ACTION_INTERRUPT -> REQUEST_INTERRUPT
+                    else -> FocusAlarms.REQUEST_BOUNDARY
+                },
                 Intent(context, FocusReceiver::class.java).setAction(action),
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
             )

@@ -8,10 +8,16 @@
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- QuotaPulse live mode: user-started foreground service (dataSync) -->
+    <!-- Focus timer as an Android 16 Live Update (status-bar chip) -->
+    <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />
     <!-- Today's Top 3: busy time from the phone's calendars (read locally, asked at runtime) -->
     <uses-permission android:name="android.permission.READ_CALENDAR" />
+    <!-- Focus → calendar log: finished sessions as events in a calendar you pick (optional) -->
+    <uses-permission android:name="android.permission.WRITE_CALENDAR" />
+    <!-- Focus → Do Not Disturb while a session runs (access granted in system settings) -->
+    <uses-permission android:name="android.permission.ACCESS_NOTIFICATION_POLICY" />
     <!-- Screen vs Focus: per-app screen time, granted by the user in Usage access settings -->
     <uses-permission
         android:name="android.permission.PACKAGE_USAGE_STATS"
@@ -328,6 +334,29 @@
         <receiver
             android:name=".automation.PlaceTriggerReceiver"
             android:exported="false" />
+
+        <!-- Focus Shield: notices which app opens (window changes only) to cover distracting ones -->
+        <service
+            android:name=".focus.shield.ShieldService"
+            android:exported="false"
+            android:label="@string/shield_service_label"
+            android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE">
+            <intent-filter>
+                <action android:name="android.accessibilityservice.AccessibilityService" />
+            </intent-filter>
+            <meta-data
+                android:name="android.accessibilityservice"
+                android:resource="@xml/shield_service" />
+        </service>
+
+        <!-- Covers a blocked app / the mindful pause; its own task so Back can't land in the app -->
+        <activity
+            android:name=".focus.shield.ShieldActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:launchMode="singleTask"
+            android:taskAffinity="dev.diligent.app.shield"
+            android:theme="@style/Theme.Diligent" />
 
         <!-- Health Connect: privacy explanation shown from its permission screen -->
         <activity

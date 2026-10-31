@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import dev.diligent.app.focus.shield.RatingDots
 import dev.diligent.app.ui.components.ActivityCard
 import dev.diligent.app.ui.theme.Cinzel
 import dev.diligent.app.ui.theme.DiligentColors
@@ -51,11 +52,45 @@ fun DashboardScreen(
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val sortMode by viewModel.sortMode.collectAsStateWithLifecycle()
     val focus by viewModel.focus.collectAsStateWithLifecycle()
+    val finished by viewModel.finishedFocus.collectAsStateWithLifecycle()
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) { viewModel.messages.collect { snackbar.showSnackbar(it) } }
 
     var showSortMenu by remember { mutableStateOf(false) }
 
+    // "How focused were you?" after a session ends in the app
+    finished?.let { record ->
+        AlertDialog(
+            onDismissRequest = { viewModel.dismissFinished() },
+            containerColor = DiligentColors.SurfaceElevated,
+            title = {
+                Text(
+                    "${record.focusMinutes} min logged",
+                    style = MaterialTheme.typography.headlineSmall.copy(fontFamily = Cinzel),
+                    color = DiligentColors.White
+                )
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Text(
+                        "How focused were you?" + if (record.broken) "  (stake broken ✕)" else "  (stake held ◆)",
+                        style = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix),
+                        color = DiligentColors.Gray700
+                    )
+                    RatingDots(0) { viewModel.rateFinished(it) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { viewModel.dismissFinished() }) {
+                    Text("SKIP", color = DiligentColors.Gray600, fontFamily = DotMatrix)
+                }
+            }
+        )
+    }
+
     Scaffold(
         containerColor = DiligentColors.Black,
+        snackbarHost = { SnackbarHost(snackbar) },
         topBar = {
             // Custom top bar — no standard TopAppBar for more control
             Column(
@@ -303,8 +338,9 @@ fun DashboardScreen(
                         onClick = { onNavigateToDetail(item.activity.id) },
                         modifier = Modifier.animateItem(),
                         focus = focus.session?.takeIf { it.activityId == item.activity.id },
-                        onStartFocus = { pomodoro -> viewModel.startFocus(item.activity.id, pomodoro) },
-                        onStopFocus = { viewModel.stopFocus() }
+                        onStartFocus = { start -> viewModel.startFocus(item.activity.id, start) },
+                        onStopFocus = { viewModel.stopFocus() },
+                        onInterrupt = { viewModel.interruptFocus() }
                     )
                 }
 

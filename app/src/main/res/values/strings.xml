@@ -24,4 +24,6 @@
     <string name="widget_top3_description">Your three must-dos for today with + buttons, plus calendar busy time.</string>
     <string name="widget_screentime_name">Focus vs Scroll</string>
     <string name="widget_screentime_description">Hours logged today vs time in distracting apps. Computed on the phone, no network.</string>
+    <string name="shield_service_label">Diligent Focus Shield</string>
+    <string name="shield_service_description">Covers apps you marked distracting while a focus session runs, or pauses before they open. It only notices which app comes to the front; it never reads what is on the screen and nothing leaves your phone.</string>
 </resources>
