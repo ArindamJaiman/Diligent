@@ -24,6 +24,7 @@ import dev.diligent.app.automation.AutoLogService
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.health.HealthSync
 import dev.diligent.app.papers.PaperService
+import dev.diligent.app.planning.PlanService
 import dev.diligent.app.review.WeeklyReviewService
 import dev.diligent.app.screentime.ScreenTimeService
 import dev.diligent.app.top3.Top3Service
@@ -49,6 +50,8 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
     HEALTH_EVENING(true, false),
     VERSUS_EVENING(true, true),
     AUTOLOG_EVENING(true, false),
+    PLAN_MORNING(true, false),
+    SHUTDOWN_PROMPT(true, false),
     CONTESTS_SYNC(false, true),
     PAPERS_SYNC(false, true),
     VERSUS_SYNC(false, true),
@@ -67,7 +70,8 @@ class ToolServices @Inject constructor(
     val screenTime: ScreenTimeService,
     val health: HealthSync,
     val versus: VersusSync,
-    val autoLog: AutoLogService
+    val autoLog: AutoLogService,
+    val plans: PlanService
 ) {
     suspend fun run(job: ToolJob) {
         when (job) {
@@ -83,6 +87,8 @@ class ToolServices @Inject constructor(
             ToolJob.VERSUS_SYNC -> versus.sync(force = true)
             ToolJob.AUTOLOG_EVENING -> autoLog.runEvening()
             ToolJob.AUTOLOG_SYNC -> autoLog.sync()
+            ToolJob.PLAN_MORNING -> plans.runMorning()
+            ToolJob.SHUTDOWN_PROMPT -> plans.runShutdownPrompt()
         }
     }
 
@@ -96,6 +102,8 @@ class ToolServices @Inject constructor(
         ToolJob.HEALTH_EVENING -> health.nextRun(now)
         ToolJob.VERSUS_EVENING -> versus.nextRun(now)
         ToolJob.AUTOLOG_EVENING -> autoLog.nextRun(now)
+        ToolJob.PLAN_MORNING -> plans.nextMorning(now)
+        ToolJob.SHUTDOWN_PROMPT -> plans.nextShutdown(now)
         else -> null
     }
 }

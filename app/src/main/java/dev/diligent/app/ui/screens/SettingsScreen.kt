@@ -227,6 +227,21 @@ fun SettingsScreen(
             )
 
             SettingsToggleItem(
+                icon = Icons.Default.NotificationsActive,
+                title = "Nag Until Done",
+                subtitle = "Activity reminders repeat every ${tracking.nag.minutes} min until you log, until ${tracking.nag.untilHour}:00 · tap to change",
+                checked = tracking.nag.enabled,
+                onCheckedChange = {
+                    if (it) ensureNotificationPermission()
+                    viewModel.setNag(tracking.nag.copy(enabled = it))
+                },
+                onClick = {
+                    val next = when (tracking.nag.minutes) { 15 -> 30; 30 -> 60; else -> 15 }
+                    viewModel.setNag(tracking.nag.copy(minutes = next))
+                }
+            )
+
+            SettingsToggleItem(
                 icon = Icons.Default.Lock,
                 title = "Commitment Mode",
                 subtitle = "Easier goals start ${Commitment.DELAY_DAYS} days after you change them" +

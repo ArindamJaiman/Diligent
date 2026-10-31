@@ -39,6 +39,9 @@ import dev.diligent.app.leetcode.data.LeetCodePrefs
 import dev.diligent.app.leetcode.domain.LeetCodeDay
 import dev.diligent.app.papers.PaperService
 import dev.diligent.app.papers.PapersScreen
+import dev.diligent.app.planning.PlanScreen
+import dev.diligent.app.planning.PlanService
+import dev.diligent.app.planning.ShutdownScreen
 import dev.diligent.app.review.WeeklyReviewScreen
 import dev.diligent.app.routines.RoutineStore
 import dev.diligent.app.routines.RoutinesScreen
@@ -74,12 +77,14 @@ object ToolRoutes {
     const val ROUTINES = "tools/routines"
     const val AUTOMATIONS = "tools/automations"
     const val FOCUS = "tools/focus"
+    const val PLAN = "tools/plan"
+    const val SHUTDOWN = "tools/shutdown"
 
     /** Existing screens the Hub links to. */
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -105,6 +110,8 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.ROUTINES) { RoutinesScreen(onBack = back) }
     composable(ToolRoutes.AUTOMATIONS) { AutomationsScreen(onBack = back) }
     composable(ToolRoutes.FOCUS) { FocusScreen(onBack = back) }
+    composable(ToolRoutes.PLAN) { PlanScreen(onBack = back) }
+    composable(ToolRoutes.SHUTDOWN) { ShutdownScreen(onBack = back) }
 }
 
 data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
@@ -122,7 +129,8 @@ class HubViewModel @Inject constructor(
     private val versus: VersusSync,
     private val goalsPrefs: GoalsPrefs,
     private val routines: RoutineStore,
-    private val autoLog: AutoLogService
+    private val autoLog: AutoLogService,
+    private val plans: PlanService
 ) : ViewModel() {
 
     val tiles: StateFlow<List<HubTile>?> = flow {
@@ -180,6 +188,17 @@ class HubViewModel @Inject constructor(
         val automationLine = if (linkedSources == 0) "WakaTime, GitHub, app time, NFC, places"
         else "$linkedSources source${if (linkedSources > 1) "s" else ""} logging" + (auto.lastSyncAt.takeIf { it > 0 }?.let { " · ${ToolFormat.clock(it)}" } ?: "")
 
+        val todayPlan = plans.today()
+        val nextBlock = todayPlan.blocks.firstOrNull { it.end > now }
+        val names = activities.associate { it.id to it.name }
+        val planLine = nextBlock?.let { "Next: ${names[it.activityId] ?: "?"} at ${ToolFormat.clock(it.start)}" }
+            ?: if (todayPlan.blocks.isEmpty()) "Auto-plan your day around the calendar" else "Plan done for today"
+        val log = repository.getDayLog()
+        val planSettings = plans.settings.value
+        val shutdownDue = log.shutdownAt == 0L &&
+            java.time.LocalTime.now().isAfter(java.time.LocalTime.of(planSettings.shutdownHour, planSettings.shutdownMinute))
+        val shutdownLine = if (log.shutdownAt > 0L) "Closed at ${ToolFormat.clock(log.shutdownAt)} ✓" else "Close the day, pick tomorrow's top 3"
+
         val shield = FocusShield.config(context)
         val focusLine = listOfNotNull(
             "shield".takeIf { shield.shieldDuringFocus },
@@ -194,7 +213,9 @@ class HubViewModel @Inject constructor(
 
         return listOf(
             HubTile(ToolRoutes.TOP3, "Today's Top 3", top3Line, Icons.Outlined.Checklist, highlight = picks.isEmpty()),
+            HubTile(ToolRoutes.PLAN, "Plan", planLine, Icons.Outlined.ViewTimeline),
             HubTile(ToolRoutes.FOCUS, "Focus", focusLine, Icons.Outlined.CenterFocusStrong),
+            HubTile(ToolRoutes.SHUTDOWN, "Shutdown", shutdownLine, Icons.Outlined.Bedtime, highlight = shutdownDue),
             HubTile(ToolRoutes.ROUTINES, "Routines", routineLine, Icons.Outlined.PlaylistPlay, highlight = routineState.run != null),
             HubTile(ToolRoutes.LEETCODE, "LeetCode", lcLine, Icons.Outlined.Code),
             HubTile(ToolRoutes.VERSUS, "LeetCode Versus", versusLine, Icons.Outlined.EmojiEvents),

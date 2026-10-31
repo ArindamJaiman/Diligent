@@ -15,6 +15,7 @@ import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.GithubUsers
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.planning.Commitment
 import dev.diligent.app.tracking.DayClock
@@ -74,12 +75,23 @@ class SettingsViewModel @Inject constructor(
 
     // ─── Tracking day & commitment ──────────────────────────────
 
-    data class TrackingPrefs(val dayStartMinutes: Int, val followSleep: Boolean, val commitment: Commitment.Config)
+    data class TrackingPrefs(
+        val dayStartMinutes: Int,
+        val followSleep: Boolean,
+        val commitment: Commitment.Config,
+        val nag: ActivityReminders.Nag
+    )
 
     private val _tracking = MutableStateFlow(readTracking())
     val tracking: StateFlow<TrackingPrefs> = _tracking.asStateFlow()
 
-    private fun readTracking() = TrackingPrefs(DayClock.startMinutes(), DayClock.followsSleep(), Commitment.config(context))
+    private fun readTracking() =
+        TrackingPrefs(DayClock.startMinutes(), DayClock.followsSleep(), Commitment.config(context), ActivityReminders.nag(context))
+
+    fun setNag(nag: ActivityReminders.Nag) {
+        ActivityReminders.setNag(context, nag)
+        _tracking.value = readTracking()
+    }
 
     /** Moves the start of the tracking day; widgets and the day-change alarm follow. */
     fun setDayStart(minutes: Int, followSleep: Boolean) {

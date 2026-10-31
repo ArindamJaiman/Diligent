@@ -9,13 +9,17 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.ActivityReminder
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.planning.Commitment
+import dev.diligent.app.planning.ReminderMath
 import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.Schedule
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import java.time.LocalDate
+import java.time.LocalTime
+import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
 
@@ -254,18 +258,43 @@ class ActivityEditViewModel @Inject constructor(
                     daysOfWeek = daysOfWeek
                 )
             )
+            ActivityReminders.syncAll(context, repository, replace = true)
         }
     }
 
     fun deleteReminder(reminder: ActivityReminder) {
         viewModelScope.launch {
             repository.deleteReminder(reminder)
+            ActivityReminders.syncAll(context, repository, replace = true)
         }
     }
 
     fun toggleReminder(reminder: ActivityReminder) {
         viewModelScope.launch {
             repository.updateReminder(reminder.copy(isEnabled = !reminder.isEnabled))
+            ActivityReminders.syncAll(context, repository, replace = true)
+        }
+    }
+
+    fun toggleReminderDay(reminder: ActivityReminder, bit: Int) {
+        val days = reminder.daysOfWeek xor bit
+        if (days and 127 == 0) return
+        viewModelScope.launch {
+            repository.updateReminder(reminder.copy(daysOfWeek = days))
+            ActivityReminders.syncAll(context, repository, replace = true)
+        }
+    }
+
+    /** When you usually finish this activity (median completion time, last 30 days), if known. */
+    private val _usualTime = MutableStateFlow<LocalTime?>(null)
+    val usualTime: StateFlow<LocalTime?> = _usualTime.asStateFlow()
+
+    init {
+        activityId?.let { id ->
+            viewModelScope.launch {
+                val completions = repository.getHistory(id, 30).filter { it.isCompleted }.map { it.lastUpdated }
+                _usualTime.value = ReminderMath.usualTime(completions, ZoneId.systemDefault())
+            }
         }
     }
 

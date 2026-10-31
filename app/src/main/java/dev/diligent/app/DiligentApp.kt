@@ -10,6 +10,7 @@ import dev.diligent.app.focus.FocusTimer
 import dev.diligent.app.leetcode.data.LeetCodePrefs
 import dev.diligent.app.leetcode.notify.LeetCodeAlarms
 import dev.diligent.app.leetcode.notify.LeetCodeReminders
+import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.notifications.ReminderScheduler
 import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
@@ -68,6 +69,7 @@ class DiligentApp : Application(), Configuration.Provider {
 
             // Make reminder jobs match the user's settings (keeps already-queued jobs)
             ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)
+            ActivityReminders.syncAll(this@DiligentApp, repository, replace = false)
 
             // LeetCode checks (kept if already queued) and contest alarms, which a reboot clears
             val leetCode = leetCodePrefs.current()

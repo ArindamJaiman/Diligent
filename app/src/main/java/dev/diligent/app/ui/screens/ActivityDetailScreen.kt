@@ -28,6 +28,8 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.planning.Pace
+import dev.diligent.app.planning.TargetPace
 import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.HabitStrength
@@ -78,7 +80,9 @@ class ActivityDetailViewModel @Inject constructor(
         val heatmap: List<List<HeatDay>> = emptyList(),
         val rows: Map<String, DailyProgress> = emptyMap(),
         /** Quit / limit activities: days since the last slip. */
-        val daysClean: Long = 0
+        val daysClean: Long = 0,
+        /** Long-term target progress, when one is set. */
+        val pace: Pace? = null
     )
 
     /**
@@ -106,6 +110,11 @@ class ActivityDetailViewModel @Inject constructor(
                     val days = repository.split(rows)
                     val created = repository.createdDate(activity)
                     val summary = repository.trackingSummary(activity, rows)
+                    val deadline = runCatching { LocalDate.parse(activity.targetDate) }.getOrNull()
+                    val pace = if (activity.targetTotal > 0f && deadline != null) {
+                        val recent = rows.filter { it.date >= today.minusDays(14).format(dateFormatter) }.sumOf { it.progress.toDouble() } / 14
+                        TargetPace.compute(repository.getLifetimeTotal(activity.id), activity.targetTotal, created, deadline, today, recent.toFloat())
+                    } else null
                     History(
                         streak = summary.streak.current,
                         weekly = weekly,
@@ -113,7 +122,8 @@ class ActivityDetailViewModel @Inject constructor(
                         summary = summary,
                         heatmap = Heatmap.build(activity, days.progress, days.skipped, days.completed, today, created),
                         rows = byDate,
-                        daysClean = Tracking.daysSinceSlip(activity, days.progress, today, created)
+                        daysClean = Tracking.daysSinceSlip(activity, days.progress, today, created),
+                        pace = pace
                     )
                 }
             }
@@ -502,6 +512,11 @@ fun ActivityDetailScreen(
                     )
                 }
 
+                history.pace?.let { pace ->
+                    Spacer(modifier = Modifier.height(24.dp))
+                    TargetCard(act, pace)
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // ─── Year heatmap: tap a day to edit it ─────
@@ -647,4 +662,58 @@ private fun StatMiniCard(
 private fun formatFloat(value: Float): String {
     return if (value == value.toInt().toFloat()) value.toInt().toString()
     else String.format("%.1f", value)
+}
+
+/** Long-term target: where you are against a straight line to the deadline, and the pace needed. */
+@Composable
+private fun TargetCard(activity: Activity, pace: Pace) {
+    val deadline = runCatching { LocalDate.parse(activity.targetDate) }.getOrNull()
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(12.dp))
+            .border(1.dp, DiligentColors.Border, RoundedCornerShape(12.dp))
+            .background(DiligentColors.Surface)
+            .padding(16.dp)
+    ) {
+        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(
+                text = "TARGET · ${formatFloat(pace.target)} ${activity.unit} by ${deadline?.format(DateTimeFormatter.ofPattern("d MMM yyyy")) ?: "?"}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 2.sp),
+                color = DiligentColors.Gray500
+            )
+            Text(
+                text = "${formatFloat(pace.total)} / ${formatFloat(pace.target)} ${activity.unit}",
+                style = MaterialTheme.typography.headlineSmall.copy(fontFamily = DotMatrix, fontWeight = FontWeight.Bold),
+                color = DiligentColors.White
+            )
+            // Progress against the ideal line
+            BoxWithConstraints(Modifier.fillMaxWidth().height(6.dp).clip(RoundedCornerShape(3.dp)).background(DiligentColors.Gray400)) {
+                Box(
+                    Modifier.fillMaxHeight()
+                        .fillMaxWidth((pace.total / pace.target).coerceIn(0f, 1f))
+                        .background(if (pace.ahead >= 0) DiligentColors.CompletedGreen else DiligentColors.White)
+                )
+                // Where a straight line to the deadline says you should be today
+                Box(
+                    Modifier.offset(x = maxWidth * (pace.expectedByNow / pace.target).coerceIn(0f, 1f) - 1.dp)
+                        .width(2.dp)
+                        .fillMaxHeight()
+                        .background(DiligentColors.Gray800)
+                )
+            }
+            Text(
+                text = (if (pace.ahead >= 0) "▲ ${formatFloat(pace.ahead)} ahead" else "▼ ${formatFloat(-pace.ahead)} behind") +
+                    " · need ${String.format("%.2f", pace.neededPerDay)} ${activity.unit}/day for ${pace.daysLeft} days",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix),
+                color = if (pace.ahead >= 0) DiligentColors.CompletedGreen else DiligentColors.Gray700
+            )
+            Text(
+                text = pace.projectedFinish?.let { "at your 14-day pace you finish on ${it.format(DateTimeFormatter.ofPattern("d MMM yyyy"))}" }
+                    ?: "no recent progress to project from",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix),
+                color = DiligentColors.Gray600
+            )
+        }
+    }
 }

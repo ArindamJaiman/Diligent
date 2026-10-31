@@ -62,6 +62,11 @@
             </intent-filter>
         </activity>
 
+        <!-- Buttons on activity reminders (log, start timer, done, snooze); not exported -->
+        <receiver
+            android:name=".notifications.ReminderActionReceiver"
+            android:exported="false" />
+
         <!-- Install results for in-app updates; only the system reaches it, via our PendingIntent -->
         <receiver
             android:name=".update.UpdateInstallReceiver"

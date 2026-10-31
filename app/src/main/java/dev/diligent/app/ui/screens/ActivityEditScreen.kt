@@ -21,7 +21,11 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import dev.diligent.app.planning.Commitment
+import dev.diligent.app.tools.ToolButton
 import dev.diligent.app.tools.ToolChip
+import dev.diligent.app.tools.ToolFormat
+import dev.diligent.app.tools.ToolTimeDialog
+import dev.diligent.app.tools.rememberNotificationAsker
 import dev.diligent.app.tools.ToolField
 import dev.diligent.app.tools.ToolToggle
 import dev.diligent.app.tracking.Goals
@@ -60,7 +64,19 @@ fun ActivityEditScreen(
     val targetDate by viewModel.targetDate.collectAsStateWithLifecycle()
     val isPrivate by viewModel.isPrivate.collectAsStateWithLifecycle()
     val pendingNote by viewModel.pendingNote.collectAsStateWithLifecycle()
+    val reminders by viewModel.reminders.collectAsStateWithLifecycle()
+    val usualTime by viewModel.usualTime.collectAsStateWithLifecycle()
     var showTargetDate by remember { mutableStateOf(false) }
+    var addReminderAt by remember { mutableStateOf<Pair<Int, Int>?>(null) }
+    val askNotifications = rememberNotificationAsker()
+
+    addReminderAt?.let { (hour, minute) ->
+        ToolTimeDialog("Remind me at", hour, minute, { addReminderAt = null }) { h, m ->
+            askNotifications()
+            viewModel.addReminder(h, m)
+            addReminderAt = null
+        }
+    }
 
     if (showTargetDate) {
         val initial = runCatching { LocalDate.parse(targetDate) }.getOrNull() ?: LocalDate.now().plusMonths(3)
@@ -364,6 +380,61 @@ fun ActivityEditScreen(
                 }
                 Text(
                     "Shows whether you're ahead or behind and the daily pace you need.",
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix),
+                    color = DiligentColors.Gray500
+                )
+            }
+
+            // ─── Reminders ──────────────────────────────────
+            if (viewModel.isEditing) Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                EditLabel("REMINDERS")
+                reminders.forEach { reminder ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(
+                                ToolFormat.hm(reminder.hour, reminder.minute),
+                                style = MaterialTheme.typography.bodyLarge.copy(fontFamily = DotMatrix, fontWeight = FontWeight.Bold),
+                                color = if (reminder.isEnabled) DiligentColors.White else DiligentColors.Gray500
+                            )
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                                DayOfWeek.entries.forEach { day ->
+                                    val bit = 1 shl (day.value - 1)
+                                    ToolChip(day.name.take(1), reminder.daysOfWeek and bit != 0) { viewModel.toggleReminderDay(reminder, bit) }
+                                }
+                            }
+                        }
+                        Switch(
+                            checked = reminder.isEnabled,
+                            onCheckedChange = { viewModel.toggleReminder(reminder) },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = DiligentColors.Black,
+                                checkedTrackColor = DiligentColors.White,
+                                uncheckedThumbColor = DiligentColors.Gray600,
+                                uncheckedTrackColor = DiligentColors.Gray300
+                            )
+                        )
+                        IconButton(onClick = { viewModel.deleteReminder(reminder) }) {
+                            Icon(Icons.Default.Close, "Remove reminder", tint = DiligentColors.Gray600)
+                        }
+                    }
+                }
+                usualTime?.let { usual ->
+                    val suggested = usual.minusMinutes(30)
+                    Text(
+                        "You usually finish around ${ToolFormat.hm(usual.hour, usual.minute)}.",
+                        style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix),
+                        color = DiligentColors.Gray600
+                    )
+                    if (reminders.none { it.hour == suggested.hour && it.minute == suggested.minute }) {
+                        ToolButton("+ REMIND AT ${ToolFormat.hm(suggested.hour, suggested.minute)}", outlined = true) {
+                            askNotifications()
+                            viewModel.addReminder(suggested.hour, suggested.minute)
+                        }
+                    }
+                }
+                ToolButton("+ ADD REMINDER", outlined = true) { addReminderAt = 9 to 0 }
+                Text(
+                    "Only rings while it's still open today. Settings → Nag until done repeats it.",
                     style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix),
                     color = DiligentColors.Gray500
                 )

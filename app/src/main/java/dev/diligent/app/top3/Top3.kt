@@ -136,8 +136,28 @@ class Top3Service @Inject constructor(
 
     fun current(): Top3State = read().also { _state.value = it }
 
-    /** Today's ids (empty when the stored picks are from another day). */
-    fun todayIds(today: LocalDate = DayClock.today()): List<Long> = current().let { if (it.date == today) it.ids else emptyList() }
+    /**
+     * Today's ids: the picks made today, else the ones chosen for today at last night's
+     * shutdown, else none.
+     */
+    fun todayIds(today: LocalDate = DayClock.today()): List<Long> = current().let { state ->
+        when {
+            state.date == today -> state.ids
+            prefs.getString("planned_date", null) == today.toString() ->
+                prefs.getString("planned_ids", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }
+            else -> emptyList()
+        }
+    }
+
+    /** Tomorrow's picks from the evening shutdown; they become that day's Top 3 unless replaced. */
+    fun planFor(date: LocalDate, ids: List<Long>) {
+        prefs.edit().putString("planned_date", date.toString()).putString("planned_ids", ids.take(MAX).joinToString(",")).apply()
+    }
+
+    fun plannedFor(date: LocalDate): List<Long> =
+        if (prefs.getString("planned_date", null) == date.toString())
+            prefs.getString("planned_ids", "").orEmpty().split(",").mapNotNull { it.toLongOrNull() }
+        else emptyList()
 
     fun setPicks(ids: List<Long>, today: LocalDate = DayClock.today()) {
         val previous = current()

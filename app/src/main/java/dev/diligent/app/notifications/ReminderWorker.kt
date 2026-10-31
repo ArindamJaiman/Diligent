@@ -37,7 +37,8 @@ class ReminderWorker @AssistedInject constructor(
         try {
             when (type) {
                 TYPE_DAILY -> if (settings.dailyReminderEnabled) sendDailyReminder()
-                TYPE_ACTIVITY -> sendActivityReminder(activityName ?: "Activity")
+                TYPE_ACTIVITY -> if (inputData.getLong(KEY_ACTIVITY_ID, 0L) > 0L) sendActivityReminder()
+                    else sendActivityReminder(activityName ?: "Activity")
                 TYPE_MISSED_GOAL -> if (settings.missedGoalNotification) sendMissedGoalNotification()
             }
         } finally {
@@ -87,6 +88,27 @@ class ReminderWorker @AssistedInject constructor(
         }
     }
 
+    /**
+     * A reminder set on an activity (or a nag / snooze for it). Queues the reminder's next
+     * occurrence, then notifies only while the activity is still open today.
+     */
+    private suspend fun sendActivityReminder() {
+        val reminderId = inputData.getLong(KEY_REMINDER_ID, 0L)
+        val activityId = inputData.getLong(KEY_ACTIVITY_ID, 0L)
+        val attempt = inputData.getInt(KEY_ATTEMPT, 0)
+        if (reminderId > 0L) {
+            repository.getAllRemindersSnapshot().firstOrNull { it.id == reminderId && it.isEnabled }
+                ?.let { ActivityReminders.schedule(applicationContext, it, ExistingWorkPolicy.APPEND_OR_REPLACE) }
+        }
+        val activity = repository.getActivityById(activityId)?.takeIf { !it.isArchived } ?: return
+        if (repository.openToday().none { it.id == activity.id }) return
+        val progress = repository.getProgressOn(activity.id, repository.today())?.progress ?: 0f
+        ActivityReminders.post(applicationContext, activity, progress, attempt)
+        val nag = ActivityReminders.nag(applicationContext)
+        if (ActivityReminders.nagFits(nag)) ActivityReminders.scheduleNag(applicationContext, activity.id, attempt + 1, nag.minutes)
+    }
+
+    /** Older queued jobs carry only a name. */
     private fun sendActivityReminder(activityName: String) {
         val intent = Intent(applicationContext, MainActivity::class.java)
         val pendingIntent = PendingIntent.getActivity(
@@ -168,6 +190,9 @@ class ReminderWorker @AssistedInject constructor(
         const val NOTIFICATION_ID_MISSED = 1002
         const val KEY_REMINDER_TYPE = "reminder_type"
         const val KEY_ACTIVITY_NAME = "activity_name"
+        const val KEY_ACTIVITY_ID = "activity_id"
+        const val KEY_REMINDER_ID = "reminder_id"
+        const val KEY_ATTEMPT = "attempt"
         const val TYPE_DAILY = "daily"
         const val TYPE_ACTIVITY = "activity"
         const val TYPE_MISSED_GOAL = "missed_goal"
