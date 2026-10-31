@@ -35,13 +35,13 @@ jobs:
         run: chmod +x gradlew
 
       - name: Unit tests
-        run: ./gradlew testDebugUnitTest --continue
+        run: ./gradlew testDebugUnitTest --continue --stacktrace
 
       - name: Debug build
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Release build (R8)
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleRelease --stacktrace
 
       # Room exports a new schema JSON when the database version goes up; print any that
       # aren't committed yet so they can be checked in alongside the migration.
