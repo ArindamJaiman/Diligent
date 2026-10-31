@@ -28,6 +28,8 @@ import dev.diligent.app.automation.AutomationsScreen
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.contests.ContestRadarScreen
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.desk.DeskActivity
+import dev.diligent.app.quicklog.QuickLogActivity
 import dev.diligent.app.focus.shield.FocusScreen
 import dev.diligent.app.focus.shield.FocusShield
 import dev.diligent.app.goals.GoalsCalculator
@@ -35,6 +37,9 @@ import dev.diligent.app.goals.GoalsPrefs
 import dev.diligent.app.goals.GoalsScreen
 import dev.diligent.app.health.HealthScreen
 import dev.diligent.app.health.HealthSync
+import dev.diligent.app.insights.AchievementsScreen
+import dev.diligent.app.insights.InsightsScreen
+import dev.diligent.app.insights.ReportsScreen
 import dev.diligent.app.leetcode.data.LeetCodePrefs
 import dev.diligent.app.leetcode.domain.LeetCodeDay
 import dev.diligent.app.papers.PaperService
@@ -79,12 +84,19 @@ object ToolRoutes {
     const val FOCUS = "tools/focus"
     const val PLAN = "tools/plan"
     const val SHUTDOWN = "tools/shutdown"
+    const val INSIGHTS = "tools/insights"
+    const val ACHIEVEMENTS = "tools/achievements"
+    const val REPORTS = "tools/reports"
+
+    /** Not screens: the Hub opens these activities directly. */
+    const val DESK = "desk"
+    const val QUICK_LOG = "quicklog"
 
     /** Existing screens the Hub links to. */
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN, INSIGHTS, ACHIEVEMENTS, REPORTS)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -112,6 +124,9 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.FOCUS) { FocusScreen(onBack = back) }
     composable(ToolRoutes.PLAN) { PlanScreen(onBack = back) }
     composable(ToolRoutes.SHUTDOWN) { ShutdownScreen(onBack = back) }
+    composable(ToolRoutes.INSIGHTS) { InsightsScreen(onBack = back) }
+    composable(ToolRoutes.ACHIEVEMENTS) { AchievementsScreen(onBack = back) }
+    composable(ToolRoutes.REPORTS) { ReportsScreen(onBack = back) }
 }
 
 data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
@@ -222,10 +237,15 @@ class HubViewModel @Inject constructor(
             HubTile(ToolRoutes.CONTESTS, "Contest Radar", contestLine, Icons.Outlined.Radar),
             HubTile(ToolRoutes.PAPERS, "Paper of the Day", paperLine, Icons.Outlined.Article),
             HubTile(ToolRoutes.GOALS, "Streaks & Goals", goalsLine, Icons.Outlined.AcUnit, highlight = goals.suggestions.isNotEmpty()),
+            HubTile(ToolRoutes.INSIGHTS, "Insights", "Readiness, what helps you, this vs last", Icons.Outlined.Lightbulb),
             HubTile(ToolRoutes.WEEKLY, "Weekly Review", "Your week in numbers, shareable", Icons.Outlined.Insights),
+            HubTile(ToolRoutes.ACHIEVEMENTS, "Achievements", "Level, badges, 10 → 10,000 h mastery", Icons.Outlined.MilitaryTech),
+            HubTile(ToolRoutes.REPORTS, "Reports", "Month & year wrap-ups, PDF, README card", Icons.Outlined.PictureAsPdf),
             HubTile(ToolRoutes.SCREEN_TIME, "Screen vs Focus", screenLine, Icons.Outlined.PhoneAndroid),
             HubTile(ToolRoutes.HEALTH, "Health → Gym", healthLine, Icons.Outlined.FitnessCenter),
             HubTile(ToolRoutes.AUTOMATIONS, "Automations", automationLine, Icons.Outlined.AutoMode),
+            HubTile(ToolRoutes.QUICK_LOG, "Quick log", "Type or say \"2h quantum\", \"+3 lc\"", Icons.Outlined.KeyboardVoice),
+            HubTile(ToolRoutes.DESK, "Desk mode", "Dot-matrix clock, timer and goals; also a screen saver", Icons.Outlined.Nightlight),
             HubTile(ToolRoutes.QUOTAPULSE, "QuotaPulse", "AI usage: Claude, Codex, Gemini", Icons.Outlined.Speed)
         )
     }
@@ -234,10 +254,18 @@ class HubViewModel @Inject constructor(
 @Composable
 fun HubScreen(onBack: () -> Unit, onOpen: (String) -> Unit, viewModel: HubViewModel = hiltViewModel()) {
     val tiles by viewModel.tiles.collectAsStateWithLifecycle()
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val open: (String) -> Unit = { route ->
+        when (route) {
+            ToolRoutes.DESK -> context.startActivity(android.content.Intent(context, DeskActivity::class.java))
+            ToolRoutes.QUICK_LOG -> context.startActivity(QuickLogActivity.intent(context))
+            else -> onOpen(route)
+        }
+    }
     ToolScaffold(title = "Hub", onBack = onBack) {
         val list = tiles ?: return@ToolScaffold
         list.forEach { tile ->
-            ToolCard(onClick = { onOpen(tile.route) }) {
+            ToolCard(onClick = { open(tile.route) }) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(tile.icon, null, tint = if (tile.highlight) ToolColors.Accent else DiligentColors.Gray700, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))

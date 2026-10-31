@@ -340,6 +340,53 @@
             android:name=".automation.PlaceTriggerReceiver"
             android:exported="false" />
 
+        <!-- Quick log: type or say "2h quantum"; opened from the tile, shortcuts and the dashboard -->
+        <activity
+            android:name=".quicklog.QuickLogActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:taskAffinity="dev.diligent.app.quicklog"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:windowSoftInputMode="stateVisible|adjustResize" />
+
+        <!-- Launcher "Focus: …" shortcuts; acts only on intents with this install's token -->
+        <activity
+            android:name=".quicklog.ShortcutActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".quicklog.QuickLogTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_quicklog_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
+        <!-- Desk mode and the same face as a screen saver (StandBy-style while charging) -->
+        <activity
+            android:name=".desk.DeskActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:theme="@style/Theme.Diligent" />
+
+        <service
+            android:name=".desk.DeskDreamService"
+            android:exported="true"
+            android:label="@string/desk_dream_label"
+            android:permission="android.permission.BIND_DREAM_SERVICE">
+            <intent-filter>
+                <action android:name="android.service.dreams.DreamService" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </service>
+
         <!-- Focus Shield: notices which app opens (window changes only) to cover distracting ones -->
         <service
             android:name=".focus.shield.ShieldService"

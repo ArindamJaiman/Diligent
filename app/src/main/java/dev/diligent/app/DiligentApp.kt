@@ -12,6 +12,7 @@ import dev.diligent.app.leetcode.notify.LeetCodeAlarms
 import dev.diligent.app.leetcode.notify.LeetCodeReminders
 import dev.diligent.app.notifications.ActivityReminders
 import dev.diligent.app.notifications.ReminderScheduler
+import dev.diligent.app.quicklog.Shortcuts
 import dev.diligent.app.quotapulse.data.LiveMode
 import dev.diligent.app.quotapulse.data.QuotaPulsePrefs
 import dev.diligent.app.quotapulse.live.LiveMonitorService
@@ -70,6 +71,9 @@ class DiligentApp : Application(), Configuration.Provider {
             // Make reminder jobs match the user's settings (keeps already-queued jobs)
             ReminderScheduler.sync(this@DiligentApp, repository.getSettingsSnapshot(), replaceExisting = false)
             ActivityReminders.syncAll(this@DiligentApp, repository, replace = false)
+
+            // Launcher long-press shortcuts follow the activity list
+            Shortcuts.publish(this@DiligentApp, repository.getAllActiveSnapshot())
 
             // LeetCode checks (kept if already queued) and contest alarms, which a reboot clears
             val leetCode = leetCodePrefs.current()
