@@ -23,6 +23,8 @@ import androidx.navigation.NavHostController
 import androidx.navigation.compose.composable
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.diligent.app.automation.AutoLogService
+import dev.diligent.app.automation.AutomationsScreen
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.contests.ContestRadarScreen
 import dev.diligent.app.data.repository.DiligentRepository
@@ -68,12 +70,13 @@ object ToolRoutes {
     const val HEALTH = "tools/health"
     const val VERSUS = "tools/versus"
     const val ROUTINES = "tools/routines"
+    const val AUTOMATIONS = "tools/automations"
 
     /** Existing screens the Hub links to. */
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -97,6 +100,7 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.HEALTH) { HealthScreen(onBack = back) }
     composable(ToolRoutes.VERSUS) { VersusScreen(onBack = back) }
     composable(ToolRoutes.ROUTINES) { RoutinesScreen(onBack = back) }
+    composable(ToolRoutes.AUTOMATIONS) { AutomationsScreen(onBack = back) }
 }
 
 data class HubTile(val route: String, val title: String, val line: String, val icon: ImageVector, val highlight: Boolean = false)
@@ -113,7 +117,8 @@ class HubViewModel @Inject constructor(
     private val health: HealthSync,
     private val versus: VersusSync,
     private val goalsPrefs: GoalsPrefs,
-    private val routines: RoutineStore
+    private val routines: RoutineStore,
+    private val autoLog: AutoLogService
 ) : ViewModel() {
 
     val tiles: StateFlow<List<HubTile>?> = flow {
@@ -165,6 +170,12 @@ class HubViewModel @Inject constructor(
         val h = health.state.value
         val healthLine = if (h.settings.connected) "${h.lastMinutes} min of workouts today" else "Auto-log Gym from your watch / phone"
 
+        val auto = autoLog.state.value
+        val linkedSources = listOf(auto.wakaActivityId != 0L, auto.githubActivityId != 0L, auto.cpActivityId != 0L, auto.appLinks.isNotEmpty())
+            .count { it }
+        val automationLine = if (linkedSources == 0) "WakaTime, GitHub, app time, NFC, places"
+        else "$linkedSources source${if (linkedSources > 1) "s" else ""} logging" + (auto.lastSyncAt.takeIf { it > 0 }?.let { " · ${ToolFormat.clock(it)}" } ?: "")
+
         val routineState = routines.state.value
         val routineLine = routineState.running?.let { "Running: ${it.name} · step ${(routineState.run?.step ?: 0) + 1}/${it.steps.size}" }
             ?: if (routineState.routines.isEmpty()) "Chain activities into a morning stack" else "${routineState.routines.size} saved · tap to start"
@@ -180,6 +191,7 @@ class HubViewModel @Inject constructor(
             HubTile(ToolRoutes.WEEKLY, "Weekly Review", "Your week in numbers, shareable", Icons.Outlined.Insights),
             HubTile(ToolRoutes.SCREEN_TIME, "Screen vs Focus", screenLine, Icons.Outlined.PhoneAndroid),
             HubTile(ToolRoutes.HEALTH, "Health → Gym", healthLine, Icons.Outlined.FitnessCenter),
+            HubTile(ToolRoutes.AUTOMATIONS, "Automations", automationLine, Icons.Outlined.AutoMode),
             HubTile(ToolRoutes.QUOTAPULSE, "QuotaPulse", "AI usage: Claude, Codex, Gemini", Icons.Outlined.Speed)
         )
     }

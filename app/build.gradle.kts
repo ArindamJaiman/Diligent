@@ -139,8 +139,11 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
-    // Health Connect (reads today's exercise sessions for Gym auto-log)
+    // Health Connect (exercise for Gym auto-log; sleep, steps and mindfulness for insights)
     implementation(libs.androidx.health.connect.client)
+
+    // Geofences: "arrive at the gym → start the Gym timer"
+    implementation(libs.play.services.location)
 
     // Testing
     testImplementation(libs.junit)

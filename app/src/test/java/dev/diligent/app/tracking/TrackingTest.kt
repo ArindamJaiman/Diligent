@@ -282,3 +282,55 @@ class DueTodayTest {
         assertTrue(Schedule.isDue(everyThird, setOf(today.minusDays(3)), emptySet(), today))
     }
 }
+
+class SleepAndSourcesTest {
+
+    private val zone = ZoneId.of("Asia/Kolkata")
+    private fun at(day: Int, hour: Int, minute: Int = 0) =
+        LocalDateTime.of(2026, 10, day, hour, minute).atZone(zone).toInstant().toEpochMilli()
+
+    @Test
+    fun `sleep onsets are minutes after midnight, evening sleep negative`() {
+        val spans = listOf(
+            dev.diligent.app.health.SleepSpan(at(28, 23), at(29, 7)),
+            dev.diligent.app.health.SleepSpan(at(30, 2, 30), at(30, 9)),
+            dev.diligent.app.health.SleepSpan(at(30, 14), at(30, 15)) // nap, ignored
+        )
+        assertEquals(listOf(-60, 150), dev.diligent.app.health.SleepMath.onsets(spans, zone).sorted())
+        assertEquals(390, dev.diligent.app.health.SleepMath.minutesEndingBetween(spans.take(2), at(30, 0), at(30, 23)))
+    }
+
+    @Test
+    fun `codeforces counts distinct accepted problems in the window`() {
+        val body = """{"status":"OK","result":[
+            {"creationTimeSeconds":1000,"verdict":"OK","problem":{"contestId":1900,"index":"A"}},
+            {"creationTimeSeconds":1100,"verdict":"OK","problem":{"contestId":1900,"index":"A"}},
+            {"creationTimeSeconds":1200,"verdict":"WRONG_ANSWER","problem":{"contestId":1900,"index":"B"}},
+            {"creationTimeSeconds":10,"verdict":"OK","problem":{"contestId":1800,"index":"C"}}]}"""
+        assertEquals(setOf("cf:1900A"), dev.diligent.app.automation.AutoLogSources.codeforcesSolved(body, 500, 2000))
+    }
+
+    @Test
+    fun `atcoder and wakatime parse`() {
+        val ac = """[{"epoch_second":1000,"result":"AC","problem_id":"abc300_a"},{"epoch_second":1001,"result":"WA","problem_id":"abc300_b"}]"""
+        assertEquals(setOf("ac:abc300_a"), dev.diligent.app.automation.AutoLogSources.atcoderSolved(ac, 0, 2000))
+        val waka = """{"data":[{"grand_total":{"total_seconds":5400.5}}]}"""
+        assertEquals(5400.5, dev.diligent.app.automation.AutoLogSources.wakaSeconds(waka), 1e-9)
+        assertEquals(1.5f, dev.diligent.app.automation.AutoLogSources.timeAmount("hrs", 5_400_000)!!, 1e-6f)
+        assertNull(dev.diligent.app.automation.AutoLogSources.timeAmount("qs", 5_400_000))
+    }
+
+    @Test
+    fun `external commands parse from links and extras`() {
+        val log = dev.diligent.app.automation.ExternalCommand.parse("log", mapOf("activity" to "LeetCode", "amount" to "2"))
+        assertEquals(dev.diligent.app.automation.ExternalCommand.Log("LeetCode", 2f), log)
+        val focus = dev.diligent.app.automation.ExternalCommand.parse("FOCUS", mapOf("activity" to "3", "mode" to "start"))
+        assertEquals(dev.diligent.app.automation.ExternalCommand.Focus("3", "start", false), focus)
+        assertNull(dev.diligent.app.automation.ExternalCommand.parse("set", mapOf("activity" to "Reading")))
+        assertNull(dev.diligent.app.automation.ExternalCommand.parse("explode", mapOf("activity" to "Reading")))
+        val activities = listOf(Activity(id = 3, name = "Quantum Computing"), Activity(id = 4, name = "LeetCode"))
+        assertEquals(4L, dev.diligent.app.automation.ExternalCommand.resolve(activities, "leetcode")?.id)
+        assertEquals(3L, dev.diligent.app.automation.ExternalCommand.resolve(activities, "3")?.id)
+        assertEquals(3L, dev.diligent.app.automation.ExternalCommand.resolve(activities, "quantum")?.id)
+    }
+}

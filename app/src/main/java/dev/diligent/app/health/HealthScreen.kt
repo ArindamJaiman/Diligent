@@ -94,8 +94,19 @@ class HealthViewModel @Inject constructor(
     }
 
     fun syncNow() = viewModelScope.launch {
-        val error = health.sync()
+        val error = health.sync() ?: health.syncWellbeing()
         messages.emit(error ?: "Synced from Health Connect")
+    }
+
+    fun onWellbeingResult(result: Set<String>) {
+        granted.value = granted.value + result
+        if (result.intersect(health.wellbeingPermissions).isNotEmpty()) {
+            health.update { it.copy(wellbeing = true) }
+            ToolJobs.reschedule(context, ToolJob.HEALTH_EVENING)
+            syncNow()
+        } else {
+            viewModelScope.launch { messages.emit("Sleep, steps and mindfulness weren't granted") }
+        }
     }
 
     fun disconnect() {
@@ -117,6 +128,11 @@ fun HealthScreen(onBack: () -> Unit, viewModel: HealthViewModel = hiltViewModel(
     val launcher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) {
         viewModel.onPermissionResult(it)
     }
+    val wellbeingLauncher = rememberLauncherForActivityResult(PermissionController.createRequestPermissionResultContract()) {
+        viewModel.onWellbeingResult(it)
+    }
+    var stepsMenu by remember { mutableStateOf(false) }
+    var mindfulMenu by remember { mutableStateOf(false) }
 
     ToolScaffold(title = "Health → Gym", onBack = onBack, messages = viewModel.messages) {
         val state = ui ?: return@ToolScaffold
@@ -208,5 +224,52 @@ fun HealthScreen(onBack: () -> Unit, viewModel: HealthViewModel = hiltViewModel(
             }
         }
         ToolNote("Hours-based activities get minutes ÷ 60, minute-based get minutes, anything else gets one per session. Progress is only ever raised.")
+
+        // ─── Sleep, steps, mindfulness ──────────────────────
+        ToolSection("SLEEP · STEPS · MINDFULNESS")
+        ToolCard {
+            if (!s.settings.wellbeing || state.granted.intersect(viewModel.health.wellbeingPermissions).isEmpty()) {
+                Text("Read your day's wellbeing", style = toolLabel(13.sp, bold = true), color = DiligentColors.White)
+                Text(
+                    "Last night's sleep, today's steps and mindfulness minutes feed Insights (what helps you hit your goals), " +
+                        "the readiness score, and \"day starts when I sleep\" in Settings.",
+                    style = toolLabel(10.sp), color = DiligentColors.Gray600
+                )
+                Spacer(Modifier.height(10.dp))
+                ToolButton("CONNECT SLEEP & STEPS", Modifier.fillMaxWidth()) {
+                    wellbeingLauncher.launch(viewModel.health.wellbeingPermissions)
+                }
+            } else {
+                Row {
+                    ToolStat(if (s.lastSleepMinutes > 0) "%d:%02d".format(s.lastSleepMinutes / 60, s.lastSleepMinutes % 60) else "–", "SLEEP", Modifier.weight(1f))
+                    ToolStat("${s.lastSteps}", "STEPS", Modifier.weight(1f))
+                    ToolStat("${s.lastMindfulMinutes} min", "MINDFUL", Modifier.weight(1f))
+                }
+                Spacer(Modifier.height(10.dp))
+                Box {
+                    ToolChip("STEPS → ${state.activities.firstOrNull { it.id == s.settings.stepsActivityId }?.name?.uppercase() ?: "NOTHING"}  ▾", s.settings.stepsActivityId != 0L) { stepsMenu = true }
+                    DropdownMenu(expanded = stepsMenu, onDismissRequest = { stepsMenu = false }) {
+                        DropdownMenuItem(text = { Text("Nothing") }, onClick = { viewModel.update { it.copy(stepsActivityId = 0L) }; stepsMenu = false })
+                        state.activities.forEach { a ->
+                            DropdownMenuItem(text = { Text(a.name) }, onClick = { viewModel.update { it.copy(stepsActivityId = a.id) }; stepsMenu = false })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+                Box {
+                    ToolChip("MINDFUL → ${state.activities.firstOrNull { it.id == s.settings.mindfulActivityId }?.name?.uppercase() ?: "NOTHING"}  ▾", s.settings.mindfulActivityId != 0L) { mindfulMenu = true }
+                    DropdownMenu(expanded = mindfulMenu, onDismissRequest = { mindfulMenu = false }) {
+                        DropdownMenuItem(text = { Text("Nothing") }, onClick = { viewModel.update { it.copy(mindfulActivityId = 0L) }; mindfulMenu = false })
+                        state.activities.forEach { a ->
+                            DropdownMenuItem(text = { Text(a.name) }, onClick = { viewModel.update { it.copy(mindfulActivityId = a.id) }; mindfulMenu = false })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                ToolButton("STOP READING WELLBEING", Modifier.fillMaxWidth(), outlined = true) {
+                    viewModel.update { it.copy(wellbeing = false) }
+                }
+            }
+        }
     }
 }

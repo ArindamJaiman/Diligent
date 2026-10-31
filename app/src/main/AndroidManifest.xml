@@ -19,6 +19,17 @@
     <!-- Health → Gym: read exercise sessions from Health Connect -->
     <uses-permission android:name="android.permission.health.READ_EXERCISE" />
     <uses-permission android:name="android.permission.health.READ_HEALTH_DATA_IN_BACKGROUND" />
+    <!-- Health → sleep, steps and mindfulness for the day log (each optional, asked at runtime) -->
+    <uses-permission android:name="android.permission.health.READ_SLEEP" />
+    <uses-permission android:name="android.permission.health.READ_STEPS" />
+    <uses-permission android:name="android.permission.health.READ_MINDFULNESS" />
+    <!-- Automations: write diligent:// links to NFC tags -->
+    <uses-permission android:name="android.permission.NFC" />
+    <uses-feature android:name="android.hardware.nfc" android:required="false" />
+    <!-- Automations → places: geofences ("arrive at the gym → start the timer"), asked at runtime -->
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_BACKGROUND_LOCATION" />
 
     <application
         android:name=".DiligentApp"
@@ -277,6 +288,47 @@
                 android:resource="@xml/tool_file_paths" />
         </provider>
 
+        <!-- diligent://log|set|done|skip|focus from NFC tags, shortcuts and Tasker (off until
+             Hub → Automations → "Allow outside commands") -->
+        <activity
+            android:name=".automation.CommandActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="diligent" />
+                <data android:host="log" />
+                <data android:host="set" />
+                <data android:host="done" />
+                <data android:host="skip" />
+                <data android:host="focus" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="android.nfc.action.NDEF_DISCOVERED" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:scheme="diligent" />
+            </intent-filter>
+        </activity>
+
+        <!-- Tasker / automation apps: broadcast dev.diligent.app.action.COMMAND (same gate) -->
+        <receiver
+            android:name=".automation.CommandReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="dev.diligent.app.action.COMMAND" />
+            </intent-filter>
+        </receiver>
+
+        <!-- Geofence transitions from Play services' PendingIntent -->
+        <receiver
+            android:name=".automation.PlaceTriggerReceiver"
+            android:exported="false" />
+
         <!-- Health Connect: privacy explanation shown from its permission screen -->
         <activity
             android:name=".health.HealthPrivacyActivity"
@@ -305,6 +357,11 @@
         <intent>
             <action android:name="android.intent.action.MAIN" />
             <category android:name="android.intent.category.HOME" />
+        </intent>
+        <!-- Automations: pick which apps' time counts towards an activity -->
+        <intent>
+            <action android:name="android.intent.action.MAIN" />
+            <category android:name="android.intent.category.LAUNCHER" />
         </intent>
     </queries>
 </manifest>

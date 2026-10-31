@@ -18,10 +18,14 @@ vico = "2.0.0-beta.3"
 coroutines = "1.9.0"
 material3 = "1.3.1"
 healthConnect = "1.1.0"
+playServicesLocation = "21.3.0"
 
 [libraries]
 # Health Connect (Health → Gym auto-log)
 androidx-health-connect-client = { group = "androidx.health.connect", name = "connect-client", version.ref = "healthConnect" }
+
+# Geofences for place triggers (Hub → Automations)
+play-services-location = { group = "com.google.android.gms", name = "play-services-location", version.ref = "playServicesLocation" }
 
 # Core
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }

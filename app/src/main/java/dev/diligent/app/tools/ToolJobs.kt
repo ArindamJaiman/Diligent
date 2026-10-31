@@ -20,6 +20,7 @@ import dagger.assisted.Assisted
 import dagger.assisted.AssistedInject
 import dagger.hilt.android.EntryPointAccessors
 import dev.diligent.app.R
+import dev.diligent.app.automation.AutoLogService
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.health.HealthSync
 import dev.diligent.app.papers.PaperService
@@ -47,9 +48,11 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
     SCREEN_NUDGE(true, false),
     HEALTH_EVENING(true, false),
     VERSUS_EVENING(true, true),
+    AUTOLOG_EVENING(true, false),
     CONTESTS_SYNC(false, true),
     PAPERS_SYNC(false, true),
-    VERSUS_SYNC(false, true);
+    VERSUS_SYNC(false, true),
+    AUTOLOG_SYNC(false, true);
 
     val workName: String get() = "tool_" + name.lowercase()
 }
@@ -63,7 +66,8 @@ class ToolServices @Inject constructor(
     val top3: Top3Service,
     val screenTime: ScreenTimeService,
     val health: HealthSync,
-    val versus: VersusSync
+    val versus: VersusSync,
+    val autoLog: AutoLogService
 ) {
     suspend fun run(job: ToolJob) {
         when (job) {
@@ -77,6 +81,8 @@ class ToolServices @Inject constructor(
             ToolJob.HEALTH_EVENING -> health.runEvening()
             ToolJob.VERSUS_EVENING -> versus.runEvening()
             ToolJob.VERSUS_SYNC -> versus.sync(force = true)
+            ToolJob.AUTOLOG_EVENING -> autoLog.runEvening()
+            ToolJob.AUTOLOG_SYNC -> autoLog.sync()
         }
     }
 
@@ -89,6 +95,7 @@ class ToolServices @Inject constructor(
         ToolJob.SCREEN_NUDGE -> screenTime.nextRun(now)
         ToolJob.HEALTH_EVENING -> health.nextRun(now)
         ToolJob.VERSUS_EVENING -> versus.nextRun(now)
+        ToolJob.AUTOLOG_EVENING -> autoLog.nextRun(now)
         else -> null
     }
 }

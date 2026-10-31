@@ -12,6 +12,8 @@ import dagger.hilt.EntryPoint
 import dagger.hilt.InstallIn
 import dagger.hilt.android.EntryPointAccessors
 import dagger.hilt.components.SingletonComponent
+import dev.diligent.app.automation.AutoLogService
+import dev.diligent.app.automation.PlaceTriggers
 import dev.diligent.app.contests.ContestRadar
 import dev.diligent.app.contests.ContestWidgetUpdater
 import dev.diligent.app.data.repository.DiligentRepository
@@ -43,6 +45,7 @@ interface ToolsEntryPoint {
     fun screenTimeService(): ScreenTimeService
     fun healthSync(): HealthSync
     fun versusSync(): VersusSync
+    fun autoLog(): AutoLogService
 }
 
 /**
@@ -61,6 +64,8 @@ object ToolsBootstrap {
         val entry = EntryPointAccessors.fromApplication(app, ToolsEntryPoint::class.java)
         ToolJobs.scheduleAll(app, replace = false)
         entry.contestRadar().armAlarms()
+        // Geofences don't survive a reboot or an app update; register them again.
+        PlaceTriggers.registerAll(app)
 
         app.registerActivityLifecycleCallbacks(object : Application.ActivityLifecycleCallbacks {
             override fun onActivityResumed(activity: Activity) {
@@ -82,8 +87,10 @@ object ToolsBootstrap {
         val entry = EntryPointAccessors.fromApplication(context, ToolsEntryPoint::class.java)
         scope.launch {
             safely { entry.healthSync().sync() }          // local Health Connect read
+            safely { entry.healthSync().syncWellbeing() } // sleep, steps, mindfulness → day log
             safely { entry.contestRadar().refreshIfStale() } // network only if data is over 6 h old
             safely { entry.paperService().sync() }          // network only once a day
+            safely { entry.autoLog().sync() }               // WakaTime, GitHub, CF/AtCoder, app time
             safely { ToolWidgets.refreshLocal(context) }     // Top 3, screen time: no network
         }
     }
