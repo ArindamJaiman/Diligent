@@ -28,6 +28,15 @@ Supabase project, alongside the app.
 Everything has a keyboard shortcut (`?` lists them) and the command palette (`Ctrl K` or `/`)
 runs commands, starts focus sessions, switches themes and takes quick-log lines.
 
+## Public page
+
+Settings → **Public page** builds one self-contained `index.html` of your year for the activities
+you tick: a heatmap (green when every goal was hit), current and best streaks, totals (or habit
+strength, with hours off) and a 30-day sparkline each. It's opt-in and static: nothing is
+uploaded, the page runs no JavaScript, and it never includes notes, mood, Top 3, clips or keys.
+To publish it, put `index.html` in a GitHub repo named `<you>.github.io` (or any static host)
+and download a fresh copy whenever you want to update it.
+
 ## Your data
 
 - Kept in the browser's `localStorage` (`diligent.web.v1`), live across tabs.

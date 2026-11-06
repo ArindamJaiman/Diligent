@@ -74,7 +74,9 @@ has shipped since the list was started.
 - [ ] **Room chat** (short messages, gone after 24 h) and nudges ("ping Alex to focus")
 - ✅ **Challenge templates** (LeetCode 30, Quantum 100 h, Deep work week, Gym 12, Reading 20 h,
   Papers sprint) in the app, and **challenges on the web** (Room tab) sharing the app's leaderboard
-- [ ] **Public profile page** (opt-in): heatmap + streaks as a static page on GitHub Pages
+- ✅ **Public profile page** (opt-in, web Settings → Public page): one self-contained HTML file
+  of your year (heatmap, streaks, totals for the activities you tick), no scripts and no notes;
+  host it anywhere
 
 ## Platform
 

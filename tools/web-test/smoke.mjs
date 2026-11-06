@@ -260,6 +260,16 @@ try {
   check(!!roomRow && roomRow.text.startsWith("enc1:") && (await a.locator(".clip pre").allInnerTexts()).includes("notes for the room"),
     "room clips are encrypted with the room passphrase and read back");
 
+  // Public page: a static file with no notes and no scripts
+  await a.evaluate(() => { const S = Diligent.store; S.note(S.active()[0].id, "private note do not publish", S.today()); });
+  await blur(a);
+  await a.keyboard.press("7");
+  await a.fill("#pp-title", "Arindam's year");
+  const [dl] = await Promise.all([a.waitForEvent("download"), a.click("#pp-download")]);
+  const html = fs.readFileSync(await dl.path(), "utf8");
+  check(dl.suggestedFilename() === "index.html" && html.includes("Arindam&#39;s year") && (html.match(/<circle /g) || []).length >= 365
+    && !html.includes("private note") && !/<script/i.test(html), "public page: a static year with no notes and no scripts");
+
   const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await block(m);
   const mp = await m.newPage();

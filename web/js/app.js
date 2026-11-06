@@ -1318,6 +1318,14 @@ create policy clips on diligent_clips for all
             <label class="btn ghost sm" style="cursor:pointer">Import<input type="file" id="d-import" accept="application/json,.json" hidden></label>
             <span class="spacer"></span><button class="btn danger sm" id="d-reset">Reset</button></div>
         </div>
+        <div class="card spot"><p class="label">Public page</p>
+          <p class="tiny">One self-contained HTML file of your year: heatmap, streaks and totals for the activities you tick. Nothing is uploaded; host it anywhere (GitHub Pages: name it index.html in a repo). Never includes notes, mood, Top 3 or clips.</p>
+          <label class="field" for="pp-title">Title</label><input id="pp-title" value="${esc(D.profile.options().title)}" maxlength="40">
+          <label class="field">Activities</label>
+          <div class="row" style="gap:6px">${S.active().map((a) => `<label class="pp-act" style="--c:${esc(a.color)}"><input type="checkbox" data-pp="${a.id}" ${D.profile.options().activities.includes(a.id) ? "checked" : ""}><span class="dot"></span>${esc(a.name)}</label>`).join("")}</div>
+          <label class="switch"><span class="txt"><b>Show hours</b><br><span class="tiny">Off shows habit strength instead of totals</span></span><input type="checkbox" id="pp-hours" ${D.profile.options().hours ? "checked" : ""}></label>
+          <div class="row" style="margin-top:10px"><button class="btn ghost sm" id="pp-preview">Preview</button><button class="btn sm" id="pp-download">Download</button></div>
+        </div>
         <div class="card spot"><p class="label">About</p>
           <p class="small">Diligent for the web. Everything works offline and installs as an app. <a href="https://github.com/ArindamJaiman/Diligent" target="_blank" rel="noopener">Source</a> · <a href="#" id="s-keys">Keyboard shortcuts</a></p></div>
       </div></div>`;
@@ -1361,6 +1369,15 @@ create policy clips on diligent_clips for all
     $("#d-import").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { toast(S.importJson(await f.text()), 4000); } catch (err) { toast("Import failed: " + err.message, 4000); } };
     $("#d-reset").onclick = () => { if (confirm("Delete everything Diligent keeps in this browser?") && confirm("Really? This can't be undone.")) { localStorage.removeItem("diligent.web.v1"); location.reload(); } };
     $("#s-keys").onclick = (e) => { e.preventDefault(); $("#keys").showModal(); };
+    const ppSave = () => D.profile.setOptions({ title: $("#pp-title").value.trim(), hours: $("#pp-hours").checked, activities: $$("[data-pp]").filter((x) => x.checked).map((x) => x.dataset.pp) });
+    $("#pp-title").oninput = ppSave; $("#pp-hours").onchange = ppSave; $$("[data-pp]").forEach((x) => x.onchange = ppSave);
+    $("#pp-preview").onclick = () => {
+      ppSave();
+      const url = URL.createObjectURL(new Blob([D.profile.build()], { type: "text/html" }));
+      window.open(url, "_blank", "noopener");
+      setTimeout(() => URL.revokeObjectURL(url), 60000);
+    };
+    $("#pp-download").onclick = () => { ppSave(); download("index.html", D.profile.build(), "text/html"); toast("Saved index.html · upload it to any static host"); };
   }
 
   // ─── Activity editor ─────────────────────────────────

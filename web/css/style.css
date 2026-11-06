@@ -393,6 +393,8 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .stand .tot { text-align: right; font: 700 12px/1 var(--font-dot); }
 .stand .tot.done { color: var(--good); }
 .code-chip { font: 900 13px/1 var(--font-dot); letter-spacing: 0.2em; padding: 5px 8px; border-radius: 8px; border: 1px dashed var(--border-strong); }
+.pp-act { display: inline-flex; align-items: center; gap: 6px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 99px; font-size: 12px; cursor: pointer; }
+.pp-act input { width: auto; margin: 0; accent-color: var(--good); }
 .btn.picked { border-color: var(--good); color: var(--good); }
 .pool { position: relative; height: 380px; margin-top: 16px; padding: 0; }
 .pool-goo { position: absolute; inset: 0; filter: url(#goo-big); }
