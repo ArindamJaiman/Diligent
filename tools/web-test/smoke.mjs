@@ -80,6 +80,17 @@ try {
 
   await blur(a);
   await a.keyboard.press("4");
+  // Best week: seed two past weeks, the better one is picked and replays
+  const bestMonday = await a.evaluate(() => {
+    const S = Diligent.store, m1 = S.addDays(S.weekStart(S.today()), -14), m2 = S.addDays(m1, 7);
+    S.active().forEach((x) => { for (let i = 0; i < 7; i++) { S.set(x.id, x.goal, S.addDays(m1, i)); S.set(x.id, x.goal / 2, S.addDays(m2, i)); } });
+    return m1;
+  });
+  await a.evaluate(() => { location.hash = "#today"; }); await a.evaluate(() => { location.hash = "#stats"; });
+  await a.waitForSelector(".bestweek");
+  check((await a.locator(".bestweek .big").first().innerText()) === "100%" && await a.evaluate((m) => Diligent.store.bestWeek().monday === m, bestMonday), "best week finds the strongest finished week");
+  await a.click("#replay-week");
+  await a.waitForTimeout(3500);
   await a.click("#weekly-card");
   await a.waitForSelector("#card-dialog[open] img");
   const card = await a.evaluate(async () => { const img = document.querySelector("#card-dialog img"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });

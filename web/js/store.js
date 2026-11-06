@@ -238,6 +238,30 @@
     return s;
   }
 
+  // ─── Weeks (Monday to Sunday) ──────────────────────────
+  /** A week's numbers: share of goals hit (days with data), hours, and each day. */
+  function weekSummary(monday) {
+    const days = range(monday, addDays(monday, 6)).map((d) => ({ date: d, share: d > today() ? null : dayShare(d), hours: hoursOn(d) }));
+    const scored = days.filter((d) => d.share != null);
+    return {
+      monday, days,
+      share: scored.length ? scored.reduce((n, d) => n + d.share, 0) / scored.length : null,
+      hours: days.reduce((n, d) => n + d.hours, 0),
+      scoredDays: scored.length,
+    };
+  }
+  /** Your best finished week of the last year: highest share of goals, then most hours (needs 5 days with data). */
+  function bestWeek() {
+    let best = null;
+    const thisMonday = weekStart(today());
+    for (let w = addDays(thisMonday, -7), i = 0; i < 53; i++, w = addDays(w, -7)) {
+      const s = weekSummary(w);
+      if (s.scoredDays < 5) continue;
+      if (!best || s.share > best.share + 1e-9 || (Math.abs(s.share - best.share) < 1e-9 && s.hours > best.hours)) best = s;
+    }
+    return best;
+  }
+
   // ─── Long-term targets ("200 h by 31 Dec"): the app's TargetPace ─
   function lifetime(a) { let n = 0; for (const d in state.progress) { const r = state.progress[d][a.id]; if (r) n += r.p || 0; } return n; }
   /** null without a target; else total, target, ahead (+/−), needed per day, days left, projected finish. */
@@ -468,7 +492,7 @@
     state, uid, COLORS, today, iso, parse, addDays, range,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, emit, save,
     active, byId, rowOf, progressOf, met, credit, skipped, isLimit, dayShare, streak, bestStreak, strength,
-    isDue, neutral, describe, caption, streakUnit, pace, lifetime, isScheduledDay, hoursOf, hoursOn, overallStreak, fmt, step,
+    isDue, neutral, describe, caption, streakUnit, pace, lifetime, isScheduledDay, weekStart, weekSummary, bestWeek, hoursOf, hoursOn, overallStreak, fmt, step,
     add, set, toggleDone, toggleSkip, note, upsertActivity, removeActivity, move, dayLog, setDayLog,
     parseQuick, runQuick, matchActivity, exportJson, importJson, exportCsv,
   };

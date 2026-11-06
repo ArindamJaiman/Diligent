@@ -724,6 +724,7 @@
           : `<p class="tiny">Rate your mood in Today → Day log and this shows what goes with your good days.</p>`}
         </div>
       </div>
+      ${bestWeekCard()}
       ${targetsCard()}
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -829,6 +830,47 @@
     dlg.showModal();
   }
 
+
+  /** Best finished week vs this one, as liquid day columns; Replay pours the best week in again. */
+  function bestWeekCard() {
+    const best = S.bestWeek();
+    const fmtRange = (m) => `${S.parse(m).toLocaleDateString(undefined, { day: "numeric", month: "short" })} – ${S.parse(S.addDays(m, 6)).toLocaleDateString(undefined, { day: "numeric", month: "short" })}`;
+    if (!best) return `<div class="card spot" style="margin-top:16px"><p class="label">Best week</p><p class="tiny">Log at least five days of a week and your best one shows up here, to replay and beat.</p></div>`;
+    const cur = S.weekSummary(S.weekStart(S.today()));
+    const col = (d, i, cls) => `<div class="wcol ${cls}${d.date > S.today() ? " future" : ""}" title="${d.date}: ${d.share == null ? "–" : Math.round(d.share * 100) + "%"} · ${d.hours.toFixed(1)} h">
+        <div class="wtank">${tank(d.share || 0, "var(--wc)")}</div>
+        <span>${S.parse(d.date).toLocaleDateString(undefined, { weekday: "narrow" })}</span><b>${d.hours ? d.hours.toFixed(1) : "·"}</b></div>`;
+    // the best week's focus sessions: when did the deep work happen?
+    const sessions = state.sessions.filter((x) => { const d = S.iso(new Date(x.start)); return d >= best.monday && d <= S.addDays(best.monday, 6); });
+    const byHour = new Array(24).fill(0);
+    sessions.forEach((x) => { byHour[new Date(x.start).getHours()] += x.minutes; });
+    const peak = byHour.indexOf(Math.max(...byHour));
+    const ahead = cur.share != null ? Math.round((cur.share - best.share) * 100) : null;
+    return `<div class="card spot bestweek" style="margin-top:16px">
+      <p class="label">Best week <span class="grow"></span><button class="btn ghost sm" id="replay-week" data-cursor="replay">Replay</button></p>
+      <div class="row" style="align-items:flex-end;gap:22px;flex-wrap:wrap">
+        <div><div class="tiny">${esc(fmtRange(best.monday))}</div><b class="big">${Math.round(best.share * 100)}%</b><span class="tiny"> of goals · ${best.hours.toFixed(1)} h</span>
+          ${sessions.length ? `<div class="tiny">${sessions.length} focus sessions · most around ${peak}:00</div>` : ""}</div>
+        <div class="wrow" id="best-cols" style="--wc:var(--good)">${best.days.map((d, i) => col(d, i, "best")).join("")}</div>
+      </div>
+      <div class="row" style="align-items:flex-end;gap:22px;flex-wrap:wrap;margin-top:14px">
+        <div><div class="tiny">This week</div><b class="big">${cur.share == null ? "–" : Math.round(cur.share * 100) + "%"}</b><span class="tiny"> so far · ${cur.hours.toFixed(1)} h</span>
+          ${ahead == null ? "" : `<div class="tiny" style="color:${ahead >= 0 ? "var(--good)" : "var(--dim)"}">${ahead >= 0 ? "▲ on pace for a new best" : `▼ ${-ahead} points behind your best`}</div>`}</div>
+        <div class="wrow" style="--wc:var(--text)">${cur.days.map((d, i) => col(d, i, "now")).join("")}</div>
+      </div>
+    </div>`;
+  }
+  function replayWeek() {
+    const tanks = $$("#best-cols .tank");
+    const levels = tanks.map((t) => t.style.getPropertyValue("--level"));
+    tanks.forEach((t) => t.style.setProperty("--level", 0));
+    tanks.forEach((t, i) => setTimeout(() => {
+      t.style.setProperty("--level", levels[i]);
+      t.classList.remove("slosh"); void t.offsetWidth; t.classList.add("slosh");
+      if (+levels[i] >= 0.999) { bloop(); inkAt(t.parentElement, "#4ade80"); } else bloop("soft");
+    }, 500 + i * 380));
+  }
+
   function targetsCard() {
     const list = S.active().map((a) => ({ a, p: S.pace(a) })).filter((x) => x.p);
     if (!list.length) return "";
@@ -842,6 +884,7 @@
       </div>`).join("")}</div>`;
   }
   function statsAfter() {
+    const rw = $("#replay-week"); if (rw) rw.onclick = replayWeek;
     const wc = $("#weekly-card"); if (wc) wc.onclick = openWeeklyCard;
     const h = $("#heat"); if (!h) return;
     h.scrollLeft = h.scrollWidth;

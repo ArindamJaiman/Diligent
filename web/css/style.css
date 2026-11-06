@@ -340,6 +340,16 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .meter i { display: block; height: 100%; border-radius: 99px; background: var(--c, var(--text)); transition: width 1s var(--spring); }
 .scroll-x { overflow-x: auto; }
 
+.bestweek .big { font: 900 34px/1.1 var(--font-dot); }
+.wrow { display: flex; gap: 8px; flex: 1; min-width: 260px; justify-content: flex-end; }
+.wcol { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; max-width: 54px; }
+.wtank { position: relative; width: 100%; height: 74px; border-radius: 14px; border: 1px solid var(--border-strong); overflow: hidden; isolation: isolate; }
+.wtank .tank .wave { opacity: 0.75; }
+.wtank .tank .wave.w2 { opacity: 0.3; }
+.wcol span { font: 700 10px/1 var(--font-dot); color: var(--dim); }
+.wcol.future { opacity: 0.3; }
+.wcol b { font: 700 11px/1 var(--font-dot); }
+
 /* ─── Clipboard ────────────────────────────────────── */
 .drop { position: relative; border: 1.5px dashed var(--border-strong); border-radius: var(--radius); padding: 14px; transition: border-color 0.3s, background 0.3s; }
 .drop.over { border-color: var(--good); background: color-mix(in srgb, var(--good) 8%, transparent); }
