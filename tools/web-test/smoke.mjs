@@ -190,6 +190,19 @@ try {
   await a.click("#room-join");
   await a.waitForSelector(".member");
   check(db.tables.diligent_presence.some((r) => r.room === "SMOKE1"), "joining a room publishes presence");
+  check(await a.locator(".pool .mblob:not(.core)").count() >= 1, "room members show as liquid blobs");
+
+  // Room passphrase: room clips are encrypted with it
+  await a.fill("#room-pass", "room secret");
+  await a.click("#room-pass-save");
+  await a.click("#room-clip");
+  await a.waitForSelector("#clip-text");
+  await a.fill("#clip-text", "notes for the room");
+  await a.click("#clip-send");
+  await a.waitForFunction(() => document.body.innerText.includes("notes for the room"), null, { timeout: 8000 }).catch(() => {});
+  const roomRow = db.tables.diligent_clips.find((r) => r.scope === "room:SMOKE1");
+  check(!!roomRow && roomRow.text.startsWith("enc1:") && (await a.locator(".clip pre").allInnerTexts()).includes("notes for the room"),
+    "room clips are encrypted with the room passphrase and read back");
 
   const m = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   await block(m);

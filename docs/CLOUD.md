@@ -129,7 +129,12 @@ AES-256-GCM with a key from the passphrase (PBKDF2-SHA256, 100,000 rounds), stor
 ciphertext. Use the same passphrase on every device; a device without it lists those clips as
 🔒 locked. Plain clips from before keep working. The passphrase never leaves the device (the
 phone keeps it in the Keystore-backed secret store; the web app in that browser's storage,
-left out of exports). Room clips stay plain.
+left out of exports).
+
+Rooms can have their own **room passphrase** (phone: Hub → Clipboard while in the room; web:
+the Room tab). Room clips are then encrypted the same way. The room code can't be the key,
+since it's stored next to the clips, so share the passphrase separately, and set it on every
+device in the room; without it a member sees those clips as 🔒 locked.
 
 **Instant updates (web):** the web app also opens a Supabase **Realtime** socket while the
 Clipboard or Room tab is open. After a change it sends a tiny "changed" ping (no data) on a

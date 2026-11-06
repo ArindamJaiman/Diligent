@@ -103,14 +103,19 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
 
     private fun device(): String = cloud.state.value.displayName.ifBlank { Build.MODEL ?: "Android" }
 
-    /** Your own clips are end-to-end encrypted once a passphrase is set; room clips stay plain. */
-    private fun passphrase(room: String): String? =
-        if (room.isBlank()) cloud.secret(PASS_SECRET)?.takeIf { it.isNotBlank() } else null
+    /**
+     * Clips are end-to-end encrypted once a passphrase is set: one for your own clips, and one
+     * per room (shared with room mates apart from the code, which sits next to the clips).
+     */
+    private fun passSecret(room: String): String =
+        if (room.isBlank()) PASS_SECRET else ROOM_PASS_PREFIX + room.trim().uppercase()
 
-    val encrypting: Boolean get() = cloud.hasSecret(PASS_SECRET)
+    private fun passphrase(room: String): String? = cloud.secret(passSecret(room))?.takeIf { it.isNotBlank() }
+
+    fun encrypting(room: String = ""): Boolean = cloud.hasSecret(passSecret(room))
 
     /** Blank removes it. Kept in the Keystore-backed SecretStore, never uploaded. */
-    fun setPassphrase(value: String?) = cloud.setSecret(PASS_SECRET, value)
+    fun setPassphrase(value: String?, room: String = "") = cloud.setSecret(passSecret(room), value)
 
     /**
      * Newest first, pinned on top. Unpinned clips older than [EXPIRE_MS] are dropped here and
@@ -195,6 +200,7 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
         const val LIMIT = 50
         const val MAX_CHARS = 20_000
         const val PASS_SECRET = "clip_passphrase"
+        const val ROOM_PASS_PREFIX = "clip_room_passphrase_"
 
         /** Unpinned clips are kept for a day. */
         const val EXPIRE_MS = 24L * 60 * 60 * 1000
@@ -299,13 +305,20 @@ class ClipboardViewModel @Inject constructor(
     val room: StateFlow<String> = _room.asStateFlow()
     val messages = MutableSharedFlow<String>()
     val ready: Boolean get() = service.ready
-    private val _encrypting = MutableStateFlow(service.encrypting)
+    private val _encrypting = MutableStateFlow(service.encrypting(_room.value))
     val encrypting: StateFlow<Boolean> = _encrypting.asStateFlow()
 
     fun setPassphrase(value: String) = viewModelScope.launch {
-        service.setPassphrase(value)
-        _encrypting.value = service.encrypting
-        messages.emit(if (service.encrypting) "Passphrase saved · new clips are encrypted on this phone" else "Passphrase removed · new clips are sent plain")
+        val room = _room.value
+        service.setPassphrase(value, room)
+        _encrypting.value = service.encrypting(room)
+        messages.emit(
+            when {
+                !_encrypting.value -> "Passphrase removed · new clips are sent plain"
+                room.isBlank() -> "Passphrase saved · new clips are encrypted on this phone"
+                else -> "Room passphrase saved · share it with the room apart from the code"
+            }
+        )
         refresh()
     }
 
@@ -313,6 +326,7 @@ class ClipboardViewModel @Inject constructor(
         val clean = code.trim().uppercase()
         context.getSharedPreferences("clipboard", Context.MODE_PRIVATE).edit().putString("room", clean).apply()
         _room.value = clean
+        _encrypting.value = service.encrypting(clean)
         _clips.value = emptyList()
         viewModelScope.launch { refresh() }
     }
@@ -417,17 +431,29 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
                 ToolField(roomDraft, { roomDraft = it.uppercase() }, "room code (optional)", Modifier.weight(1f))
                 ToolButton("USE", enabled = roomDraft.length >= 4 && roomDraft != room) { viewModel.setRoom(roomDraft) }
             }
-            if (room.isBlank()) {
+            run {
                 val encrypting by viewModel.encrypting.collectAsStateWithLifecycle()
-                var pass by remember { mutableStateOf("") }
+                var pass by remember(room) { mutableStateOf("") }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    ToolField(pass, { pass = it }, if (encrypting) "passphrase saved · type to replace" else "passphrase (optional, end-to-end)", Modifier.weight(1f))
+                    ToolField(
+                        pass, { pass = it },
+                        when {
+                            encrypting -> "passphrase saved · type to replace"
+                            room.isBlank() -> "passphrase (optional, end-to-end)"
+                            else -> "room passphrase (optional, end-to-end)"
+                        },
+                        Modifier.weight(1f)
+                    )
                     ToolButton("SAVE", enabled = pass.isNotBlank()) { viewModel.setPassphrase(pass); pass = "" }
                 }
                 if (encrypting) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("🔒 Encrypted on this phone before it's sent. Use the same passphrase on the web app.", style = toolLabel(9.sp), color = ToolColors.Good, modifier = Modifier.weight(1f))
+                        Text(
+                            if (room.isBlank()) "🔒 Encrypted on this phone before it's sent. Use the same passphrase on the web app."
+                            else "🔒 Room clips are encrypted. Everyone in room $room needs this passphrase; share it apart from the code.",
+                            style = toolLabel(9.sp), color = ToolColors.Good, modifier = Modifier.weight(1f)
+                        )
                         Text("REMOVE", style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500, modifier = Modifier.padding(start = 8.dp).clickable { viewModel.setPassphrase("") })
                     }
                 }

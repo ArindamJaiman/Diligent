@@ -850,6 +850,7 @@
 
   // ─── Clipboard ───────────────────────────────────────
   let clipScope = state.settings.clipScope || (C.ready() ? "mine" : "local");
+  let clipDraft = ""; // what you're typing in the composer; survives re-renders
   let clipList = [], clipError = "", clipSeen = Date.now(), clipNewest = 0;
   const ago = (t) => { const s = (Date.now() - t) / 1000; if (s < 45) return "just now"; if (s < 3600) return Math.round(s / 60) + " m ago"; if (s < 86400) return Math.round(s / 3600) + " h ago"; return new Date(t).toLocaleDateString(); };
   const linkify = (text) => esc(text).replace(/https?:\/\/[^\s<]+/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
@@ -860,13 +861,13 @@
         <p class="label">Shared clipboard <span class="grow"></span>${clipScope !== "local" && C.ready() ? `<span class="live">LIVE</span>` : ""}</p>
         <div class="row" style="margin-bottom:14px">
           <div class="seg" id="clip-scope">${["local", "mine", "room"].map((s) => `<button data-v="${s}" class="${clipScope === s ? "on" : ""}">${esc(scopeLabel[s])}</button>`).join("")}</div>
-          <span class="tiny">${clipScope === "local" ? "Stays in this browser; live across its tabs." : clipScope === "mine" ? "Your phone (Hub → Clipboard), laptop and any browser signed in with your owner id." + (C.encrypting("mine") ? " 🔒 End-to-end encrypted." : "") : state.cloud.room ? "Everyone with the room code sees these." : "Join a room in the Room tab first."}</span>
+          <span class="tiny">${clipScope === "local" ? "Stays in this browser; live across its tabs." : clipScope === "mine" ? "Your phone (Hub → Clipboard), laptop and any browser signed in with your owner id." + (C.encrypting("mine") ? " 🔒 End-to-end encrypted." : "") : state.cloud.room ? "Everyone with the room code sees these." + (C.encrypting("room") ? " 🔒 End-to-end encrypted with the room passphrase." : "") : "Join a room in the Room tab first."}</span>
         </div>
         <div class="drop" id="drop">
-          <textarea id="clip-text" placeholder="Type, paste or drop text or an image… (Ctrl ↵ to send)" maxlength="${C.MAX_CHARS}"></textarea>
+          <textarea id="clip-text" placeholder="Type, paste or drop text or an image… (Ctrl ↵ to send)" maxlength="${C.MAX_CHARS}">${esc(clipDraft)}</textarea>
           <div class="row"><button class="btn" id="clip-send" data-cursor="send">Send</button><button class="btn ghost" id="clip-paste">Paste from clipboard</button><span class="spacer"></span>
             <label class="btn ghost sm" style="cursor:pointer">Image<input type="file" id="clip-file" accept="image/*" hidden></label>
-            ${clipList.some((c) => !c.pinned) ? `<button class="btn danger sm" id="clip-clear">Clear unpinned</button>` : ""}</div>
+            <button class="btn danger sm" id="clip-clear" ${clipList.some((c) => !c.pinned) ? "" : "hidden"}>Clear unpinned</button></div>
         </div>
         <div class="row" style="margin-top:10px"><span class="tiny">Keep unpinned clips for</span>
           <div class="seg" id="clip-ttl">${[[24, "1 day"], [168, "7 days"], [0, "Forever"]].map(([h, l]) => `<button data-v="${h}" class="${(state.settings.clipTtl == null ? 24 : +state.settings.clipTtl) === h ? "on" : ""}">${l}</button>`).join("")}</div>
@@ -902,8 +903,7 @@
   function renderClipList() {
     const el = $("#clips"); if (!el) return;
     el.innerHTML = clipList.map(clipCard).join("") || `<p class="tiny">No clips yet.</p>`;
-    const clr = $("#clip-clear"), want = clipList.some((c) => !c.pinned);
-    if (!!clr !== want) render(false);
+    const clr = $("#clip-clear"); if (clr) clr.hidden = !clipList.some((c) => !c.pinned); // no full re-render: it would drop what you're typing
   }
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); return true; } catch {
@@ -942,6 +942,7 @@
       bloop();
       inkAt($("#clip-send"), "#4ade80", true);
       await loadClips();
+      clipDraft = "";
       const ta = $("#clip-text"); if (ta) ta.value = "";
     } catch (e) { toast(e.message, 4000); }
   }
@@ -953,6 +954,7 @@
       render(false); loadClips();
     };
     const ta = $("#clip-text");
+    ta.oninput = () => { clipDraft = ta.value; };
     $("#clip-send").onclick = () => sendClip(ta.value.trim() ? ta.value : "", "text");
     ta.onkeydown = (e) => { if (e.key === "Enter" && (e.ctrlKey || e.metaKey)) { e.preventDefault(); sendClip(ta.value.trim() ? ta.value : "", "text"); } };
     $("#clip-paste").onclick = async () => {
@@ -1032,7 +1034,7 @@
   }, 30000);
 
   // ─── Room ────────────────────────────────────────────
-  let roomMembers = [], roomError = "", roomFetched = "";
+  let roomMembers = [], roomError = "", roomFetched = "", roomFetchedAt = 0;
   function roomView() {
     if (!C.ready()) return `<div class="card spot"><p class="label">Study room</p><p>Rooms live in your own Supabase project, the same one the app uses.</p><button class="btn" onclick="location.hash='#settings'">Set up cloud</button></div>`;
     const room = state.cloud.room;
@@ -1047,13 +1049,44 @@
     return `<div class="card spot"><p class="label">Room <span class="grow"></span><span class="live">LIVE</span></p>
       <div class="row"><span class="code">${esc(room)}</span><span class="spacer"></span><button class="btn ghost sm" id="room-copy">Copy code</button><button class="btn ghost sm" id="room-clip">Room clipboard</button><button class="btn danger sm" id="room-leave">Leave</button></div>
       <p class="tiny">Your status updates when you start or stop the focus timer, here or on the phone.</p>
+      <div class="row" style="margin-top:10px"><input id="room-pass" type="password" autocomplete="new-password" style="flex:1" placeholder="${(state.cloud.roomPasses || {})[room] ? "room passphrase saved · type to replace" : "room passphrase (optional): encrypts room clips end to end"}"><button class="btn ghost sm" id="room-pass-save">Save</button>${(state.cloud.roomPasses || {})[room] ? `<button class="btn ghost sm" id="room-pass-clear">Remove</button>` : ""}</div>
+      <p class="tiny">${(state.cloud.roomPasses || {})[room] ? "🔒 Room clips are encrypted. Everyone in the room needs the same passphrase; share it apart from the code." : "Share a passphrase apart from the code and set it on every device to keep room clips unreadable to anyone with just the code."}</p>
       ${roomError ? `<p class="small" style="color:var(--bad)">${esc(roomError)}</p>` : ""}</div>
+      ${roomPool(roomMembers, now)}
       <p class="label" style="margin-top:22px">Focusing · ${on.length}</p>
       <div class="grid members">${on.map((m) => mcard(m, true)).join("") || `<p class="tiny">Nobody is focusing right now. Start a timer and you'll be first.</p>`}</div>
       ${off.length ? `<p class="label" style="margin-top:22px">Around</p><div class="grid members">${off.map((m) => mcard(m, false)).join("")}</div>` : ""}`;
   }
+
+  /** Room members as liquid blobs in a goo pool: focusing ones grow with their session and wobble. */
+  function roomPool(members, now) {
+    if (!members.length) return "";
+    const hue = (s) => { let h = 0; for (const ch of s) h = (h * 31 + ch.charCodeAt(0)) % 360; return h; };
+    const list = members.slice(0, 12);
+    const n = list.length;
+    const blobs = [], labels = [];
+    list.forEach((m, i) => {
+      const live = !!m.activity && now - m.updatedAt < 10 * 60000;
+      const mins = live ? Math.max(0, (now - m.since) / 60000) : 0;
+      const size = live ? Math.round(64 + Math.min(70, mins * 1.1)) : 40;
+      const ang = n === 1 ? -Math.PI / 2 : (i / n) * Math.PI * 2 - Math.PI / 2;
+      const r = n === 1 ? 0 : 30;
+      const x = 50 + Math.cos(ang) * r, y = 50 + Math.sin(ang) * r * 0.82;
+      const color = live ? `hsl(${hue(m.name || "?")} 72% 62%)` : "var(--faint)";
+      blobs.push(`<i class="mblob${live ? " live" : ""}" style="--x:${x}%;--y:${y}%;--s:${size}px;--c:${color};--d:${(-i * 1.3).toFixed(1)}s"></i>`);
+      labels.push(`<div class="mlabel${live ? " on" : ""}${y < 45 ? " above" : ""}" style="--x:${x}%;--y:${y}%;--s:${size}px"><b>${esc(m.name)}</b><span>${live ? `${esc(m.activity)} · ${Math.round(mins)} min` : "away"}</span></div>`);
+    });
+    const focusing = list.filter((m) => m.activity && now - m.updatedAt < 10 * 60000).length;
+    return `<div class="card spot pool" aria-label="Room members">
+      <div class="pool-goo"><i class="mblob core" style="--x:50%;--y:50%;--s:${70 + focusing * 14}px"></i>${blobs.join("")}</div>
+      ${labels.join("")}
+      <div class="pool-count"><b>${focusing}</b><span>focusing</span></div>
+    </div>`;
+  }
+
   async function refreshRoom() {
     roomFetched = state.cloud.room;
+    roomFetchedAt = Date.now();
     try { await C.pushPresence(); roomMembers = await C.members(); roomError = ""; } catch (e) { roomError = e.message; }
     if (view === "room") render(false);
   }
@@ -1062,10 +1095,14 @@
     const j = $("#room-join"); if (j) { j.onclick = () => join($("#room-code").value); $("#room-code").onkeydown = (e) => { if (e.key === "Enter") join(e.target.value); }; }
     const n = $("#room-new"); if (n) n.onclick = () => join(C.newCode());
     const c = $("#room-copy"); if (c) c.onclick = async () => { await copyText(state.cloud.room); toast("Code copied"); };
-    const rc = $("#room-clip"); if (rc) rc.onclick = () => { clipScope = "room"; state.settings.clipScope = "room"; S.save(); go("clipboard"); };
+    const rc = $("#room-clip"); if (rc) rc.onclick = () => { clipList = []; clipError = ""; clipScope = "room"; state.settings.clipScope = "room"; S.save(); go("clipboard"); };
+    const setRoomPass = (v) => { state.cloud.roomPasses = Object.assign({}, state.cloud.roomPasses, { [state.cloud.room]: v }); if (!v) delete state.cloud.roomPasses[state.cloud.room]; S.save(); render(false); toast(v ? "Room passphrase saved" : "Room passphrase removed"); };
+    const rps = $("#room-pass-save"); if (rps) rps.onclick = () => { const v = $("#room-pass").value.trim(); if (v) setRoomPass(v); };
+    const rpc = $("#room-pass-clear"); if (rpc) rpc.onclick = () => setRoomPass("");
     const l = $("#room-leave"); if (l) l.onclick = async () => { await C.leaveRoom(); roomMembers = []; render(false); };
     if (!C.ready() || !state.cloud.room) return null;
-    if (roomFetched !== state.cloud.room) refreshRoom();
+    // On entering (not on every re-render, which would loop): your own status may have changed.
+    if (roomFetched !== state.cloud.room || Date.now() - roomFetchedAt > 4000) refreshRoom();
     // On a ping only re-read the members: pushing presence back would ping everyone again.
     const offLive = C.watch("room:" + state.cloud.room, async () => {
       try { roomMembers = await C.members(); roomError = ""; } catch {}

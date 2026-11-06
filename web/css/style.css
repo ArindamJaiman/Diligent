@@ -365,6 +365,28 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .member.on .avatar::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 1px solid var(--good); animation: ring 2s var(--ease) infinite; }
 @keyframes ring { from { transform: scale(0.9); opacity: 0.8; } to { transform: scale(1.35); opacity: 0; } }
 .code { font: 900 40px/1 var(--font-dot); letter-spacing: 0.2em; }
+.pool { position: relative; height: 380px; margin-top: 16px; padding: 0; }
+.pool-goo { position: absolute; inset: 0; filter: url(#goo-big); }
+.mblob { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
+  border-radius: 50%; background: var(--c, var(--faint)); transition: width 1.4s var(--spring), height 1.4s var(--spring), margin 1.4s var(--spring); }
+.mblob.core { --c: color-mix(in srgb, var(--text) 14%, var(--bg)); animation: core 7s ease-in-out infinite; }
+.mblob.live { animation: wobble 6s ease-in-out infinite; animation-delay: var(--d); }
+@keyframes wobble {
+  0%, 100% { border-radius: 50%; transform: translate(0, 0) scale(1); }
+  25% { border-radius: 58% 42% 55% 45% / 45% 58% 42% 55%; transform: translate(-6%, 4%) scale(1.1); }
+  50% { border-radius: 44% 56% 46% 54% / 56% 44% 56% 44%; transform: translate(-9%, -5%) scale(1.03); }
+  75% { border-radius: 52% 48% 58% 42% / 42% 54% 46% 58%; transform: translate(4%, -3%) scale(1.08); }
+}
+@keyframes core { 50% { transform: scale(1.12); border-radius: 46% 54% 52% 48% / 52% 46% 54% 48%; } }
+.mlabel { position: absolute; left: var(--x); top: calc(var(--y) + var(--s) / 2 + 16px); transform: translateX(-50%); text-align: center; pointer-events: none; white-space: nowrap;
+  padding: 4px 10px; border-radius: 12px; background: color-mix(in srgb, var(--surface-solid) 82%, transparent); backdrop-filter: blur(6px); z-index: 1; }
+.mlabel.above { top: auto; bottom: calc(100% - var(--y) + var(--s) / 2 + 16px); }
+.mlabel b { display: block; font-size: 12px; }
+.mlabel span { display: block; font-size: 10px; color: var(--dim); }
+.mlabel.on span { color: var(--good); }
+.pool-count { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); text-align: center; pointer-events: none; mix-blend-mode: difference; color: #fff; }
+.pool-count b { display: block; font: 900 30px/1 var(--font-dot); }
+.pool-count span { font: 700 9px/1 var(--font-dot); letter-spacing: 0.24em; text-transform: uppercase; }
 
 /* ─── Overlays ─────────────────────────────────────── */
 dialog { border: 1px solid var(--border-strong); background: var(--surface-solid); color: var(--text); border-radius: 22px; padding: 22px; width: min(520px, calc(100vw - 32px)); box-shadow: 0 40px 120px -20px rgba(0, 0, 0, 0.8); }

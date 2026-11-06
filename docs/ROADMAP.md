@@ -24,7 +24,7 @@ has shipped since the list was started.
 - ✅ **End-to-end encryption** for your own clips with a clipboard passphrase (AES-256-GCM,
   PBKDF2): the Supabase project only stores ciphertext. Keying from the owner id or room code
   would protect nothing, since both are stored next to the clips
-- [ ] End-to-end encryption for room clips (a room passphrase shared with the code)
+- ✅ End-to-end encryption for room clips: a room passphrase, shared apart from the code
 - [ ] **Files** (PDFs, small zips) through Supabase Storage, with expiry
 - ✅ **Pin and expire** clips (keep pinned, delete the rest after 24 h; 7 days or forever on the web)
 - [ ] Browser extension: right-click → *Send to Diligent clipboard*
@@ -42,7 +42,7 @@ has shipped since the list was started.
 - ✅ **Weekly review card** as a shareable PNG (Stats → Weekly card): download, share, copy or send to the clipboard
 - ✅ **Ambient sound** for focus (rain, brown noise, waves) generated with WebAudio
 - ✅ **Picture-in-picture timer** (Document PiP API) so the countdown floats over other windows
-- [ ] **Liquid avatars** in rooms: each member is a blob that grows while they focus
+- ✅ **Liquid avatars** in rooms: each member is a blob that grows while they focus and melts into the room
 - ✅ Tests: a Playwright smoke test in CI against a mock PostgREST server (`tools/web-test`, `Web check` workflow)
 
 ## Tracking (app)

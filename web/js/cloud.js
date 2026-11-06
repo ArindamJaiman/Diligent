@@ -96,10 +96,15 @@
   // ─── End-to-end encryption for your own clips ─────────
   // AES-256-GCM, key from the clipboard passphrase (PBKDF2-SHA256, 100,000 rounds), stored as
   // "enc1:" + base64(iv ‖ ciphertext ‖ tag): the same bytes the Android app's ClipCrypto writes.
-  // Room clips stay plain (everyone in the room would need the passphrase).
+  // Rooms have their own passphrase, shared with room mates apart from the code.
   const ENC = "enc1:";
   const clipKeys = new Map();
-  const passphrase = (scope) => (scope === "mine" && (S.state.cloud.clipPass || "").trim()) || null;
+  const passphrase = (scope) => {
+    const c = S.state.cloud;
+    if (scope === "mine") return (c.clipPass || "").trim() || null;
+    if (scope === "room") return ((c.roomPasses || {})[(c.room || "").toUpperCase()] || "").trim() || null;
+    return null;
+  };
   function clipKey(pass) {
     if (!clipKeys.has(pass)) clipKeys.set(pass, (async () => {
       const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
