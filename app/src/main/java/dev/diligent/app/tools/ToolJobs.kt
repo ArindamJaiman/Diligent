@@ -21,6 +21,9 @@ import dagger.assisted.AssistedInject
 import dagger.hilt.android.EntryPointAccessors
 import dev.diligent.app.R
 import dev.diligent.app.automation.AutoLogService
+import dagger.hilt.android.qualifiers.ApplicationContext
+import dev.diligent.app.cloud.ClipWatch
+import dev.diligent.app.cloud.ClipboardService
 import dev.diligent.app.cloud.CloudService
 import dev.diligent.app.cloud.SocialService
 import dev.diligent.app.contests.ContestRadar
@@ -55,6 +58,7 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
     PLAN_MORNING(true, false),
     SHUTDOWN_PROMPT(true, false),
     CLOUD_NIGHTLY(true, true),
+    CLIP_WATCH(true, true),
     CONTESTS_SYNC(false, true),
     PAPERS_SYNC(false, true),
     VERSUS_SYNC(false, true),
@@ -66,6 +70,7 @@ enum class ToolJob(val recurring: Boolean, val needsNetwork: Boolean) {
 /** The tools' singletons, in one place for the worker and the scheduler. */
 @Singleton
 class ToolServices @Inject constructor(
+    @ApplicationContext private val context: Context,
     val weekly: WeeklyReviewService,
     val contests: ContestRadar,
     val papers: PaperService,
@@ -76,7 +81,8 @@ class ToolServices @Inject constructor(
     val autoLog: AutoLogService,
     val plans: PlanService,
     val cloud: CloudService,
-    val social: SocialService
+    val social: SocialService,
+    val clipboard: ClipboardService
 ) {
     suspend fun run(job: ToolJob) {
         when (job) {
@@ -98,6 +104,7 @@ class ToolServices @Inject constructor(
                 cloud.runAll()
                 social.pushAllScores()
             }
+            ToolJob.CLIP_WATCH -> ClipWatch.check(context, clipboard)
         }
     }
 
@@ -114,6 +121,7 @@ class ToolServices @Inject constructor(
         ToolJob.PLAN_MORNING -> plans.nextMorning(now)
         ToolJob.SHUTDOWN_PROMPT -> plans.nextShutdown(now)
         ToolJob.CLOUD_NIGHTLY -> cloud.nextRun(now)
+        ToolJob.CLIP_WATCH -> ClipWatch.nextRun(context, clipboard.ready, now)
         else -> null
     }
 }

@@ -21,7 +21,9 @@ has shipped since the list was started.
 - ✅ **Auto-send on copy** (opt-in, Hub → Clipboard): when Diligent comes to the front, text
   copied since goes to your clips (Android 10+ only lets the focused app read the clipboard);
   its own copies, sensitive ones (password managers) and repeats are skipped
-- [ ] "Copy on the laptop → notification on the phone" using Supabase Realtime instead of polling
+- ✅ "Copy on the laptop → notification on the phone" (opt-in, Hub → Clipboard): a WorkManager
+  check about every 15 minutes with COPY on the notification. A live Realtime socket would keep
+  the phone awake; instant delivery would need a push service (FCM), which needs a server
 - ✅ **End-to-end encryption** for your own clips with a clipboard passphrase (AES-256-GCM,
   PBKDF2): the Supabase project only stores ciphertext. Keying from the owner id or room code
   would protect nothing, since both are stored next to the clips

@@ -44,6 +44,8 @@ import dev.diligent.app.tools.ToolNote
 import dev.diligent.app.tools.ToolScaffold
 import dev.diligent.app.tools.ToolSection
 import dev.diligent.app.tools.ToolToggle
+import dev.diligent.app.tools.ToolJob
+import dev.diligent.app.tools.ToolJobs
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.ui.theme.DiligentColors
 import kotlinx.coroutines.Dispatchers
@@ -110,6 +112,9 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
         cloud.supabase(if (room.isBlank()) emptyMap() else mapOf("x-diligent-room" to room.trim().uppercase()))
 
     private fun device(): String = cloud.state.value.displayName.ifBlank { Build.MODEL ?: "Android" }
+
+    /** How this phone signs its clips (Hub → Cloud name, else the model). */
+    val deviceName: String get() = device()
 
     /**
      * Clips are end-to-end encrypted once a passphrase is set: one for your own clips, and one
@@ -485,6 +490,18 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
                 subtitle = "When you open Diligent, text you copied since goes to your clips. Passwords and other sensitive copies are skipped",
                 checked = autoSend,
                 onChecked = { on -> autoSend = on; AutoSendClip.setEnabled(context, on) }
+            )
+            var watch by remember { mutableStateOf(ClipWatch.enabled(context)) }
+            Spacer(Modifier.height(6.dp))
+            ToolToggle(
+                title = "Notify me of clips from my other devices",
+                subtitle = "Checks about every ${ClipWatch.INTERVAL_MINUTES} minutes (Android may wait longer when the phone is idle), with COPY on the notification",
+                checked = watch,
+                onChecked = { on ->
+                    watch = on
+                    ClipWatch.setEnabled(context, on)
+                    ToolJobs.reschedule(context, ToolJob.CLIP_WATCH)
+                }
             )
         }
         ToolSection("CLIPS · ${clips.size}")

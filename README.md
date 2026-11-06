@@ -27,6 +27,7 @@ through your Supabase project. Details: [docs/WEB.md](docs/WEB.md)
 - **Share → Diligent clipboard** from any Android app sends the text straight there, and the
   **Send clipboard** Quick Settings tile sends whatever you just copied in one tap
 - **Auto-send on copy** (opt-in): open Diligent and the text you copied goes to your clips; passwords and Diligent's own copies are skipped
+- **Clip notifications** (opt-in): copy on the laptop or the web app and the phone notifies you within about 15 minutes, with COPY
 - **Clipboard widget:** your newest clip on the home screen with COPY and SEND MINE
 - The web app also shares images, takes `Ctrl V` anywhere on its Clipboard tab and drag & drop
 - Stored in your own Supabase project, scoped by your owner id or the room code; nothing

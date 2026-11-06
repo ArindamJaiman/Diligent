@@ -302,6 +302,11 @@
                 android:resource="@xml/papers_widget_info" />
         </receiver>
 
+        <!-- COPY on a "clip from your devices" notification -->
+        <receiver
+            android:name=".cloud.ClipCopyReceiver"
+            android:exported="false" />
+
         <!-- One activity as a liquid tank; the picker opens when it's placed -->
         <receiver
             android:name=".widget.ActivityWidgetReceiver"
