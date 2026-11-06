@@ -34,8 +34,14 @@ import kotlinx.serialization.json.jsonPrimitive
 import kotlinx.serialization.json.longOrNull
 
 /** Today as the phone publishes it at wear://…/diligent/today. */
-data class Today(val done: Int, val total: Int, val items: List<Item>) {
+data class Today(val done: Int, val total: Int, val items: List<Item>, val streak: Int = 0, val streakName: String = "") {
     data class Item(val id: Long, val name: String, val line: String)
+
+    /** 0..1 share of today's goals done. */
+    val share: Float get() = if (total <= 0) 0f else (done.toFloat() / total).coerceIn(0f, 1f)
+
+    /** "3/5" */
+    val doneText: String get() = "$done/$total"
 
     companion object {
         const val PATH = "/diligent/today"
@@ -46,6 +52,8 @@ data class Today(val done: Int, val total: Int, val items: List<Item>) {
             Today(
                 done = o["done"]?.jsonPrimitive?.intOrNull ?: 0,
                 total = o["total"]?.jsonPrimitive?.intOrNull ?: 0,
+                streak = o["streak"]?.jsonPrimitive?.intOrNull ?: 0,
+                streakName = o["streakName"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 items = o["items"]?.jsonArray.orEmpty().mapNotNull { e ->
                     val i = e.jsonObject
                     Item(
@@ -189,9 +197,10 @@ class TodayTileService : TileService() {
     }
 }
 
-/** The phone republished today: redraw the tile. */
+/** The phone republished today: redraw the tile and the complications. */
 class TodayUpdateListener : WearableListenerService() {
     override fun onDataChanged(dataEvents: DataEventBuffer) {
         TileService.getUpdater(this).requestUpdate(TodayTileService::class.java)
+        Complications.refresh(this)
     }
 }

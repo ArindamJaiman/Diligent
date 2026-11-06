@@ -25,6 +25,41 @@
                 android:resource="@drawable/tile_preview" />
         </service>
 
+        <!-- Watch-face complications: today's goals (ring or text) and the longest streak -->
+        <service
+            android:name=".TodayComplicationService"
+            android:exported="true"
+            android:icon="@drawable/tile_preview"
+            android:label="@string/complication_today"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="RANGED_VALUE,SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
+        <service
+            android:name=".StreakComplicationService"
+            android:exported="true"
+            android:icon="@drawable/tile_preview"
+            android:label="@string/complication_streak"
+            android:permission="com.google.android.wearable.permission.BIND_COMPLICATION_PROVIDER">
+            <intent-filter>
+                <action android:name="android.support.wearable.complications.ACTION_COMPLICATION_UPDATE_REQUEST" />
+            </intent-filter>
+            <meta-data
+                android:name="android.support.wearable.complications.SUPPORTED_TYPES"
+                android:value="SHORT_TEXT" />
+            <meta-data
+                android:name="android.support.wearable.complications.UPDATE_PERIOD_SECONDS"
+                android:value="0" />
+        </service>
+
         <!-- The phone tells the tile to redraw when progress changes -->
         <service
             android:name=".TodayUpdateListener"

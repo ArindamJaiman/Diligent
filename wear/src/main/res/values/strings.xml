@@ -2,4 +2,6 @@
 <resources>
     <string name="app_name">Diligent</string>
     <string name="tile_label">Diligent · today</string>
+    <string name="complication_today">Diligent · today\'s goals</string>
+    <string name="complication_streak">Diligent · streak</string>
 </resources>

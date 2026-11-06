@@ -35,9 +35,13 @@ object WearSync {
             val active = repository.getAllActiveSnapshot()
             val rows = repository.getTodayProgressSnapshot().associateBy { it.activityId }
             val open = repository.openToday()
+            // The longest running streak, for the watch's streak complication.
+            val best = active.map { it to runCatching { repository.calculateStreak(it.id) }.getOrDefault(0) }.maxByOrNull { it.second }
             val json = buildJsonObject {
                 put("done", active.count { rows[it.id]?.isCompleted == true })
                 put("total", active.size)
+                put("streak", best?.second ?: 0)
+                put("streakName", best?.takeIf { it.second > 0 }?.first?.let { Privacy.publicName(it) } ?: "")
                 put("at", System.currentTimeMillis())
                 putJsonArray("items") {
                     open.take(3).forEach { a ->

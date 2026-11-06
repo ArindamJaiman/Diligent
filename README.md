@@ -131,7 +131,7 @@ What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
 - **Quick log:** "2h quantum", "+3 lc", "gym done yesterday", typed or spoken; QS tile and launcher shortcuts
 - **Desk mode** and screen saver; **Glyph Matrix** toy for the Nothing Phone (3) ([docs/GLYPH.md](docs/GLYPH.md))
 - **Cloud:** nightly backup to Drive / Dropbox / a private GitHub repo, Supabase sync, web app, **shared clipboard**, laptop browser extension, **study rooms** and **challenges**, webhook / Notion export ([docs/CLOUD.md](docs/CLOUD.md))
-- **Now widget** (the card that fits the moment) and a **Wear OS tile** (`wear` module)
+- **Now widget** (the card that fits the moment), a **Wear OS tile** and two **watch-face complications** (today's goals as a ring, your longest streak) in the `wear` module
 - Look & feel: red night and paper themes, four launcher icons, haptics and chimes, app lock
 
 ### Hub: productivity tools

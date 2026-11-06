@@ -23,6 +23,7 @@ anthropic = "3.2.0"
 playServicesWearable = "19.0.0"
 wearTiles = "1.4.1"
 protolayout = "1.2.1"
+wearComplications = "1.2.1"
 guava = "33.3.1-android"
 
 [libraries]
@@ -34,6 +35,7 @@ play-services-wearable = { group = "com.google.android.gms", name = "play-servic
 kotlinx-coroutines-play-services = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-play-services", version.ref = "coroutines" }
 androidx-wear-tiles = { group = "androidx.wear.tiles", name = "tiles", version.ref = "wearTiles" }
 androidx-wear-protolayout = { group = "androidx.wear.protolayout", name = "protolayout", version.ref = "protolayout" }
+androidx-wear-complications-data-source = { group = "androidx.wear.watchface", name = "watchface-complications-data-source-ktx", version.ref = "wearComplications" }
 guava = { group = "com.google.guava", name = "guava", version.ref = "guava" }
 kotlinx-coroutines-guava = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-guava", version.ref = "coroutines" }
 

@@ -98,7 +98,9 @@ has shipped since the list was started.
 
 - [ ] **iOS / desktop** through the web app's PWA (done for reading and logging; push
   notifications next, via Web Push)
-- [ ] **Wear OS complications** for the streak and today's percentage
+- ✅ **Wear OS complications** for the streak and today's percentage: *Diligent · today's goals*
+  (a ring, or "3/5") and *Diligent · streak* ("🔥12", your longest running streak), redrawn when the
+  phone republishes
 - ✅ **Backup encryption** with a passphrase for Drive / GitHub backups (AES-256-GCM, the
   clipboard's format; restore and the web import ask for it; the web exports encrypted too)
 - [ ] **Localisation** (Hindi first)

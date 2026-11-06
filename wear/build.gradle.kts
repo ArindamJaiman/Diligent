@@ -3,7 +3,8 @@ plugins {
     alias(libs.plugins.kotlin.android)
 }
 
-// The watch side of Diligent: one tile with today's goals and + buttons. Same applicationId
+// The watch side of Diligent: one tile with today's goals and + buttons, and two watch-face
+// complications (today's goals, the longest streak). Same applicationId
 // and signing as the phone app, which the Wearable Data Layer requires to pair them.
 android {
     namespace = "dev.diligent.wear"
@@ -54,10 +55,13 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.wear.tiles)
     implementation(libs.androidx.wear.protolayout)
+    implementation(libs.androidx.wear.complications.data.source)
     implementation(libs.guava)
     implementation(libs.kotlinx.coroutines.android)
     implementation(libs.kotlinx.coroutines.guava)
     implementation(libs.kotlinx.coroutines.play.services)
     implementation(libs.play.services.wearable)
     implementation(libs.kotlinx.serialization.json)
+
+    testImplementation(libs.junit)
 }
