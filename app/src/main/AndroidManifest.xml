@@ -303,6 +303,18 @@
         </receiver>
 
         <receiver
+            android:name=".cloud.ClipboardWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_clipboard_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/clipboard_widget_info" />
+        </receiver>
+
+        <receiver
             android:name=".top3.Top3WidgetReceiver"
             android:exported="true"
             android:label="@string/widget_top3_name">

@@ -200,6 +200,7 @@ class ShareToClipboardActivity : ComponentActivity() {
         val service = EntryPointAccessors.fromApplication(applicationContext, ClipboardEntryPoint::class.java).clipboard()
         lifecycleScope.launch {
             val result = runCatching { service.push(text) }
+            if (result.isSuccess) ClipCache.sent(applicationContext, text)
             Toast.makeText(
                 applicationContext,
                 result.fold({ "Sent to your Diligent clipboard" }, { it.message ?: "Couldn't send" }),
@@ -233,6 +234,7 @@ class SendClipboardActivity : ComponentActivity() {
         val service = EntryPointAccessors.fromApplication(app, ClipboardEntryPoint::class.java).clipboard()
         lifecycleScope.launch {
             val result = runCatching { service.push(text) }
+            if (result.isSuccess) ClipCache.sent(app, text)
             Toast.makeText(
                 app,
                 result.fold({ "Sent to your devices: " + text.take(40) }, { it.message ?: "Couldn't send" }),
@@ -286,7 +288,12 @@ class ClipboardViewModel @Inject constructor(
     }
 
     suspend fun refresh() {
-        runCatching { _clips.value = service.list(_room.value) }
+        val room = _room.value
+        runCatching { service.list(room) }
+            .onSuccess {
+                _clips.value = it
+                if (room.isBlank()) ClipCache.update(context, it) // the widget shows your own newest clip
+            }
             .onFailure { messages.emit(it.message ?: "Couldn't load clips") }
     }
 

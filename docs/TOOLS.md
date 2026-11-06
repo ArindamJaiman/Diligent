@@ -22,7 +22,7 @@ Open the **Hub** with the grid icon on the dashboard. Each tool keeps working of
 | **Reports** | Wrap-up images, PDF report, README card (shared through the system share sheet) | – | none |
 | **Quick log / Desk mode / Glyph Matrix** | Natural-language logging; dot-matrix clock and screen saver; Phone (3) back matrix | QS tile, shortcuts | none |
 | **Study room / Challenges / Cloud** | Live rooms, leaderboards, backup, sync, export (docs/CLOUD.md) | – | your Supabase / GitHub / webhook / Notion, only once set up |
-| **Clipboard** | Shared clipboard with the web app and rooms; Share → Diligent clipboard | – | your Supabase, only while the screen is open or when you share |
+| **Clipboard** | Shared clipboard with the web app and rooms; Share → Diligent clipboard; Send clipboard tile | Clipboard widget (COPY, SEND MINE, ↻) | your Supabase, only while the screen is open or when you share |
 
 ## Streak freezes
 

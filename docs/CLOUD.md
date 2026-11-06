@@ -106,7 +106,9 @@ Already set up before the shared clipboard existed? Run only the `diligent_clips
 Hub → Clipboard on the phone, the Clipboard tab in the web app (`web/`), **Share →
 Diligent clipboard** from any Android app, and the **Send clipboard** Quick Settings tile (one
 tap sends what you copied; Android 10+ only lets the app in focus read the clipboard, so the
-tile flashes an invisible screen to do it). Clips are scoped like everything else:
+tile flashes an invisible screen to do it). The **Clipboard** home-screen widget shows your
+newest clip with COPY and SEND MINE; it draws from a local copy and only goes online when you tap
+↻ (the Clipboard screen, sharing and the tile also update it). Clips are scoped like everything else:
 
 - **My devices:** `scope` is your owner id, so only your devices see them.
 - **Room:** `scope` is `room:<CODE>` and requests carry the code in `x-diligent-room`; everyone

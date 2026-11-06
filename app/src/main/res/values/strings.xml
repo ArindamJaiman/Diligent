@@ -29,6 +29,8 @@
     <string name="tile_quicklog_label">Quick log</string>
     <string name="share_clipboard_label">Diligent clipboard</string>
     <string name="tile_clipboard_label">Send clipboard</string>
+    <string name="widget_clipboard_name">Clipboard</string>
+    <string name="widget_clipboard_description">Your newest shared clip with COPY, and SEND MINE to share what you copied. Only goes online when you tap ↻.</string>
     <string name="desk_dream_label">Diligent desk clock</string>
     <string name="shield_service_label">Diligent Focus Shield</string>
     <string name="shield_service_description">Covers apps you marked distracting while a focus session runs, or pauses before they open. It only notices which app comes to the front; it never reads what is on the screen and nothing leaves your phone.</string>

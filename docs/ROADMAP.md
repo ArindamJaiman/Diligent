@@ -17,7 +17,7 @@ has shipped since the list was started.
 ## Clipboard & cross-device
 
 - ✅ **Clipboard Quick Settings tile:** "Send clipboard" sends the phone clipboard in one tap
-- [ ] **Clipboard widget:** the newest clip on the home screen with COPY
+- ✅ **Clipboard widget:** the newest clip on the home screen with COPY, SEND MINE and ↻
 - [ ] **Auto-send on copy** (opt-in, foreground only: Android 10+ only lets the focused app read
   the clipboard) and a "copy on the laptop → notification on the phone" mode using Supabase
   Realtime instead of polling

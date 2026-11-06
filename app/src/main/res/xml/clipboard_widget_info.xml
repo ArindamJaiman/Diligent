@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No periodic updates: redrawn when the Clipboard screen, the share target or the tile
+     changes the newest clip, and when you tap ↻. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="180dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="110dp"
+    android:minResizeHeight="90dp"
+    android:maxResizeWidth="560dp"
+    android:maxResizeHeight="520dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="3"
+    android:targetCellHeight="2"
+    android:widgetCategory="home_screen|keyguard"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_clipboard_preview"
+    android:previewLayout="@layout/widget_clipboard_preview"
+    android:description="@string/widget_clipboard_description" />

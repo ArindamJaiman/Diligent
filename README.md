@@ -26,6 +26,7 @@ through your Supabase project. Details: [docs/WEB.md](docs/WEB.md)
   app, and everyone in a room with the same code
 - **Share → Diligent clipboard** from any Android app sends the text straight there, and the
   **Send clipboard** Quick Settings tile sends whatever you just copied in one tap
+- **Clipboard widget:** your newest clip on the home screen with COPY and SEND MINE
 - The web app also shares images, takes `Ctrl V` anywhere on its Clipboard tab and drag & drop
 - Stored in your own Supabase project, scoped by your owner id or the room code; nothing
   polls in the background ([docs/CLOUD.md](docs/CLOUD.md#shared-clipboard))
