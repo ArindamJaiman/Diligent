@@ -186,7 +186,16 @@ try {
   await a.fill("#ed-count", "3");
   await a.click("#ed-save");
   await a.waitForTimeout(200);
-  check(/\d\/3 this week|week done/.test(await a.locator('.act:has(h3:text-is("Gym")) .meta').innerText()), "a 3× a week schedule shows its weekly count");
+  check(/\d\/3 · |week done/.test(await a.locator('.act:has(h3:text-is("Gym")) .meta').innerText()), "a 3× a week schedule shows its weekly count");
+  {
+    // Smart reschedule: the same spread as the app's Schedule.weekPlan (Mon 26 Oct 2026 week).
+    const r = await a.evaluate(() => {
+      const S = Diligent.store, gym = { id: -77, name: "spread", scheduleType: "weekly", scheduleCount: 3, goal: 1, unit: "times", goalType: "at_least" };
+      return [S.weekPlan(gym, "2026-10-26").slots.join(","), S.weekPlan(gym, "2026-10-28").slots.join(","), S.caption(gym, "2026-10-30"), S.caption(gym, "2026-10-31")];
+    });
+    check(r[0] === "2026-10-27,2026-10-29,2026-10-31" && r[1] === "2026-10-28,2026-10-30,2026-11-01" && r[2] === "0/3 · every day to Sun" && r[3] === "0/3 · 3 left, only 2 days",
+      "weekly sessions spread over the days left and move up when one is missed (" + r.join(" | ") + ")");
+  }
   await a.locator('.act:has(h3:text-is("Quantum Computing")) h3').click();
   await a.fill("#ed-target", "200");
   await a.fill("#ed-target-date", await a.evaluate(() => Diligent.store.addDays(Diligent.store.today(), 60)));

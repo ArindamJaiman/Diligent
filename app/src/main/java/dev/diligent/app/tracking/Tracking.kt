@@ -105,6 +105,52 @@ object Schedule {
     fun weekStart(date: LocalDate): LocalDate = date.with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY))
 
     /**
+     * Smart reschedule for "N× a week": what's left of this week's target, spread evenly over
+     * the days left (today unless it's already done, up to Sunday, skipped days left out).
+     * Slots sit in the middle of equal shares, so on track you get breathing room (3× from
+     * Monday: Tue, Thu, Sat) and once you fall behind the next session lands on today.
+     */
+    data class WeekPlan(val count: Int, val target: Int, val slots: List<LocalDate>, val daysLeft: Int) {
+        val remaining: Int get() = (target - count).coerceAtLeast(0)
+        /** Every day left is needed. */
+        val tight: Boolean get() = remaining in 1..daysLeft && remaining == daysLeft
+        /** The target can't be reached any more this week. */
+        val short: Boolean get() = remaining > daysLeft
+    }
+
+    fun weekPlan(activity: Activity, done: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): WeekPlan {
+        val target = activity.scheduleCount.coerceIn(1, 7)
+        val start = weekStart(today)
+        val end = start.plusDays(6)
+        val count = done.count { !it.isBefore(start) && !it.isAfter(today) }
+        val first = if (today in done) today.plusDays(1) else today
+        val free = generateSequence(first) { it.plusDays(1) }.takeWhile { !it.isAfter(end) }.filter { it !in skipped }.toList()
+        val n = minOf((target - count).coerceAtLeast(0), free.size)
+        val slots = (0 until n).map { free[(2 * it + 1) * free.size / (2 * n)] }
+        return WeekPlan(count, target, slots, free.size)
+    }
+
+    /** True when a weekly activity's spread puts a session on [today]; other schedules: [isDue]. */
+    fun isPlannedFor(activity: Activity, done: Set<LocalDate>, skipped: Set<LocalDate>, today: LocalDate): Boolean =
+        if (activity.scheduleType == WEEKLY) today !in done && today in weekPlan(activity, done, skipped, today).slots
+        else isDue(activity, done, skipped, today)
+
+    /** "2/3 · next Thu", "1/3 · today", "0/3 · every day to Sun", "1/4 · 3 left, only 2 days". */
+    fun weekCaption(plan: WeekPlan, today: LocalDate): String {
+        val head = "${plan.count}/${plan.target}"
+        if (plan.remaining == 0) return "week done · $head"
+        if (plan.short) return if (plan.daysLeft == 0) "$head · short this week" else "$head · ${plan.remaining} left, only ${plan.daysLeft} day${if (plan.daysLeft == 1) "" else "s"}"
+        val next = plan.slots.first()
+        return when {
+            next == today && plan.tight && plan.remaining > 1 -> "$head · every day to Sun"
+            next == today && plan.tight -> "$head · last one today"
+            next == today -> "$head · today"
+            next == today.plusDays(1) -> "$head · next tomorrow"
+            else -> "$head · next ${next.dayOfWeek.name.take(1)}${next.dayOfWeek.name.substring(1, 3).lowercase()}"
+        }
+    }
+
+    /**
      * Today's line on the card: null when it's an ordinary due day, otherwise "rest day",
      * "2/3 this week", "week done" or "next in 2 days".
      */
@@ -112,11 +158,7 @@ object Schedule {
         if (today in skipped) return "skipped"
         return when (activity.scheduleType) {
             WEEKDAYS -> if (isScheduledDay(activity, today)) null else "rest day"
-            WEEKLY -> {
-                val target = activity.scheduleCount.coerceIn(1, 7)
-                val count = done.count { !it.isBefore(weekStart(today)) && !it.isAfter(today) }
-                if (count >= target) "week done · $count/$target" else "$count/$target this week"
-            }
+            WEEKLY -> weekCaption(weekPlan(activity, done, skipped, today), today)
             INTERVAL -> {
                 val interval = activity.scheduleCount.coerceAtLeast(1)
                 if (today in done) return null

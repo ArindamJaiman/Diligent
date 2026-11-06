@@ -157,15 +157,37 @@
     if (t === "interval") return schedCount(a) <= 1 ? "every day" : `every ${schedCount(a)} days`;
     return "every day";
   }
-  /** "rest day", "2/3 this week", "week done · 3/3", "next in 2 days", or null on an ordinary due day. */
+  /**
+   * Smart reschedule for "N× a week" (the app's Schedule.weekPlan): what's left of the target,
+   * spread evenly over the days left (today unless done, up to Sunday, skipped days left out),
+   * in the middle of equal shares, so a missed session pulls the next one onto today.
+   */
+  function weekPlan(a, date) {
+    const target = Math.min(7, schedCount(a)), start = weekStart(date), end = addDays(start, 6);
+    const count = doneThisWeek(a, date, true);
+    const free = [];
+    for (let d = doneOn(a, date) ? addDays(date, 1) : date; d <= end; d = addDays(d, 1)) if (!skipped(a, d)) free.push(d);
+    const remaining = Math.max(0, target - count), n = Math.min(remaining, free.length);
+    const slots = Array.from({ length: n }, (_, i) => free[Math.floor(((2 * i + 1) * free.length) / (2 * n))]);
+    return { count, target, remaining, slots, daysLeft: free.length, tight: remaining > 0 && remaining === free.length, short: remaining > free.length };
+  }
+  /** Weekly ones only on the days their sessions are spread to; the rest: isDue. */
+  const isPlannedFor = (a, date) => (schedType(a) === "weekly" ? !doneOn(a, date) && weekPlan(a, date).slots.includes(date) : isDue(a, date));
+  function weekCaption(p, date) {
+    const head = `${p.count}/${p.target}`;
+    if (!p.remaining) return `week done · ${head}`;
+    if (p.short) return p.daysLeft ? `${head} · ${p.remaining} left, only ${p.daysLeft} day${p.daysLeft === 1 ? "" : "s"}` : `${head} · short this week`;
+    const next = p.slots[0];
+    if (next === date) return p.tight ? (p.remaining > 1 ? `${head} · every day to Sun` : `${head} · last one today`) : `${head} · today`;
+    if (next === addDays(date, 1)) return `${head} · next tomorrow`;
+    return `${head} · next ${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][(parse(next).getDay() + 6) % 7]}`;
+  }
+  /** "rest day", "1/3 · next Thu", "week done · 3/3", "next in 2 days", or null on an ordinary due day. */
   function caption(a, date) {
     if (skipped(a, date)) return "skipped";
     const t = schedType(a);
     if (t === "weekdays") return isScheduledDay(a, date) ? null : "rest day";
-    if (t === "weekly") {
-      const target = Math.min(7, schedCount(a)), n = doneThisWeek(a, date, true);
-      return n >= target ? `week done · ${n}/${target}` : `${n}/${target} this week`;
-    }
+    if (t === "weekly") return weekCaption(weekPlan(a, date), date);
     if (t === "interval" && !doneOn(a, date)) {
       for (let k = 1; k < schedCount(a); k++) if (doneOn(a, addDays(date, -k))) {
         const left = schedCount(a) - k;
@@ -494,7 +516,7 @@
     state, uid, COLORS, today, iso, parse, addDays, range,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, emit, save,
     active, byId, rowOf, progressOf, met, credit, skipped, isLimit, dayShare, streak, bestStreak, strength,
-    isDue, neutral, describe, caption, streakUnit, pace, lifetime, isScheduledDay, weekStart, weekSummary, bestWeek, hoursOf, hoursOn, overallStreak, fmt, step,
+    isDue, neutral, describe, caption, weekPlan, isPlannedFor, streakUnit, pace, lifetime, isScheduledDay, weekStart, weekSummary, bestWeek, hoursOf, hoursOn, overallStreak, fmt, step,
     add, set, toggleDone, toggleSkip, note, upsertActivity, removeActivity, move, dayLog, setDayLog,
     parseQuick, runQuick, matchActivity, exportJson, importJson, exportCsv,
   };

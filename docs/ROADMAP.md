@@ -52,7 +52,10 @@ has shipped since the list was started.
 - [ ] **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard")
 - ✅ **Numeric journal fields** on the web (Settings → Journal fields): your own daily numbers in
   the day log, charted in Stats and included in What goes with your good days
-- [ ] **Smart reschedule:** a missed weekly target moves its remaining sessions into the days left
+- ✅ **Smart reschedule:** "N× a week" spreads what's left of the target evenly over the days
+  left; a missed session moves the next one onto today. Cards say "1/3 · next Thu", "0/3 ·
+  every day to Sun" or "3 left, only 2 days", and the planners (app and web) only bring a
+  weekly activity up on its days, first when it can't move
 - ~~**Undo snackbar** for every widget tap~~ dropped: the widget's − already undoes a +, and an
   extra control would crowd the small widget layouts
 - [ ] **Home-screen widget for one activity** with its own liquid fill, in Glance

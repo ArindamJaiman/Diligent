@@ -139,7 +139,8 @@
 
   /** Minutes still needed today: time units from the goal, other units get a 30-minute slot. */
   function remaining(a, date) {
-    if (S.isLimit(a) || S.met(a, date) || !S.isDue(a, date)) return 0;
+    // Weekly ("3× a week") ones come up on the days their sessions are spread to.
+    if (S.isLimit(a) || S.met(a, date) || !S.isPlannedFor(a, date)) return 0;
     const p = S.progressOf(date, a.id);
     if (a.unit === "hrs") return Math.max(0, (a.goal - p) * 60);
     if (a.unit === "mins") return Math.max(0, a.goal - p);
@@ -172,7 +173,9 @@
 
   /** Places what's left into free time; returns { placed, unplaced (minutes) }. */
   function autoPlan(date) {
-    const items = open(date).sort((x, y) => y.left - x.left);
+    // Weekly sessions that can't move to another day first, then the biggest.
+    const must = (a) => { if (a.scheduleType !== "weekly") return 0; const w = S.weekPlan(a, date); return w.tight || w.short ? 1 : 0; };
+    const items = open(date).sort((x, y) => must(y.a) - must(x.a) || y.left - x.left);
     let placed = 0, unplaced = 0;
     for (const it of items) {
       let left = Math.round(it.left / STEP) * STEP || STEP;

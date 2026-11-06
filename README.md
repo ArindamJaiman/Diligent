@@ -40,7 +40,7 @@ What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
 - Increment/decrement progress directly from widget
 - Mark activities complete with one tap
 - Daily goal tracking with completion percentages
-- **Schedules:** every day, chosen weekdays, N times a week or every N days; rest days and skipped days never break a streak, weekly targets count met weeks
+- **Schedules:** every day, chosen weekdays, N times a week or every N days; rest days and skipped days never break a streak, weekly targets count met weeks and spread the sessions left over the days left ("1/3 · next Thu"), moving them up when one is missed
 - **Goal types:** at least (reach it), at most (a limit, e.g. max 1 h of YouTube) and quit (days clean)
 - **Habit strength** (Loop-style 0–100%) next to the streak
 - **Year heatmap** per activity: tap any day to change its progress, mark it done, skip it, rate it 1–5 or add a note

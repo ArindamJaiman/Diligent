@@ -69,7 +69,55 @@ class TrackingTest {
         val summary = Tracking.summarize(weekly, progress(done), emptySet(), today, created)
         assertEquals(2, summary.streak.current)
         assertEquals("weeks", summary.streakUnit)
-        assertEquals("2/3 this week", summary.caption)
+        assertEquals("2/3 · next tomorrow", summary.caption)
+    }
+
+    // ─── Smart reschedule ───────────────────────────────────────
+
+    private val monday = LocalDate.of(2026, 10, 26)
+
+    @Test
+    fun `weekly sessions spread over the week with room to breathe`() {
+        val plan = Schedule.weekPlan(activity(Schedule.WEEKLY, count = 3), emptySet(), emptySet(), monday)
+        assertEquals(listOf(27, 29, 31), plan.slots.map { it.dayOfMonth }) // Tue, Thu, Sat
+        assertEquals("0/3 · next tomorrow", Schedule.weekCaption(plan, monday))
+        assertFalse(Schedule.isPlannedFor(activity(Schedule.WEEKLY, count = 3), emptySet(), emptySet(), monday))
+    }
+
+    @Test
+    fun `keeping to the spread keeps the same days`() {
+        val gym = activity(Schedule.WEEKLY, count = 3)
+        val wed = monday.plusDays(2)
+        // Tuesday done: Thu and Sat stay the plan.
+        assertEquals(listOf(29, 31), Schedule.weekPlan(gym, setOf(monday.plusDays(1)), emptySet(), wed).slots.map { it.dayOfMonth })
+        assertEquals("1/3 · next tomorrow", Schedule.caption(gym, setOf(monday.plusDays(1)), emptySet(), wed))
+        // Monday done: Wed and Sat.
+        assertEquals("1/3 · next Wed", Schedule.caption(gym, setOf(monday), emptySet(), monday))
+    }
+
+    @Test
+    fun `a missed session moves the rest into the days left, starting today`() {
+        val gym = activity(Schedule.WEEKLY, count = 3)
+        val wed = monday.plusDays(2)
+        val plan = Schedule.weekPlan(gym, emptySet(), emptySet(), wed)
+        assertEquals(listOf(28, 30, 1), plan.slots.map { it.dayOfMonth }) // Wed, Fri, Sun
+        assertEquals("0/3 · today", Schedule.weekCaption(plan, wed))
+        assertTrue(Schedule.isPlannedFor(gym, emptySet(), emptySet(), wed))
+    }
+
+    @Test
+    fun `tight and impossible weeks say so`() {
+        val gym = activity(Schedule.WEEKLY, count = 3)
+        val fri = monday.plusDays(4)
+        val tight = Schedule.weekPlan(gym, emptySet(), emptySet(), fri)
+        assertTrue(tight.tight)
+        assertEquals("0/3 · every day to Sun", Schedule.weekCaption(tight, fri))
+        val sat = monday.plusDays(5)
+        assertEquals("0/3 · 3 left, only 2 days", Schedule.caption(gym, emptySet(), emptySet(), sat))
+        // A skipped Sunday takes a day away.
+        assertEquals("1/3 · 2 left, only 1 day", Schedule.caption(gym, setOf(monday), setOf(sat.plusDays(1)), sat))
+        assertEquals("2/3 · last one today", Schedule.caption(gym, setOf(monday, fri), emptySet(), sat.plusDays(1)))
+        assertEquals("week done · 3/3", Schedule.caption(gym, setOf(monday, fri, sat), emptySet(), sat))
     }
 
     @Test

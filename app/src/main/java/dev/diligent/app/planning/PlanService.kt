@@ -114,11 +114,15 @@ class PlanService @Inject constructor(
         return EnergyView(todayLog?.sleepMinutes, nights.takeIf { it.isNotEmpty() }?.let { Energy.sleepDebt(it) }, peak, source)
     }
 
-    /** What's still to do today, as plannable minutes. Top 3 picks rank first. */
+    /**
+     * What's still to do today, as plannable minutes. Top 3 picks rank first, then weekly
+     * sessions that can't move to another day; weekly ones whose spread doesn't fall on today
+     * wait for their day.
+     */
     private suspend fun tasks(): List<PlanTask> {
         val picks = top3.todayIds()
         val today = repository.today()
-        return repository.openToday().mapNotNull { activity ->
+        return repository.planToday().mapNotNull { (activity, urgent) ->
             val done = repository.getProgressOn(activity.id, today)?.progress ?: 0f
             val minutes = remainingMinutes(activity, done)
             if (minutes <= 0) null
@@ -126,7 +130,7 @@ class PlanService @Inject constructor(
                 activityId = activity.id,
                 minutes = minutes,
                 deep = FocusMath.isTimeUnit(activity.unit) && (activity.dailyGoal >= 1f || activity.unit == "mins" && activity.dailyGoal >= 60f),
-                priority = if (activity.id in picks) 2 else 0
+                priority = if (activity.id in picks) 2 else if (urgent) 1 else 0
             )
         }
     }

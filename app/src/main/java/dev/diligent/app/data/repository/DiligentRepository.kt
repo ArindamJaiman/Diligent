@@ -317,6 +317,21 @@ class DiligentRepository @Inject constructor(
         }
     }
 
+    /**
+     * What to plan today: [openToday], except that "N× a week" activities only come up on the
+     * days their remaining sessions are spread to ([Schedule.weekPlan]). Paired with whether
+     * the day can't be moved (every day left this week is needed).
+     */
+    suspend fun planToday(): List<Pair<Activity, Boolean>> {
+        val today = DayClock.today()
+        return openToday().mapNotNull { activity ->
+            if (activity.scheduleType != Schedule.WEEKLY) return@mapNotNull activity to false
+            val days = split(dailyProgressDao.getHistorySnapshot(activity.id, daysAgo(14)))
+            val plan = Schedule.weekPlan(activity, days.completed, days.skipped, today)
+            if (today in plan.slots) activity to (plan.tight || plan.short) else null
+        }
+    }
+
     // ─── Statistics ─────────────────────────────────────────────
 
     /**
