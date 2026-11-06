@@ -464,6 +464,26 @@
             </intent-filter>
         </activity>
 
+        <!-- "Send clipboard" Quick Settings tile: the activity reads the clipboard once it has focus -->
+        <activity
+            android:name=".cloud.SendClipboardActivity"
+            android:exported="false"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:taskAffinity="dev.diligent.app.clipboard"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar" />
+
+        <service
+            android:name=".cloud.ClipboardTileService"
+            android:exported="true"
+            android:icon="@drawable/ic_notification"
+            android:label="@string/tile_clipboard_label"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter>
+                <action android:name="android.service.quicksettings.action.QS_TILE" />
+            </intent-filter>
+        </service>
+
         <!-- Launcher "Focus: …" shortcuts; acts only on intents with this install's token -->
         <activity
             android:name=".quicklog.ShortcutActivity"

@@ -24,7 +24,8 @@ through your Supabase project. Details: [docs/WEB.md](docs/WEB.md)
 ### Shared clipboard
 - Copy on one device, paste on another: phone (Hub → **Clipboard**), any browser running the web
   app, and everyone in a room with the same code
-- **Share → Diligent clipboard** from any Android app sends the text straight there
+- **Share → Diligent clipboard** from any Android app sends the text straight there, and the
+  **Send clipboard** Quick Settings tile sends whatever you just copied in one tap
 - The web app also shares images, takes `Ctrl V` anywhere on its Clipboard tab and drag & drop
 - Stored in your own Supabase project, scoped by your owner id or the room code; nothing
   polls in the background ([docs/CLOUD.md](docs/CLOUD.md#shared-clipboard))

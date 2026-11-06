@@ -16,8 +16,8 @@ has shipped since the list was started.
 
 ## Clipboard & cross-device
 
-- [ ] **Clipboard Quick Settings tile + widget:** send the phone clipboard in one tap; the
-  widget shows the newest clip with COPY
+- ✅ **Clipboard Quick Settings tile:** "Send clipboard" sends the phone clipboard in one tap
+- [ ] **Clipboard widget:** the newest clip on the home screen with COPY
 - [ ] **Auto-send on copy** (opt-in, foreground only: Android 10+ only lets the focused app read
   the clipboard) and a "copy on the laptop → notification on the phone" mode using Supabase
   Realtime instead of polling
@@ -34,7 +34,7 @@ has shipped since the list was started.
   match the app's activity model
 - [ ] **Supabase Realtime** for rooms and the clipboard (instant instead of 4–15 s polling)
 - [ ] **Plan view:** drag activity blocks onto a day timeline; import an .ics calendar
-- [ ] **Weekly review card** as a shareable PNG (canvas), like the app's Weekly Review
+- ✅ **Weekly review card** as a shareable PNG (Stats → Weekly card): download, share, copy or send to the clipboard
 - ✅ **Ambient sound** for focus (rain, brown noise, waves) generated with WebAudio
 - ✅ **Picture-in-picture timer** (Document PiP API) so the countdown floats over other windows
 - [ ] **Liquid avatars** in rooms: each member is a blob that grows while they focus

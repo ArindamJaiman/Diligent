@@ -570,6 +570,7 @@
     const restShare = last30.filter((d) => !good.includes(d) && S.dayShare(d) != null);
     const rs = restShare.length ? restShare.reduce((s, d) => s + S.dayShare(d), 0) / restShare.length : null;
     return `
+      <div class="row" style="margin-bottom:12px"><span class="label" style="margin:0">Your numbers</span><span class="spacer"></span><button class="btn ghost sm" id="weekly-card" data-cursor="share">Weekly card</button></div>
       <div class="grid tiles">${tiles.map(([v, l]) => `<div class="card tile spot"><b>${v}</b><span>${esc(l)}</span></div>`).join("")}</div>
       <div class="card spot" style="margin-top:16px"><p class="label">Last 12 months · share of goals hit <span class="grow"></span><span class="tiny">click a day to edit it</span></p><div class="heat" id="heat">${cells.join("")}</div></div>
       <div class="grid two" style="margin-top:16px">
@@ -583,7 +584,109 @@
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
+  // ─── Weekly card: a shareable PNG of the last 7 days ─
+  async function weeklyCanvas() {
+    const W = 1080, H = 1350;
+    const cs = getComputedStyle(document.documentElement), v = (n) => cs.getPropertyValue(n).trim();
+    const bg = v("--bg") || "#000", fg = v("--text") || "#fff", dim = v("--dim") || "#888", good = v("--good") || "#4ade80";
+    await Promise.all(["900 80px Doto", "400 80px UnifrakturMaguntia", "400 20px 'Space Mono'", "700 20px 'Space Mono'"].map((f) => document.fonts.load(f).catch(() => {})));
+    const cv = document.createElement("canvas"); cv.width = W; cv.height = H;
+    const g = cv.getContext("2d");
+    const t = S.today(), days = S.range(S.addDays(t, -6), t), acts = S.active();
+    const shares = days.map((d) => S.dayShare(d) || 0);
+    const weekShare = shares.reduce((a, b) => a + b, 0) / 7;
+    const hours = days.reduce((n, d) => n + S.hoursOn(d), 0);
+    const perfect = shares.filter((x) => x >= 0.999).length;
+    const best = acts.map((a) => ({ a, s: S.streak(a) })).sort((x, y) => y.s - x.s)[0];
+    const spaced = (txt, x, y, px) => { g.letterSpacing = px + "px"; g.fillText(txt, x, y); g.letterSpacing = "0px"; };
+
+    g.fillStyle = bg; g.fillRect(0, 0, W, H);
+    // liquid at the bottom, as high as the week went
+    const level = H - 120 - weekShare * 380;
+    for (const [alpha, amp, phase] of [[0.1, 22, 0], [0.06, 30, 1.7]]) {
+      g.beginPath(); g.moveTo(0, H);
+      for (let x = 0; x <= W; x += 10) g.lineTo(x, level + Math.sin(x / 120 + phase) * amp);
+      g.lineTo(W, H); g.closePath();
+      g.globalAlpha = alpha; g.fillStyle = fg; g.fill(); g.globalAlpha = 1;
+    }
+    // dot grain
+    g.fillStyle = fg; g.globalAlpha = 0.05;
+    for (let y = 0; y < H; y += 12) for (let x = 0; x < W; x += 12) g.fillRect(x, y, 1.5, 1.5);
+    g.globalAlpha = 1;
+
+    g.fillStyle = fg; g.font = "400 104px UnifrakturMaguntia"; g.fillText("Diligent", 80, 170);
+    const fmtDay = (d) => S.parse(d).toLocaleDateString(undefined, { day: "numeric", month: "short" }).toUpperCase();
+    g.fillStyle = dim; g.font = "700 26px Doto"; spaced(`WEEK · ${fmtDay(days[0])} – ${fmtDay(t)}`, 84, 225, 6);
+
+    g.fillStyle = fg; g.font = "900 230px Doto"; g.fillText(hours >= 100 ? Math.round(hours) : hours.toFixed(1), 70, 470);
+    g.fillStyle = dim; g.font = "700 26px Doto"; spaced("HOURS LOGGED", 84, 520, 6);
+
+    const stats = [[Math.round(weekShare * 100) + "%", "GOALS HIT"], [perfect + "/7", "PERFECT DAYS"], [best && best.s ? best.s + "d" : "–", best && best.s ? best.a.name.toUpperCase().slice(0, 14) : "STREAK"]];
+    stats.forEach(([val, label], i) => {
+      const x = 84 + i * 320;
+      g.fillStyle = fg; g.font = "900 84px Doto"; g.fillText(val, x, 650);
+      g.fillStyle = dim; g.font = "700 20px Doto"; spaced(label, x + 4, 690, 4);
+    });
+
+    // seven liquid dots
+    days.forEach((d, i) => {
+      const cx = 84 + 66 + i * 132, cy = 800, r = 52;
+      g.save(); g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.clip();
+      g.fillStyle = shares[i] >= 0.999 ? good : fg; g.globalAlpha = shares[i] >= 0.999 ? 0.9 : 0.75;
+      g.fillRect(cx - r, cy + r - shares[i] * 2 * r, 2 * r, shares[i] * 2 * r);
+      g.restore();
+      g.strokeStyle = fg; g.globalAlpha = 0.35; g.lineWidth = 2; g.beginPath(); g.arc(cx, cy, r, 0, Math.PI * 2); g.stroke(); g.globalAlpha = 1;
+      g.fillStyle = dim; g.font = "700 22px Doto"; g.textAlign = "center";
+      g.fillText(S.parse(d).toLocaleDateString(undefined, { weekday: "short" }).toUpperCase(), cx, cy + r + 40);
+      g.textAlign = "left";
+    });
+
+    // activities
+    const rows = acts.map((a) => ({ a, c: days.reduce((n, d) => n + (S.skipped(a, d) ? 0 : S.credit(a, d)), 0) / 7, total: days.reduce((n, d) => n + S.progressOf(d, a.id), 0) }))
+      .sort((x, y) => y.c - x.c).slice(0, 5);
+    rows.forEach(({ a, c, total }, i) => {
+      const y = 960 + i * 62;
+      g.fillStyle = a.color; g.beginPath(); g.arc(92, y - 8, 8, 0, Math.PI * 2); g.fill();
+      g.fillStyle = fg; g.font = "700 26px 'Space Mono'"; g.fillText(a.name.slice(0, 22), 116, y);
+      g.fillStyle = fg; g.globalAlpha = 0.12; g.fillRect(560, y - 18, 300, 12); g.globalAlpha = 1;
+      g.fillStyle = a.color; g.fillRect(560, y - 18, 300 * c, 12);
+      g.fillStyle = dim; g.font = "400 22px 'Space Mono'"; g.textAlign = "right"; g.fillText(S.fmt(a, total), W - 84, y); g.textAlign = "left";
+    });
+
+    g.fillStyle = dim; g.font = "700 20px Doto"; spaced("TRACK YOUR DISCIPLINE · BUILD CONSISTENCY", 84, H - 60, 5);
+    return cv;
+  }
+  async function openWeeklyCard() {
+    let cv;
+    try { cv = await weeklyCanvas(); } catch (e) { return toast("Couldn't draw the card: " + e.message); }
+    const blob = await new Promise((r) => cv.toBlob(r, "image/png"));
+    const url = URL.createObjectURL(blob);
+    let dlg = $("#card-dialog");
+    if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "card-dialog"; document.body.appendChild(dlg); }
+    dlg.innerHTML = `<p class="label">Weekly card</p><img src="${url}" alt="Your week" style="width:100%;border-radius:14px;border:1px solid var(--border)">
+      <div class="row" style="margin-top:14px"><button class="btn" data-c="dl">Download</button>
+      ${navigator.canShare && navigator.canShare({ files: [new File([blob], "x.png", { type: "image/png" })] }) ? `<button class="btn ghost" data-c="share">Share</button>` : ""}
+      <button class="btn ghost" data-c="copy">Copy</button><button class="btn ghost" data-c="clip" title="Send it to the shared clipboard">To clipboard</button>
+      <span class="spacer"></span><button class="btn ghost sm" data-c="close">Close</button></div>`;
+    const name = `diligent-week-${S.today()}.png`;
+    dlg.onclick = async (e) => {
+      const b = e.target.closest("[data-c]"); if (!b) { if (e.target === dlg) dlg.close(); return; }
+      const c = b.dataset.c;
+      if (c === "dl") { const a = document.createElement("a"); a.href = url; a.download = name; a.click(); }
+      else if (c === "share") navigator.share({ files: [new File([blob], name, { type: "image/png" })], title: "My week on Diligent" }).catch(() => {});
+      else if (c === "copy") { try { await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]); toast("Copied"); } catch { toast("Couldn't copy here"); } }
+      else if (c === "clip") {
+        const scope = state.settings.clipScope || (C.ready() ? "mine" : "local");
+        try { await C.pushClip(scope, await imageToDataUrl(new File([blob], name, { type: "image/png" })), "image"); toast("Sent to the clipboard"); } catch (err) { toast(err.message, 4000); }
+      }
+      else if (c === "close") dlg.close();
+    };
+    dlg.addEventListener("close", () => setTimeout(() => URL.revokeObjectURL(url), 1000), { once: true });
+    dlg.showModal();
+  }
+
   function statsAfter() {
+    const wc = $("#weekly-card"); if (wc) wc.onclick = openWeeklyCard;
     const h = $("#heat"); if (!h) return;
     h.scrollLeft = h.scrollWidth;
     h.onclick = (e) => { const c = e.target.closest("[data-date]"); if (c) { viewDate = c.dataset.date; go("today"); } };
@@ -946,6 +1049,7 @@ create policy clips on diligent_clips for all
       { icon: "⟳", label: "Sync now", run: () => C.sync().then((m) => toast("Synced · " + m)).catch((e) => toast(e.message)) },
       { icon: "⎘", label: "Send my clipboard to my devices", run: async () => { try { const t = await navigator.clipboard.readText(); await C.pushClip(C.ready() ? "mine" : "local", t); toast("Sent"); } catch (e) { toast(e.message || "Clipboard blocked"); } } },
       { icon: "❝", label: "Next quote", run: () => { nextQuote(); if (view === "today") render(false); } },
+      { icon: "▣", label: "Weekly card (share your week as an image)", run: openWeeklyCard },
       { icon: "⤓", label: "Export backup", run: () => download(`diligent-web-${S.today()}.json`, S.exportJson(), "application/json") },
       { icon: "?", label: "Keyboard shortcuts", key: "?", run: () => $("#keys").showModal() },
     ];

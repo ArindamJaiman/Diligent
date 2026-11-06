@@ -79,6 +79,12 @@ try {
 
   await blur(a);
   await a.keyboard.press("3");
+  await a.click("#weekly-card");
+  await a.waitForSelector("#card-dialog[open] img");
+  const card = await a.evaluate(async () => { const img = document.querySelector("#card-dialog img"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });
+  check(card[0] === 1080 && card[1] === 1350, "weekly card renders a 1080×1350 PNG");
+  await a.screenshot({ path: process.env.CARD_SHOT || "/dev/null" }).catch(() => {});
+  await a.click('#card-dialog [data-c="close"]');
   await a.locator("#heat i").nth(-2).click();
   check(await a.evaluate(() => location.hash) === "#today" && (await a.locator(".daynav h3").innerText()) !== "TODAY", "heatmap opens a past day");
 

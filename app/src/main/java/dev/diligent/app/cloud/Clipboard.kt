@@ -1,11 +1,14 @@
 package dev.diligent.app.cloud
 
+import android.annotation.SuppressLint
+import android.app.PendingIntent
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.os.Build
 import android.os.Bundle
+import android.service.quicksettings.TileService
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.compose.foundation.clickable
@@ -162,6 +165,59 @@ class ShareToClipboardActivity : ComponentActivity() {
     }
 }
 
+/**
+ * Sends what's on the phone's clipboard to your devices. Android 10+ only lets the app in
+ * focus read the clipboard, so the Quick Settings tile opens this invisible activity, which
+ * reads it as soon as it has focus, sends it and closes.
+ */
+class SendClipboardActivity : ComponentActivity() {
+    private var sent = false
+
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (!hasFocus || sent) return
+        sent = true
+        val app = applicationContext
+        val manager = getSystemService(ClipboardManager::class.java)
+        val text = manager?.primaryClip?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.coerceToText(this)?.toString()
+        if (text.isNullOrBlank()) {
+            Toast.makeText(app, "The clipboard is empty", Toast.LENGTH_SHORT).show()
+            finish()
+            return
+        }
+        val service = EntryPointAccessors.fromApplication(app, ClipboardEntryPoint::class.java).clipboard()
+        lifecycleScope.launch {
+            val result = runCatching { service.push(text) }
+            Toast.makeText(
+                app,
+                result.fold({ "Sent to your devices: " + text.take(40) }, { it.message ?: "Couldn't send" }),
+                Toast.LENGTH_SHORT
+            ).show()
+            finish()
+        }
+    }
+
+    companion object {
+        fun intent(context: Context): Intent =
+            Intent(context, SendClipboardActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
+    }
+}
+
+/** Quick Settings tile: one tap sends the phone's clipboard to your other devices. */
+class ClipboardTileService : TileService() {
+    @SuppressLint("StartActivityAndCollapseDeprecated")
+    override fun onClick() {
+        val intent = SendClipboardActivity.intent(this)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            startActivityAndCollapse(PendingIntent.getActivity(this, 1, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(intent)
+        }
+    }
+}
+
 // ─── Screen ─────────────────────────────────────────────────────
 
 @HiltViewModel
@@ -284,6 +340,7 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
         if (clips.isEmpty()) ToolNote("Nothing yet. Send something here, from the web app, or share text to Diligent from any app.")
         clips.forEach { clip -> ClipCard(clip, onCopy = { viewModel.copy(clip) }, onDelete = { viewModel.delete(clip) }) }
         if (clips.isNotEmpty()) ToolButton("CLEAR ALL", Modifier.fillMaxWidth(), outlined = true) { viewModel.clear() }
+        ToolNote("Tip: add the \"Send clipboard\" Quick Settings tile to send whatever you copied in one tap.")
         ToolNote("Refreshes every 10 s while this screen is open; nothing runs in the background. Clips are capped at ${ClipboardService.MAX_CHARS} characters and the newest ${ClipboardService.LIMIT} are shown.")
     }
 }
