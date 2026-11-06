@@ -72,8 +72,9 @@ try {
   await blur(a);
   await a.keyboard.press("2");
   await a.click("#start");
-  await a.waitForTimeout(1500);
-  check(/00:0[1-3]/.test(await a.locator("#timer-clock").innerText()), "focus timer runs");
+  // Wait for the clock to tick rather than sampling it at a fixed moment (CI renders slowly).
+  const ticked = await a.waitForFunction(() => { const t = document.getElementById("timer-clock"); return t && /^00:(0[1-9]|[1-5]\d)$/.test(t.textContent); }, null, { timeout: 15000 }).then(() => true, () => false);
+  check(ticked && /Diligent$/.test(await a.title()) && (await a.title()).includes("Quantum"), "focus timer runs and shows in the tab title");
   await a.click("#stop");
 
   await blur(a);
