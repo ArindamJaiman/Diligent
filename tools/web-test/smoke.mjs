@@ -231,6 +231,23 @@ try {
   check(db.tables.diligent_presence.some((r) => r.room === "SMOKE1"), "joining a room publishes presence");
   check(await a.locator(".pool .mblob:not(.core)").count() >= 1, "room members show as liquid blobs");
 
+  // Challenges: start one from a template, a second device joins with the code, both on the board
+  await a.click('[data-tpl="1"]');
+  check((await a.inputValue("#ch-kw")) === "Quantum", "a challenge template fills the form");
+  await a.click("#ch-create");
+  await a.waitForFunction(() => (Diligent.store.state.challenges || []).length === 1, null, { timeout: 8000 });
+  const chCode = await a.evaluate(() => Diligent.store.state.challenges[0].code);
+  await b.evaluate(() => { Diligent.store.state.settings.name = "Friend"; Diligent.store.save(); });
+  await blur(b);
+  await b.keyboard.press("6");
+  await b.fill("#ch-code", chCode);
+  await b.click("#ch-join");
+  await b.waitForFunction(() => document.querySelectorAll(".challenge .stand").length >= 1, null, { timeout: 8000 }).catch(() => {});
+  // Both test devices share one owner id, so they are one member with one score row (like the app).
+  const rows = db.tables.diligent_scores.filter((r) => r.code === chCode);
+  check(rows.length === 1 && rows[0].total === 2 && await b.evaluate((c) => Diligent.store.state.challenges.some((x) => x.code === c), chCode)
+    && await b.locator(".challenge .stand").count() === 1, `a second device joins by code and the board shows the Quantum total (${rows.length} row, total ${rows[0] && rows[0].total})`);
+
   // Room passphrase: room clips are encrypted with it
   await a.fill("#room-pass", "room secret");
   await a.click("#room-pass-save");

@@ -1110,7 +1110,79 @@
 
   // ─── Room ────────────────────────────────────────────
   let roomMembers = [], roomError = "", roomFetched = "", roomFetchedAt = 0;
-  function roomView() {
+
+  // ─── Challenges (Room tab) ───────────────────────────
+  let boards = {}, boardsAt = 0, chPick = null, myMember = "";
+  function challengesSection() {
+    if (!C.ready()) return "";
+    const list = state.challenges || [];
+    const t = S.today();
+    const cards = list.map((c) => {
+      const rows = boards[c.code] || [];
+      const max = Math.max(c.target, ...rows.map((r) => r.total || 0)) || 1;
+      const left = Math.max(0, Math.round((S.parse(c.end) - S.parse(t)) / 864e5));
+      const span = Math.max(1, Math.round((S.parse(c.end) - S.parse(c.start)) / 864e5) + 1);
+      const pace = c.target * Math.min(1, (span - left) / span); // a straight line to the target
+      return `<div class="card spot challenge">
+        <div class="row"><b style="flex:1">${esc(c.title)}</b><span class="code-chip" title="Share this code">${esc(c.code)}</span></div>
+        <div class="tiny">“${esc(c.keyword)}” · ${esc(String(c.target))} ${esc(c.unit)} · ${esc(c.start)} → ${esc(c.end)} · ${c.end < t ? "finished" : left === 0 ? "last day" : left + " days left"}</div>
+        <div class="standings">${rows.length ? rows.map((r, i) => `<div class="stand${r.member === myMember ? " me" : ""}">
+            <span class="pos">${i + 1}</span><span class="nm">${esc(r.name)}</span>
+            <div class="sbar"><i style="width:${Math.min(100, (r.total / max) * 100)}%"></i><b style="left:${Math.min(100, (c.target / max) * 100)}%" title="Target"></b><em style="left:${Math.min(100, (pace / max) * 100)}%" title="On pace today: ${pace.toFixed(1)}"></em></div>
+            <span class="tot${r.total >= c.target ? " done" : ""}">${(+r.total).toFixed(1)}</span></div>`).join("") : `<p class="tiny">Loading the leaderboard…</p>`}</div>
+        <div class="row" style="margin-top:8px"><button class="btn ghost sm" data-ch-copy="${esc(c.code)}">Copy code</button><span class="spacer"></span><button class="btn danger sm" data-ch-leave="${esc(c.code)}">Leave</button></div>
+      </div>`;
+    }).join("");
+    const p = chPick || {};
+    return `<p class="label" style="margin-top:28px">Challenges</p>
+      <div class="grid challenges">${cards || ""}</div>
+      ${cards ? `<p class="tiny" style="margin-top:6px">Orange: the target. Faint line: where a steady pace would put you today.</p>` : ""}
+      <div class="grid two" style="margin-top:16px">
+        <div class="card spot"><p class="label">Start one</p>
+          <div class="row" style="gap:6px">${C.CHALLENGE_TEMPLATES.map((tp, i) => `<button class="btn ghost sm${p.title === tp.title ? " picked" : ""}" data-tpl="${i}">${esc(tp.title)}</button>`).join("")}</div>
+          <label class="field" for="ch-title">Title</label><input id="ch-title" value="${esc(p.title || "")}" placeholder="Quantum 100 h in November">
+          <div class="row" style="align-items:flex-end">
+            <div style="flex:2"><label class="field" for="ch-kw">Counts activities named…</label><input id="ch-kw" value="${esc(p.keyword || "")}" placeholder="Quantum"></div>
+            <div style="flex:1"><label class="field" for="ch-target">Target</label><input id="ch-target" type="number" min="1" value="${esc(p.target || "")}"></div>
+            <div style="flex:1"><label class="field" for="ch-unit">Unit</label><select id="ch-unit">${["hrs", "mins", "qs", "units"].map((u) => `<option ${(p.unit || "hrs") === u ? "selected" : ""}>${u}</option>`).join("")}</select></div>
+          </div>
+          <div class="row" style="margin-top:12px"><div class="seg" id="ch-days">${[7, 14, 30, 90].map((d) => `<button data-v="${d}" class="${(p.days || 30) === d ? "on" : ""}">${d} days</button>`).join("")}</div><span class="spacer"></span><button class="btn" id="ch-create">Create</button></div>
+          <p class="tiny">Everyone's total counts their own activities whose names contain the keyword, between the dates, in their own units. Phone and web share the leaderboard.</p>
+        </div>
+        <div class="card spot"><p class="label">Join one</p>
+          <div class="row"><input id="ch-code" placeholder="CHALLENGE CODE" maxlength="12" style="flex:1;text-transform:uppercase;letter-spacing:.2em"><button class="btn" id="ch-join">Join</button></div>
+          <p class="tiny">Codes come from whoever started it, in the app (Hub → Challenges) or here.</p>
+        </div>
+      </div>`;
+  }
+  async function loadBoards() {
+    boardsAt = Date.now();
+    try { myMember = await C.memberId(); boards = await C.standings(); } catch {}
+    if (view === "room") render(false);
+  }
+  function challengesAfter() {
+    if (!C.ready()) return;
+    const readPick = () => ({ title: $("#ch-title").value, keyword: $("#ch-kw").value, target: $("#ch-target").value, unit: $("#ch-unit").value, days: chPick && chPick.days || 30 });
+    $$("[data-tpl]").forEach((b) => b.onclick = () => { chPick = Object.assign({}, C.CHALLENGE_TEMPLATES[+b.dataset.tpl]); render(false); });
+    $("#ch-days").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; chPick = Object.assign(readPick(), { days: +b.dataset.v }); render(false); };
+    $("#ch-create").onclick = async () => {
+      const p = readPick();
+      if (!p.title.trim() || !p.keyword.trim() || !(+p.target > 0)) return toast("Add a title, a keyword and a target");
+      try { const c = await C.createChallenge(p); chPick = null; toast(`Started · share code ${c.code}`, 4000); bloop("win"); } catch (e) { toast(e.message, 4000); }
+      loadBoards();
+    };
+    $("#ch-join").onclick = async () => {
+      const code = $("#ch-code").value.trim(); if (code.length < 4) return toast("Codes are at least 4 characters");
+      try { const c = await C.joinChallenge(code); toast(c ? `Joined ${c.title}` : "No challenge with that code"); } catch (e) { toast(e.message, 4000); }
+      loadBoards();
+    };
+    $$("[data-ch-copy]").forEach((b) => b.onclick = async () => { await copyText(b.dataset.chCopy); toast("Code copied"); });
+    $$("[data-ch-leave]").forEach((b) => b.onclick = () => { if (confirm("Leave this challenge? Your score stays on the board.")) { C.leaveChallenge(b.dataset.chLeave); render(false); } });
+    if ((state.challenges || []).length && Date.now() - boardsAt > 4000) loadBoards();
+  }
+
+  function roomView() { return roomCore() + challengesSection(); }
+  function roomCore() {
     if (!C.ready()) return `<div class="card spot"><p class="label">Study room</p><p>Rooms live in your own Supabase project, the same one the app uses.</p><button class="btn" onclick="location.hash='#settings'">Set up cloud</button></div>`;
     const room = state.cloud.room;
     if (!room) return `<div class="card spot" style="max-width:560px"><p class="label">Study room</p><h2 class="title">Focus together</h2>
@@ -1166,6 +1238,7 @@
     if (view === "room") render(false);
   }
   function roomAfter() {
+    challengesAfter();
     const join = (code) => { code = code.trim().toUpperCase(); if (code.length < 4) return toast("Codes are at least 4 characters"); state.cloud.room = code; S.save(); roomMembers = []; render(false); refreshRoom(); };
     const j = $("#room-join"); if (j) { j.onclick = () => join($("#room-code").value); $("#room-code").onkeydown = (e) => { if (e.key === "Enter") join(e.target.value); }; }
     const n = $("#room-new"); if (n) n.onclick = () => join(C.newCode());

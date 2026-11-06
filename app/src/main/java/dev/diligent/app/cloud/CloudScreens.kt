@@ -318,6 +318,7 @@ fun ChallengesScreen(onBack: () -> Unit, viewModel: ChallengesViewModel = hiltVi
     var keyword by remember { mutableStateOf("") }
     var target by remember { mutableStateOf("") }
     var days by remember { mutableIntStateOf(30) }
+    var unit by remember { mutableStateOf("units") }
     ToolScaffold(title = "Challenges", onBack = onBack, messages = viewModel.messages) {
         if (!viewModel.ready) {
             ToolCard { Text("Set up Supabase in Hub → Cloud first; challenges live in your project.", style = toolLabel(11.sp), color = DiligentColors.White) }
@@ -348,6 +349,18 @@ fun ChallengesScreen(onBack: () -> Unit, viewModel: ChallengesViewModel = hiltVi
         }
         ToolSection("START ONE")
         ToolCard {
+            Text("Templates", style = toolLabel(10.sp), color = DiligentColors.Gray600)
+            Spacer(Modifier.height(6.dp))
+            ChallengeTemplates.ALL.chunked(2).forEach { row ->
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    row.forEach { t ->
+                        ToolChip(t.title.uppercase(), title == t.title) {
+                            title = t.title; keyword = t.keyword; target = t.target.toInt().toString(); unit = t.unit; days = t.days
+                        }
+                    }
+                }
+                Spacer(Modifier.height(6.dp))
+            }
             ToolField(title, { title = it }, "e.g. Quantum 100 h in November", Modifier.fillMaxWidth())
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -356,11 +369,11 @@ fun ChallengesScreen(onBack: () -> Unit, viewModel: ChallengesViewModel = hiltVi
             }
             Spacer(Modifier.height(6.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(7, 30, 90).forEach { d -> ToolChip("$d DAYS", days == d) { days = d } }
+                (listOf(7, 14, 30, 90) + listOf(days)).distinct().sorted().forEach { d -> ToolChip("$d DAYS", days == d) { days = d } }
             }
             Spacer(Modifier.height(8.dp))
             ToolButton("CREATE", Modifier.fillMaxWidth(), enabled = title.isNotBlank() && keyword.isNotBlank() && target.toDoubleOrNull() != null) {
-                viewModel.create(title, keyword, target.toDouble(), "units", days)
+                viewModel.create(title, keyword, target.toDouble(), unit, days)
             }
             ToolNote("Everyone's total counts their own activities whose names contain the keyword, in their own units. Scores update when you open this screen or at the nightly sync.")
         }

@@ -3,13 +3,14 @@
 import http from "node:http";
 import crypto from "node:crypto";
 
-const KEYS = { diligent_days: ["owner", "date", "activity"], diligent_clips: ["scope", "id"], diligent_presence: ["room", "member"] };
+const KEYS = { diligent_days: ["owner", "date", "activity"], diligent_clips: ["scope", "id"], diligent_presence: ["room", "member"], diligent_challenges: ["code"], diligent_scores: ["code", "member"] };
 
 function allowed(table, row, h) {
   const owner = h["x-diligent-owner"] || "", room = h["x-diligent-room"] || "";
   if (table === "diligent_days") return row.owner === owner;
   if (table === "diligent_clips") return row.scope.length > 5 && (row.scope === owner || row.scope === "room:" + room);
   if (table === "diligent_presence") return row.room === room;
+  if (table === "diligent_challenges" || table === "diligent_scores") return row.code === room;
   return true;
 }
 

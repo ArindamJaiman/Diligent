@@ -58,6 +58,20 @@ data class Challenge(
 
 data class Standing(val name: String, val total: Double)
 
+/** A ready-made challenge; the keyword matches activity names, as in [Challenge]. Same list on the web. */
+data class ChallengeTemplate(val title: String, val keyword: String, val target: Double, val unit: String, val days: Int)
+
+object ChallengeTemplates {
+    val ALL = listOf(
+        ChallengeTemplate("LeetCode 30", "LeetCode", 60.0, "qs", 30),
+        ChallengeTemplate("Quantum 100 h", "Quantum", 100.0, "hrs", 30),
+        ChallengeTemplate("Deep work week", "Coding", 25.0, "hrs", 7),
+        ChallengeTemplate("Gym 12", "Gym", 12.0, "hrs", 30),
+        ChallengeTemplate("Reading 20 h", "Reading", 20.0, "hrs", 30),
+        ChallengeTemplate("Papers sprint", "Research", 10.0, "hrs", 14)
+    )
+}
+
 @Serializable
 private data class SocialData(val room: String = "", val challenges: List<Challenge> = emptyList())
 

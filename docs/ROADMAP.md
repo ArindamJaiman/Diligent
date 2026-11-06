@@ -72,7 +72,8 @@ has shipped since the list was started.
 ## Social
 
 - [ ] **Room chat** (short messages, gone after 24 h) and nudges ("ping Alex to focus")
-- [ ] **Challenge templates:** 30-day LeetCode, 100 h quantum, 5 AM club
+- ✅ **Challenge templates** (LeetCode 30, Quantum 100 h, Deep work week, Gym 12, Reading 20 h,
+  Papers sprint) in the app, and **challenges on the web** (Room tab) sharing the app's leaderboard
 - [ ] **Public profile page** (opt-in): heatmap + streaks as a static page on GitHub Pages
 
 ## Platform

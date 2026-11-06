@@ -322,6 +322,69 @@
     return rows.map((r) => ({ name: r.name || "?", activity: r.activity, since: r.started_at, until: r.until_at, broken: !!r.broken, updatedAt: r.updated_at }));
   }
 
+
+  // ─── Challenges (the app's SocialService, same tables and scoring) ─
+  // A challenge's code is its shared secret (x-diligent-room). Your total counts every activity
+  // whose name contains the keyword, between its dates, in your own units.
+  const CHALLENGE_TEMPLATES = [ // same list as the app's ChallengeTemplates
+    { title: "LeetCode 30", keyword: "LeetCode", target: 60, unit: "qs", days: 30 },
+    { title: "Quantum 100 h", keyword: "Quantum", target: 100, unit: "hrs", days: 30 },
+    { title: "Deep work week", keyword: "Coding", target: 25, unit: "hrs", days: 7 },
+    { title: "Gym 12", keyword: "Gym", target: 12, unit: "hrs", days: 30 },
+    { title: "Reading 20 h", keyword: "Reading", target: 20, unit: "hrs", days: 30 },
+    { title: "Papers sprint", keyword: "Research", target: 10, unit: "hrs", days: 14 },
+  ];
+  const challengeList = () => (S.state.challenges ||= []);
+  const codeHeaders = (code) => ({ "x-diligent-room": code });
+  function challengeTotal(c) {
+    const kw = (c.keyword || "").toLowerCase();
+    const ids = S.state.activities.filter((a) => a.name.toLowerCase().includes(kw)).map((a) => a.id);
+    const end = c.end < S.today() ? c.end : S.today();
+    let n = 0;
+    for (const d of S.range(c.start, end)) for (const id of ids) n += S.progressOf(d, id);
+    return Math.round(n * 100) / 100;
+  }
+  async function pushScore(c) {
+    await rest("diligent_scores?on_conflict=code,member", {
+      method: "POST", headers: codeHeaders(c.code), prefer: "resolution=merge-duplicates,return=minimal",
+      body: [{ code: c.code, member: await memberId(), name: S.state.settings.name || "Me", total: challengeTotal(c), updated_at: Date.now() }],
+    });
+  }
+  async function createChallenge({ title, keyword, target, unit, days }) {
+    if (!ready()) throw new Error("Add your Supabase project in Settings first");
+    const t = S.today();
+    const c = { code: newCode(), title: title.trim(), keyword: keyword.trim(), target: +target, unit: unit || "units", start: t, end: S.addDays(t, Math.max(1, +days) - 1) };
+    await rest("diligent_challenges?on_conflict=code", {
+      method: "POST", headers: codeHeaders(c.code), prefer: "resolution=merge-duplicates,return=minimal",
+      body: [{ code: c.code, title: c.title, keyword: c.keyword, target: c.target, unit: c.unit, start_date: c.start, end_date: c.end }],
+    });
+    challengeList().push(c);
+    S.save();
+    await pushScore(c);
+    return c;
+  }
+  async function joinChallenge(code) {
+    code = code.trim().toUpperCase();
+    const rows = await rest(`diligent_challenges?code=eq.${encodeURIComponent(code)}&select=*`, { headers: codeHeaders(code) });
+    const r = rows[0];
+    if (!r) return null;
+    const c = { code, title: r.title || code, keyword: r.keyword || "", target: +r.target || 0, unit: r.unit || "hrs", start: r.start_date || S.today(), end: r.end_date || S.today() };
+    S.state.challenges = challengeList().filter((x) => x.code !== code).concat(c);
+    S.save();
+    await pushScore(c);
+    return c;
+  }
+  function leaveChallenge(code) { S.state.challenges = challengeList().filter((x) => x.code !== code); S.save(); }
+  /** Pushes your score for every running challenge, then reads each leaderboard. */
+  async function standings() {
+    const out = {};
+    for (const c of challengeList()) {
+      if (c.end >= S.addDays(S.today(), -1)) await pushScore(c).catch(() => {});
+      out[c.code] = await rest(`diligent_scores?code=eq.${encodeURIComponent(c.code)}&select=name,total,member&order=total.desc`, { headers: codeHeaders(c.code) }).catch(() => []);
+    }
+    return out;
+  }
+
   async function leaveRoom() {
     const room = (cfg().room || "").toUpperCase();
     if (ready() && room) {
@@ -336,6 +399,7 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
+    CHALLENGE_TEMPLATES, createChallenge, joinChallenge, leaveChallenge, standings, challengeTotal,
     watch, scopeKey, liveState: () => live.state, encrypting: (scope) => !!passphrase(scope || "mine"),
   };
 })();

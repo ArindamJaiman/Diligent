@@ -377,6 +377,23 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .member.on .avatar::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 1px solid var(--good); animation: ring 2s var(--ease) infinite; }
 @keyframes ring { from { transform: scale(0.9); opacity: 0.8; } to { transform: scale(1.35); opacity: 0; } }
 .code { font: 900 40px/1 var(--font-dot); letter-spacing: 0.2em; }
+.challenges { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
+.sbar em { position: absolute; top: -2px; width: 2px; height: 12px; margin-left: -1px; background: var(--text); opacity: 0.35; border-radius: 1px; }
+.challenge .standings { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }
+.stand { display: grid; grid-template-columns: 18px 90px 1fr 46px; align-items: center; gap: 8px; font-size: 12px; }
+.stand .pos { font: 700 11px/1 var(--font-dot); color: var(--dim); }
+.stand .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stand.me .nm { font-weight: 700; }
+.sbar { position: relative; height: 8px; border-radius: 99px; background: var(--raise); }
+.sbar i { display: block; height: 100%; border-radius: 99px; background: var(--dim); transition: width 1s var(--spring); }
+.stand.me .sbar i { background: var(--good); }
+.stand:first-child .sbar i { background: var(--text); }
+.stand.me:first-child .sbar i { background: var(--good); }
+.sbar b { position: absolute; top: -3px; width: 2px; height: 14px; margin-left: -1px; background: var(--warn); border-radius: 1px; }
+.stand .tot { text-align: right; font: 700 12px/1 var(--font-dot); }
+.stand .tot.done { color: var(--good); }
+.code-chip { font: 900 13px/1 var(--font-dot); letter-spacing: 0.2em; padding: 5px 8px; border-radius: 8px; border: 1px dashed var(--border-strong); }
+.btn.picked { border-color: var(--good); color: var(--good); }
 .pool { position: relative; height: 380px; margin-top: 16px; padding: 0; }
 .pool-goo { position: absolute; inset: 0; filter: url(#goo-big); }
 .mblob { position: absolute; left: var(--x); top: var(--y); width: var(--s); height: var(--s); margin: calc(var(--s) / -2) 0 0 calc(var(--s) / -2);
