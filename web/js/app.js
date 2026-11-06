@@ -7,7 +7,7 @@
   const $$ = (sel, root) => Array.from((root || document).querySelectorAll(sel));
   const esc = (s) => String(s == null ? "" : s).replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
   const main = $("#main");
-  const VIEWS = ["today", "focus", "stats", "clipboard", "room", "settings"];
+  const VIEWS = ["today", "plan", "focus", "stats", "clipboard", "room", "settings"];
   let view = "today";
   let viewDate = S.today();
 
@@ -273,10 +273,10 @@
   let viewCleanup = null;
   function render(animate) {
     if (viewCleanup) { viewCleanup(); viewCleanup = null; }
-    const html = { today: todayView, focus: focusView, stats: statsView, clipboard: clipView, room: roomView, settings: settingsView }[view]();
+    const html = { today: todayView, plan: planView, focus: focusView, stats: statsView, clipboard: clipView, room: roomView, settings: settingsView }[view]();
     main.innerHTML = `<section class="view${animate ? "" : " still"}">${html}</section>`;
     if (!animate) main.firstElementChild.style.animation = "none";
-    const after = { today: todayAfter, focus: focusAfter, stats: statsAfter, clipboard: clipAfter, room: roomAfter, settings: settingsAfter }[view];
+    const after = { today: todayAfter, plan: planAfter, focus: focusAfter, stats: statsAfter, clipboard: clipAfter, room: roomAfter, settings: settingsAfter }[view];
     viewCleanup = after && after() || null;
   }
 
@@ -466,6 +466,143 @@
       if (share >= 0.999) setTimeout(() => { toast("Perfect day ✦ every goal hit"); inkAt($("#orb"), "#4ade80", true); }, 500);
     }
     return true;
+  }
+
+
+  // ─── Plan ────────────────────────────────────────────
+  const PX = 1.1; // px per minute on the timeline
+  let planDate = S.today();
+  const hhmm = (m) => `${String(Math.floor(m / 60) % 24).padStart(2, "0")}:${String(Math.round(m % 60)).padStart(2, "0")}`;
+  const dur = (m) => { m = Math.round(m); return m < 60 ? `${m} m` : `${Math.floor(m / 60)} h${m % 60 ? " " + (m % 60) + " m" : ""}`; };
+  function planView() {
+    const P = D.plan, date = planDate, { start, end } = P.settings(), t = S.today();
+    const y = (m) => (m - start * 60) * PX;
+    const clampA = (m) => Math.max(start * 60, m), clampB = (m) => Math.min(end * 60, m);
+    let hours = "";
+    for (let h = start; h <= end; h++) hours += `<div class="hour" style="top:${y(h * 60)}px"><span>${String(h % 24).padStart(2, "0")}:00</span></div>`;
+    const busy = P.busyOn(date).filter(([a, b]) => b > start * 60 && a < end * 60)
+      .map(([a, b, title]) => `<div class="busy" style="top:${y(clampA(a))}px;height:${(clampB(b) - clampA(a)) * PX - 2}px" title="${esc(title)} · ${hhmm(a)}–${hhmm(b)}"><span>${esc(title)}</span></div>`).join("");
+    const cur = P.current(date);
+    const blocks = P.blocks(date).map((b) => {
+      const a = S.byId(b.activityId); if (!a) return "";
+      const timed = a.unit === "hrs" || a.unit === "mins";
+      return `<div class="pblock${cur && cur.id === b.id ? " now" : ""}${b.minutes < 45 ? " short" : ""}" data-id="${b.id}" style="--c:${esc(a.color)};top:${y(b.start)}px;height:${b.minutes * PX - 3}px">
+        ${tank(S.credit(a, date), esc(a.color))}
+        <b>${esc(a.name)}</b><span>${hhmm(b.start)}–${hhmm(b.start + b.minutes)} · ${dur(b.minutes)}</span>
+        <div class="pctl">${timed && date === t ? `<button data-pb="focus" title="Start focus for this block" aria-label="Start focus">▶</button>` : ""}<button data-pb="del" title="Remove" aria-label="Remove">✕</button></div>
+        <i class="grip" title="Drag to resize"></i></div>`;
+    }).join("");
+    const nowMin = new Date().getHours() * 60 + new Date().getMinutes();
+    const nowLine = date === t && nowMin >= start * 60 && nowMin <= end * 60 ? `<div class="nowline" id="nowline" style="top:${y(nowMin)}px"></div>` : "";
+    const open = P.open(date);
+    const cal = state.calendar;
+    const opt = (from, to, sel) => { let o = ""; for (let h = from; h <= to; h++) o += `<option value="${h}" ${h === sel ? "selected" : ""}>${String(h % 24).padStart(2, "0")}:00</option>`; return o; };
+    return `
+      <div class="daynav">
+        <button class="btn round ghost" id="plan-prev" aria-label="Previous day" data-magnetic="0.3" ${date <= S.addDays(t, -7) ? "disabled" : ""}>‹</button>
+        <h3>${esc(date === S.addDays(t, 1) ? "Tomorrow" : dayTitle(date))}</h3>
+        <button class="btn round ghost" id="plan-next" aria-label="Next day" data-magnetic="0.3" ${date >= S.addDays(t, 14) ? "disabled" : ""}>›</button>
+        ${date !== t ? `<button class="btn sm ghost" id="plan-today">Today</button>` : ""}
+        <span class="spacer"></span>
+        <span class="tiny">${P.blocks(date).length} block${P.blocks(date).length === 1 ? "" : "s"} · ${dur(P.blocks(date).reduce((n, b) => n + b.minutes, 0))} planned</span>
+      </div>
+      <div class="grid two">
+        <div class="card spot timeline-wrap" id="timeline-wrap"><div class="timeline" id="timeline" style="height:${(end - start) * 60 * PX}px">${hours}${busy}${blocks}${nowLine}</div></div>
+        <div class="stack">
+          <div class="card spot"><p class="label">Still open <span class="grow"></span><button class="btn sm" id="autoplan" data-cursor="plan" ${open.length ? "" : "disabled"}>Auto-plan</button></p>
+            ${open.map(({ a, left }) => `<div class="pchip" draggable="true" data-act="${a.id}" style="--c:${esc(a.color)}" title="Drag onto the timeline, or tap for the next free slot"><span class="dot"></span>${esc(a.name)}<span class="spacer"></span><span class="tiny">${dur(left)}</span></div>`).join("")
+              || `<p class="tiny">Nothing left to place${P.blocks(date).length ? ": it's all on the timeline." : " for this day."}</p>`}
+            <p class="tiny">Drag onto the timeline or tap for the next free slot. Auto-plan puts the biggest first, in blocks of up to 90 minutes with 15 minutes between.</p>
+          </div>
+          <div class="card spot"><p class="label">Calendar</p>
+            ${cal.importedAt ? `<p class="small">${esc(cal.name)} · ${cal.events.length} event${cal.events.length === 1 ? "" : "s"} · imported ${ago(cal.importedAt)}</p>`
+              : `<p class="tiny">Import an .ics file to plan around your meetings. Google Calendar: Settings → Import &amp; export → Export. Outlook / Apple Calendar: File → Export. It stays in this browser.</p>`}
+            <div class="row"><label class="btn ghost sm" style="cursor:pointer">Import .ics<input type="file" id="ics" accept=".ics,text/calendar" hidden></label>
+              ${cal.importedAt ? `<button class="btn ghost sm" id="ics-clear">Remove calendar</button>` : ""}
+              <span class="spacer"></span>${P.blocks(date).length ? `<button class="btn danger sm" id="plan-clear">Clear plan</button>` : ""}</div>
+          </div>
+          <div class="card spot"><p class="label">Day window</p>
+            <div class="row"><select id="plan-start" style="flex:1" aria-label="Day starts">${opt(4, 14, start)}</select><span class="muted">to</span><select id="plan-end" style="flex:1" aria-label="Day ends">${opt(15, 24, end)}</select></div>
+          </div>
+        </div>
+      </div>`;
+  }
+  function planAfter() {
+    const P = D.plan, date = planDate, { start, end } = P.settings();
+    $("#plan-prev").onclick = () => { planDate = S.addDays(planDate, -1); render(false); };
+    $("#plan-next").onclick = () => { planDate = S.addDays(planDate, 1); render(false); };
+    const pt = $("#plan-today"); if (pt) pt.onclick = () => { planDate = S.today(); render(false); };
+    const ap = $("#autoplan"); if (ap) ap.onclick = () => {
+      const r = P.autoPlan(date);
+      toast(r.placed ? `Planned ${r.placed} block${r.placed === 1 ? "" : "s"}` + (r.unplaced ? ` · ${dur(r.unplaced)} didn't fit` : "") : "No free time left in the day window");
+      if (r.placed) { bloop("win"); inkAt($("#timeline"), null, true); }
+    };
+    const leftOf = (id) => (P.open(date).find((x) => x.a.id === id) || { left: 60 }).left;
+    $$(".pchip").forEach((chip) => {
+      chip.onclick = () => {
+        const g = P.gaps(date)[0];
+        if (!g) return toast("No free time left in the day window");
+        P.add(date, chip.dataset.act, g[0], Math.min(leftOf(chip.dataset.act), 90, g[1] - g[0]));
+        bloop("soft");
+      };
+      chip.ondragstart = (e) => { e.dataTransfer.setData("text/plain", "act:" + chip.dataset.act); e.dataTransfer.effectAllowed = "copy"; };
+    });
+    const tl = $("#timeline");
+    const minuteAt = (clientY) => start * 60 + (clientY - tl.getBoundingClientRect().top) / PX;
+    tl.ondragover = (e) => { e.preventDefault(); e.dataTransfer.dropEffect = "copy"; tl.classList.add("over"); };
+    tl.ondragleave = () => tl.classList.remove("over");
+    tl.ondrop = (e) => {
+      e.preventDefault(); tl.classList.remove("over");
+      const v = e.dataTransfer.getData("text/plain");
+      if (!v.startsWith("act:")) return;
+      const id = v.slice(4), m = minuteAt(e.clientY);
+      P.add(date, id, m, Math.min(leftOf(id) || 60, 90, end * 60 - m));
+      bloop("soft");
+      fluid && fluid.splatAt(e.clientX, e.clientY, hexRgb((S.byId(id) || {}).color).map((x) => x * 0.3));
+    };
+    // Move a block by dragging it; resize from its bottom edge. Snaps to 15 minutes on release.
+    tl.onpointerdown = (e) => {
+      const el = e.target.closest(".pblock");
+      if (!el || e.target.closest("button")) return;
+      const b = P.blocks(date).find((x) => x.id === el.dataset.id); if (!b) return;
+      const resize = !!e.target.closest(".grip"), y0 = e.clientY;
+      let moved = false;
+      el.setPointerCapture(e.pointerId);
+      el.classList.add("dragging");
+      el.onpointermove = (ev) => {
+        const dm = (ev.clientY - y0) / PX;
+        if (Math.abs(ev.clientY - y0) > 3) moved = true;
+        if (resize) el.style.height = Math.max(P.STEP, b.minutes + dm) * PX - 3 + "px";
+        else el.style.top = (Math.min(end * 60 - b.minutes, Math.max(start * 60, b.start + dm)) - start * 60) * PX + "px";
+      };
+      el.onpointerup = (ev) => {
+        el.onpointermove = el.onpointerup = null;
+        el.classList.remove("dragging");
+        if (!moved) return;
+        const dm = (ev.clientY - y0) / PX;
+        if (resize) P.update(date, b.id, { minutes: b.minutes + dm });
+        else P.update(date, b.id, { start: Math.min(end * 60 - b.minutes, Math.max(start * 60, b.start + dm)) });
+      };
+    };
+    tl.onclick = (e) => {
+      const btn = e.target.closest("[data-pb]"); if (!btn) return;
+      const el = btn.closest(".pblock"), b = P.blocks(date).find((x) => x.id === el.dataset.id); if (!b) return;
+      if (btn.dataset.pb === "del") P.remove(date, b.id);
+      else { F.start(b.activityId, { target: b.minutes }); inkAt(el, (S.byId(b.activityId) || {}).color, true); }
+    };
+    $("#ics").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { const n = P.importIcs(await f.text(), f.name); toast(`Imported ${n} event${n === 1 ? "" : "s"} from ${f.name}`); } catch (err) { toast(err.message, 4000); }
+    };
+    const ic = $("#ics-clear"); if (ic) ic.onclick = () => { if (confirm("Remove the imported calendar?")) P.clearCalendar(); };
+    const pc = $("#plan-clear"); if (pc) pc.onclick = () => { if (confirm("Remove every block from this day's plan?")) P.clear(date); };
+    $("#plan-start").onchange = (e) => { state.settings.planStart = +e.target.value; S.emit({ type: "plan" }); };
+    $("#plan-end").onchange = (e) => { state.settings.planEnd = +e.target.value; S.emit({ type: "plan" }); };
+    // Bring now (or the first block) into view.
+    const wrap = $("#timeline-wrap"), first = P.blocks(date)[0];
+    const target = date === S.today() ? new Date().getHours() * 60 + new Date().getMinutes() : first ? first.start : start * 60;
+    wrap.scrollTop = Math.max(0, (target - start * 60) * PX - 80);
+    return null;
   }
 
   // ─── Focus view ──────────────────────────────────────
@@ -1103,6 +1240,7 @@ create policy clips on diligent_clips for all
       ...S.active().filter((a) => a.unit === "hrs" || a.unit === "mins").map((a) => ({ icon: "⏱", label: `Focus on ${a.name}`, run: () => F.start(a.id) })),
       ...S.active().filter((a) => !S.isLimit(a)).map((a) => ({ icon: "✓", label: `Mark ${a.name} done`, run: () => { if (!S.met(a, S.today())) S.toggleDone(a.id); } })),
       { icon: "+", label: "New activity", key: "N", run: () => openEditor(null) },
+      { icon: "▤", label: "Auto-plan today", run: () => { const r = D.plan.autoPlan(S.today()); toast(r.placed ? `Planned ${r.placed} blocks` + (r.unplaced ? ` · ${dur(r.unplaced)} didn't fit` : "") : "No free time left"); go("plan"); } },
       { icon: "◐", label: "Theme: Mono", run: () => setTheme("mono") },
       { icon: "◐", label: "Theme: Paper", run: () => setTheme("paper") },
       { icon: "◐", label: "Theme: Red night", run: () => setTheme("night") },
@@ -1164,7 +1302,7 @@ create policy clips on diligent_clips for all
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") { e.preventDefault(); openPalette(); return; }
     if (e.target.closest("input, textarea, select, dialog[open]") || e.ctrlKey || e.metaKey || e.altKey) return;
     const k = e.key;
-    if (/^[1-6]$/.test(k)) go(VIEWS[+k - 1]);
+    if (/^[1-7]$/.test(k)) go(VIEWS[+k - 1]);
     else if (k === "/") { e.preventDefault(); openPalette(); }
     else if (k === "?") $("#keys").showModal();
     else if (k === "n") openEditor(null);
@@ -1226,6 +1364,7 @@ create policy clips on diligent_clips for all
     F.tick();
     syncAmbient();
     updatePip();
+    planTick();
     const r = F.readout();
     const f = state.focus;
     if (r) {
@@ -1241,6 +1380,18 @@ create policy clips on diligent_clips for all
     if (t !== lastToday) { if (viewDate === lastToday) viewDate = t; lastToday = t; render(false); }
   }, 1000);
   let lastToday = S.today();
+  let alerted = "";
+  /** "Time for Coding" when a planned block starts (unless you're already focusing), and the now line. */
+  function planTick() {
+    const t = S.today(), b = D.plan.current(t), now = new Date(), m = now.getHours() * 60 + now.getMinutes();
+    if (b && b.id !== alerted && m - b.start < 2) {
+      alerted = b.id;
+      const a = S.byId(b.activityId);
+      if (a && !state.focus) notify(`Time for ${a.name} · ${dur(b.minutes)} planned`);
+    }
+    const line = $("#nowline");
+    if (line && view === "plan") line.style.top = (m - D.plan.settings().start * 60) * PX + "px";
+  }
 
   // ─── Boot ────────────────────────────────────────────
   const d = new Date();

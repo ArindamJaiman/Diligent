@@ -44,6 +44,7 @@ const connect = (p, deviceName) => p.evaluate(([port, n]) => {
   Object.assign(s.cloud, { url: `http://localhost:${port}`, key: "anon", owner: "owner-smoke-test-0001", device: n, auto: false });
   s.settings.clipScope = "mine";
   localStorage.setItem("diligent.web.v1", JSON.stringify(s));
+  history.replaceState(null, "", "#today");
 }, [DB, deviceName]);
 
 try {
@@ -70,7 +71,7 @@ try {
   check(await a.evaluate(() => document.documentElement.dataset.theme) === "paper", "theme switches");
 
   await blur(a);
-  await a.keyboard.press("2");
+  await a.keyboard.press("3");
   await a.click("#start");
   // Wait for the clock to tick rather than sampling it at a fixed moment (CI renders slowly).
   const ticked = await a.waitForFunction(() => { const t = document.getElementById("timer-clock"); return t && /^00:(0[1-9]|[1-5]\d)$/.test(t.textContent); }, null, { timeout: 15000 }).then(() => true, () => false);
@@ -78,7 +79,7 @@ try {
   await a.click("#stop");
 
   await blur(a);
-  await a.keyboard.press("3");
+  await a.keyboard.press("4");
   await a.click("#weekly-card");
   await a.waitForSelector("#card-dialog[open] img");
   const card = await a.evaluate(async () => { const img = document.querySelector("#card-dialog img"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });
@@ -104,6 +105,25 @@ try {
   await a.waitForTimeout(200);
   check((await a.locator('.act:has(h3:text-is("Quantum Computing")) .target').innerText()).includes("by"), "a long-term target shows its pace on the card");
 
+  // Plan: import a calendar, auto-plan tomorrow around it, no block overlaps a meeting
+  await blur(a);
+  await a.keyboard.press("2");
+  await a.click("#plan-next");
+  const tomorrow = await a.evaluate(() => Diligent.store.addDays(Diligent.store.today(), 1).replace(/-/g, ""));
+  const ics = ["BEGIN:VCALENDAR", "BEGIN:VEVENT", "SUMMARY:Lecture", `DTSTART:${tomorrow}T100000`, `DTEND:${tomorrow}T120000`, "END:VEVENT",
+    "BEGIN:VEVENT", "SUMMARY:Standup", `DTSTART:${tomorrow}T090000`, "DURATION:PT15M", "RRULE:FREQ=DAILY", "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+  await a.setInputFiles("#ics", { name: "uni.ics", mimeType: "text/calendar", buffer: Buffer.from(ics) });
+  await a.waitForSelector(".busy");
+  check(await a.locator(".busy").count() === 2, "an imported .ics shows its meetings (and a daily recurrence) as busy");
+  await a.click("#autoplan");
+  await a.waitForSelector(".pblock");
+  const clash = await a.evaluate(() => {
+    const P = Diligent.plan, d = Diligent.store.addDays(Diligent.store.today(), 1), busy = P.busyOn(d), bl = P.blocks(d);
+    return bl.length && !bl.some((b) => busy.some(([x, y]) => b.start < y && b.start + b.minutes > x) || bl.some((c) => c !== b && b.start < c.start + c.minutes && b.start + b.minutes > c.start));
+  });
+  check(clash === true, "auto-plan fills free time without overlapping meetings or itself");
+  await a.click("#plan-today");
+
   await connect(a, "Laptop");
   await a.reload();
   await a.waitForSelector(".act");
@@ -118,11 +138,11 @@ try {
   check(await b.evaluate(() => { const S = Diligent.store; const x = S.active().find((y) => y.name === "LeetCode"); return S.progressOf(S.today(), x.id); }) === 3, "the second device pulls the synced day");
 
   await blur(a);
-  await a.keyboard.press("4");
+  await a.keyboard.press("5");
   await a.fill("#clip-text", "hello from the laptop");
   await a.click("#clip-send");
   await blur(b);
-  await b.keyboard.press("4");
+  await b.keyboard.press("5");
   await b.waitForSelector(".clip pre");
   check((await b.locator(".clip pre").allInnerTexts()).includes("hello from the laptop"), "a clip reaches the other device");
   await a.waitForFunction(() => Diligent.cloud.liveState() === "open", null, { timeout: 5000 }).catch(() => {});
@@ -165,7 +185,7 @@ try {
   check((await a.locator(".clip pre").allInnerTexts()).some((t) => t.includes("🔒 Encrypted")), "without the passphrase the clip shows as locked");
 
   await blur(a);
-  await a.keyboard.press("5");
+  await a.keyboard.press("6");
   await a.fill("#room-code", "SMOKE1");
   await a.click("#room-join");
   await a.waitForSelector(".member");

@@ -30,6 +30,8 @@
       settings: { theme: "mono", dayStartHour: 0, sound: true, fluid: true, cursor: true, quotePack: "mix", name: "", notify: false, ambient: "off" },
       cloud: { url: "", key: "", owner: "", device: "", room: "", lastPull: 0, lastPush: 0, auto: true },
       clips: [], // this-browser clipboard: { id, text, kind, device, createdAt }
+      plans: {}, // date → [{ id, activityId, start (min from midnight), minutes }]
+      calendar: { events: [], name: "", importedAt: 0 }, // imported .ics (plan.js)
       xp: 0,
     };
   }

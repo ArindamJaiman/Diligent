@@ -269,6 +269,39 @@ label.field { display: block; font: 700 10px/1 var(--font-dot); letter-spacing: 
 .scale button { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); background: none; cursor: pointer; font: 700 12px/1 var(--font-dot); color: var(--dim); transition: all 0.35s var(--spring); }
 .scale button.on { background: var(--ink); color: var(--on-ink); border-color: var(--ink); transform: scale(1.12); }
 
+/* ─── Plan ─────────────────────────────────────────── */
+.timeline-wrap { max-height: 74vh; overflow: auto; padding: 16px 12px 16px 6px; }
+.timeline { position: relative; margin-left: 52px; transition: background 0.3s; border-radius: 12px; }
+.timeline.over { background: color-mix(in srgb, var(--good) 6%, transparent); }
+.hour { position: absolute; left: -52px; right: 0; border-top: 1px dashed var(--border); pointer-events: none; }
+.hour span { position: absolute; top: -7px; left: 0; font: 700 10px/1 var(--font-dot); color: var(--dim); letter-spacing: 0.08em; }
+.busy { position: absolute; left: 0; right: 0; border-radius: 10px; padding: 4px 9px; overflow: hidden; font-size: 10.5px; color: var(--dim);
+  border: 1px dashed var(--border-strong); background: repeating-linear-gradient(-45deg, var(--raise) 0 6px, transparent 6px 12px); }
+.pblock { position: absolute; left: 10%; right: 0; border-radius: 12px; padding: 6px 10px; overflow: hidden; isolation: isolate; cursor: grab; touch-action: none; user-select: none;
+  display: flex; flex-direction: column; gap: 1px; border: 1px solid color-mix(in srgb, var(--c) 55%, transparent);
+  background: color-mix(in srgb, var(--c) 12%, var(--surface-solid)); transition: box-shadow 0.3s, transform 0.4s var(--spring); z-index: 2; }
+.pblock b { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; padding-right: 56px; }
+.pblock span { font-size: 10px; color: var(--dim); }
+.pblock > b, .pblock > span { flex-shrink: 0; }
+.pblock.short { flex-direction: row; align-items: center; gap: 10px; padding-top: 3px; padding-bottom: 3px; }
+.pblock.short b { padding-right: 0; flex-shrink: 1; min-width: 0; }
+.pblock.short span { white-space: nowrap; margin-right: 56px; }
+.pblock.short .pctl { top: 50%; transform: translateY(-50%); }
+.pblock .tank .wave { opacity: 0.22; }
+.pblock .tank .wave.w2 { opacity: 0.12; }
+.pblock.dragging { cursor: grabbing; z-index: 6; transform: scale(1.02); box-shadow: 0 22px 44px -14px rgba(0, 0, 0, 0.65); transition: box-shadow 0.3s, transform 0.3s; }
+.pblock.now { box-shadow: 0 0 0 2px var(--c), 0 0 32px -6px var(--c); }
+.pctl { position: absolute; right: 6px; top: 5px; display: flex; gap: 4px; }
+.pctl button { border: 0; width: 24px; height: 24px; border-radius: 50%; cursor: pointer; font-size: 10px; color: var(--text); background: color-mix(in srgb, var(--bg) 55%, transparent); transition: transform 0.3s var(--spring); }
+.pctl button:hover { transform: scale(1.15); }
+.pblock .grip { position: absolute; left: 0; right: 0; bottom: 0; height: 9px; cursor: ns-resize; }
+.pblock .grip::after { content: ""; position: absolute; left: 50%; bottom: 3px; width: 26px; height: 3px; margin-left: -13px; border-radius: 2px; background: var(--c); opacity: 0.5; }
+.nowline { position: absolute; left: -6px; right: 0; height: 2px; background: var(--bad); z-index: 5; pointer-events: none; box-shadow: 0 0 10px var(--bad); }
+.nowline::before { content: ""; position: absolute; left: -5px; top: -4px; width: 10px; height: 10px; border-radius: 50%; background: var(--bad); }
+.pchip { display: flex; align-items: center; gap: 8px; padding: 9px 12px; margin-bottom: 8px; border-radius: 12px; cursor: grab; font-size: 12.5px;
+  border: 1px solid var(--border); background: var(--raise); transition: transform 0.35s var(--spring), border-color 0.2s; }
+.pchip:hover { border-color: var(--c); transform: translateX(4px); }
+
 /* ─── Focus ────────────────────────────────────────── */
 .timer-wrap { display: grid; place-items: center; padding: 30px 10px; }
 .timer { position: relative; width: min(340px, 78vw); aspect-ratio: 1; border-radius: 50%; border: 1px solid var(--border-strong); overflow: hidden; isolation: isolate; display: grid; place-items: center;

@@ -36,7 +36,9 @@ has shipped since the list was started.
   the app's rules (rest days, week streaks, ahead/behind, projected finish) and imported from
   the app's backup
 - ✅ **Supabase Realtime** for rooms and the clipboard: broadcast pings make changes instant; polling is the fallback
-- [ ] **Plan view:** drag activity blocks onto a day timeline; import an .ics calendar
+- ✅ **Plan view:** drag activity blocks onto a day timeline, move and resize them, import an
+  .ics calendar (daily / weekly recurrences), auto-plan what's left around it, start focus from
+  a block, an alert when a block starts
 - ✅ **Weekly review card** as a shareable PNG (Stats → Weekly card): download, share, copy or send to the clipboard
 - ✅ **Ambient sound** for focus (rain, brown noise, waves) generated with WebAudio
 - ✅ **Picture-in-picture timer** (Document PiP API) so the countdown floats over other windows
