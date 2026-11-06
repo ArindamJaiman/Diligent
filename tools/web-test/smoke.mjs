@@ -203,6 +203,49 @@ try {
   await a.waitForTimeout(200);
   check((await a.locator('.act:has(h3:text-is("Quantum Computing")) .target').innerText()).includes("by"), "a long-term target shows its pace on the card");
 
+  // Checklist: set in the editor, ticked on the card, each tick logs its share and the last fills the goal
+  await a.evaluate(() => Diligent.store.upsertActivity({ name: "Problems", unit: "problems", goal: 3, goalType: "at_least" }));
+  await a.waitForSelector('.act:has(h3:text-is("Problems"))');
+  await a.locator('.act:has(h3:text-is("Problems")) h3').click();
+  await a.fill("#ed-checklist", "1 easy\n1 medium, 1 hard");
+  await a.click("#ed-save");
+  await a.waitForSelector('.act:has(h3:text-is("Problems")) .ck');
+  const probs = '.act:has(h3:text-is("Problems"))';
+  await a.locator(`${probs} .ck`).nth(0).click();
+  await a.locator(`${probs} .ck`).nth(2).click();
+  const half = await a.evaluate(() => { const S = Diligent.store, x = S.active().find((y) => y.name === "Problems"); return [S.progressOf(S.today(), x.id), S.ticks(x, S.today()).join(",")]; });
+  await a.locator(`${probs} .ck`).nth(1).click();
+  const full = await a.evaluate(() => { const S = Diligent.store, x = S.active().find((y) => y.name === "Problems"); return [S.progressOf(S.today(), x.id), S.met(x, S.today())]; });
+  await a.locator(`${probs} .ck`).nth(1).click();
+  const back = await a.evaluate(() => { const S = Diligent.store, x = S.active().find((y) => y.name === "Problems"); return S.progressOf(S.today(), x.id); });
+  check(half[0] === 2 && half[1] === "0,2" && full[0] === 3 && full[1] === true && back === 2 && (await a.locator(`${probs} .checks .tiny`).innerText()) === "2/3",
+    `a checklist logs its share per tick and fills the goal on the last (${half} | ${full} | ${back})`);
+
+  // Focus music: the playlist link opens when a session starts
+  {
+    const opened = await a.evaluate(() => {
+      const D = Diligent, seen = [], real = window.open;
+      window.open = (u) => { seen.push(u); return {}; };
+      D.store.state.settings.musicLink = "https://open.spotify.com/playlist/test";
+      const timed = D.store.active().find((x) => x.unit === "hrs" || x.unit === "mins");
+      D.focus.start(timed.id); D.focus.stop(true);
+      D.store.state.settings.musicLink = "";
+      window.open = real;
+      return seen.join(",");
+    });
+    check(opened === "https://open.spotify.com/playlist/test", "focus music opens the playlist link when a session starts");
+  }
+
+  // Encrypted web backup: Export encrypted writes enc1:, and the passphrase opens it again
+  {
+    const r = await a.evaluate(async () => {
+      const C = Diligent.cloud, S = Diligent.store, plain = S.exportJson();
+      const enc = await C.encryptWith(plain, "web pass 1");
+      return [enc.startsWith("enc1:"), !enc.includes("Problems"), (await C.decryptWith(enc, "web pass 1")) === plain, (await C.decryptWith(enc, "wrong")) == null];
+    });
+    check(r.every(Boolean), "an encrypted web backup is ciphertext and opens only with its passphrase (" + r + ")");
+  }
+
   // Plan: import a calendar, auto-plan tomorrow around it, no block overlaps a meeting
   await blur(a);
   await a.keyboard.press("2");
@@ -284,7 +327,7 @@ try {
 
   // Encrypted app backup: the import asks for the passphrase and restores it
   {
-    const backup = JSON.stringify({ activities: [{ id: 901, name: "Violin", unit: "mins", dailyGoal: 30, goalType: "at_least" }], dailyProgress: [{ activityId: 901, date: "2026-10-01", progress: 30, isCompleted: true }], dayLogs: [] });
+    const backup = JSON.stringify({ activities: [{ id: 901, name: "Violin", unit: "mins", dailyGoal: 30, goalType: "at_least" }], dailyProgress: [{ activityId: 901, date: "2026-10-01", progress: 30, isCompleted: true }], dayLogs: [], checklists: { items: { "901": ["Scales", "Piece"] }, done: { "901|2026-10-01": [0, 1] } } });
     const enc = await a.evaluate(async (plain) => {
       const pass = "backup pass", te = new TextEncoder();
       const base = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
@@ -299,7 +342,7 @@ try {
     a.once("dialog", (d) => d.accept("backup pass"));
     await a.setInputFiles("#d-import", { name: "diligent-backup-fri.json", mimeType: "application/json", buffer: Buffer.from(enc) });
     await a.waitForFunction(() => Diligent.store.state.activities.some((x) => x.name === "Violin"), null, { timeout: 8000 }).catch(() => {});
-    check(await a.evaluate(() => { const S = Diligent.store, v = S.state.activities.find((x) => x.name === "Violin"); return !!v && S.progressOf("2026-10-01", v.id) === 30; }), "an encrypted app backup imports with its passphrase");
+    check(await a.evaluate(() => { const S = Diligent.store, v = S.state.activities.find((x) => x.name === "Violin"); return !!v && S.progressOf("2026-10-01", v.id) === 30 && v.checklist.join() === "Scales,Piece" && S.ticks(v, "2026-10-01").join() === "0,1"; }), "an encrypted app backup imports with its passphrase (checklists too)");
   }
 
   // Files: encrypted before upload, downloaded and decrypted intact, deleted with the clip

@@ -75,6 +75,12 @@
 
   // ─── Focus timer ─────────────────────────────────────
   const POMO_WORK = 25, POMO_BREAK = 5;
+  /** Focus music: opens your playlist link in a new tab when a session starts (Settings on the Focus tab). */
+  function openFocusMusic() {
+    const link = (state.settings.musicLink || "").trim();
+    if (!/^(https:\/\/|spotify:)/.test(link)) return;
+    try { const w = window.open(link, "_blank", "noopener"); if (!w && !/^spotify:/.test(link)) toast("Allow pop-ups for this site to open your focus music"); } catch (e) { /* blocked */ }
+  }
   const F = (D.focus = {
     start(activityId, opts) {
       opts = opts || {};
@@ -87,6 +93,7 @@
       syncAmbient();
       bloop("soft");
       toast(`Focusing on ${a.name}`);
+      openFocusMusic();
       C.pushPresence().catch(() => {});
     },
     stop(silent) {
@@ -321,6 +328,7 @@
       <div class="meta">${esc(meta)}</div>
       ${target}
       ${row.note ? `<div class="note">“${esc(row.note)}”</div>` : ""}
+      ${checksHtml(a, date)}
       <div class="ctl">
         <button class="btn round" data-act="dec" aria-label="Less" data-magnetic="0.3">−</button>
         <button class="btn round" data-act="inc" aria-label="More" data-magnetic="0.3">+</button>
@@ -329,6 +337,12 @@
         ${S.isLimit(a) ? "" : `<button class="btn round done" data-act="done" aria-label="Done" data-cursor="done" data-magnetic="0.3">✓</button>`}
       </div>
     </article>`;
+  }
+  /** The activity's sub-tasks as tick buttons: each logs its share of the goal. */
+  function checksHtml(a, date) {
+    const items = S.checklist(a); if (!items.length) return "";
+    const on = new Set(S.ticks(a, date)), stepBy = S.checkStep(a);
+    return `<div class="checks" title="${stepBy ? "Each one logs " + esc(S.fmt(a, stepBy)) : ""}">${items.map((t, i) => `<button class="ck${on.has(i) ? " on" : ""}" data-act="tick" data-i="${i}" aria-pressed="${on.has(i)}"><span class="check${on.has(i) ? " on" : ""}"></span>${esc(t)}</button>`).join("")}<span class="tiny">${on.size}/${items.length}</span></div>`;
   }
   function doneCount(date) {
     const goals = S.active().filter((a) => !S.isLimit(a));
@@ -413,6 +427,7 @@
       else if (act === "dec") S.add(a.id, -S.step(a), date);
       else if (act === "done") S.toggleDone(a.id, date);
       else if (act === "skip") S.toggleSkip(a.id, date);
+      else if (act === "tick") { if (S.toggleTick(a.id, +btn.dataset.i, date)) { bloop(); inkAt(btn, a.color); } }
       else if (act === "edit") openEditor(a);
       else if (act === "focus") { if (state.focus && state.focus.activityId === a.id) F.stop(); else F.start(a.id); }
       else if (act === "set") {
@@ -728,6 +743,9 @@
             <input id="f-int" placeholder="Finish the Grover's search chapter" maxlength="120">
             <label class="field">Focus sound</label>
             <div class="seg" id="f-sound">${[["off", "Off"], ["rain", "Rain"], ["brown", "Brown noise"], ["waves", "Waves"]].map(([v, l]) => `<button data-v="${v}" class="${(state.settings.ambient || "off") === v ? "on" : ""}">${l}</button>`).join("")}</div>
+            <label class="field" for="f-music">Focus music (optional)</label>
+            <input id="f-music" placeholder="Playlist link: https://open.spotify.com/playlist/…" value="${esc(state.settings.musicLink || "")}" spellcheck="false" autocomplete="off">
+            <p class="tiny">Opens in a new tab when a session starts.</p>
             <button class="btn" id="start" style="margin-top:16px;width:100%" ${timed.length ? "" : "disabled"} data-cursor="go">Start focus</button>
             ${timed.length ? "" : `<p class="tiny">Add an activity measured in hrs or mins first.</p>`}
           </div>`}
@@ -752,6 +770,7 @@
     const fm = $("#f-mode"); if (fm) fm.onclick = (e) => { const b = e.target.closest("button"); if (b) { focusPick.mode = b.dataset.v; render(false); } };
     const ft = $("#f-target"); if (ft) ft.onclick = (e) => { const b = e.target.closest("button"); if (b) { focusPick.target = +b.dataset.v; render(false); } };
     const fs = $("#f-sound"); if (fs) fs.onclick = (e) => { const b = e.target.closest("button"); if (b) { state.settings.ambient = b.dataset.v; S.save(); $$("button", fs).forEach((x) => x.classList.toggle("on", x === b)); Ambient.preview(b.dataset.v); } };
+    const fmu = $("#f-music"); if (fmu) fmu.onchange = () => { const v = fmu.value.trim(); if (v && !/^(https:\/\/|spotify:)/.test(v)) { toast("Paste a link that starts with https:// or spotify:"); return; } state.settings.musicLink = v; S.save(); toast(v ? "Focus music saved" : "Focus music off"); };
     const pp = $("#pip"); if (pp) pp.onclick = openPip;
     const dz = $("#distracted"); if (dz) dz.onclick = distracted;
     const sp = $("#stop"); if (sp) sp.onclick = () => { inkAt($("#timer"), (S.byId(state.focus.activityId) || {}).color, true); F.stop(); };
@@ -1523,8 +1542,8 @@ create policy clips on diligent_clips for all
           ${sw("notify", "Notifications", "Pomodoro and target alerts while the tab is in the background")}
         </div>
         <div class="card spot"><p class="label">Data</p>
-          <p class="tiny">Import accepts this site's backup or the Android app's JSON backup (Settings → Backup), including encrypted ones (it asks for the backup passphrase).</p>
-          <div class="row"><button class="btn ghost sm" id="d-export">Export JSON</button><button class="btn ghost sm" id="d-csv">Export CSV</button>
+          <p class="tiny">Import accepts this site's backup or the Android app's JSON backup (Settings → Backup), including encrypted ones (it asks for the passphrase). Export encrypted uses the same format.</p>
+          <div class="row"><button class="btn ghost sm" id="d-export">Export JSON</button><button class="btn ghost sm" id="d-export-enc">Export encrypted</button><button class="btn ghost sm" id="d-csv">Export CSV</button>
             <label class="btn ghost sm" style="cursor:pointer">Import<input type="file" id="d-import" accept="application/json,.json" hidden></label>
             <span class="spacer"></span><button class="btn danger sm" id="d-reset">Reset</button></div>
         </div>
@@ -1580,6 +1599,14 @@ create policy clips on diligent_clips for all
       try { const msg = await C.sync(); st.textContent = msg; toast("Synced · " + msg); } catch (e) { st.textContent = e.message; }
     };
     $("#d-export").onclick = () => download(`diligent-web-${S.today()}.json`, S.exportJson(), "application/json");
+    $("#d-export-enc").onclick = async () => {
+      const pass = prompt("A passphrase for this backup (AES-256; without it the file can't be opened, by anyone):");
+      if (!pass) return;
+      if (pass.length < 6) { toast("Use at least 6 characters"); return; }
+      if (prompt("Type it again:") !== pass) { toast("The passphrases didn't match"); return; }
+      download(`diligent-web-${S.today()}.enc.json`, await C.encryptWith(S.exportJson(), pass), "application/json");
+      toast("Encrypted backup downloaded");
+    };
     $("#d-csv").onclick = () => download(`diligent-${S.today()}.csv`, S.exportCsv(), "text/csv");
     $("#d-import").onchange = async (e) => {
       const f = e.target.files[0]; if (!f) return;
@@ -1630,6 +1657,7 @@ create policy clips on diligent_clips for all
     $("#ed-count").value = (a && a.scheduleCount > 1 && a.scheduleCount) || (edSched === "interval" ? 2 : 3);
     $("#ed-target").value = a && +a.targetTotal > 0 ? a.targetTotal : "";
     $("#ed-target-date").value = (a && a.targetDate) || "";
+    $("#ed-checklist").value = (a && Array.isArray(a.checklist) ? a.checklist : []).join("\n");
     $("#ed-delete").hidden = !a;
     paintEditor();
     $("#editor").showModal();
@@ -1661,6 +1689,7 @@ create policy clips on diligent_clips for all
       scheduleType: edSched, scheduleDays: edSched === "weekdays" ? edDays : 127,
       scheduleCount: edSched === "weekly" ? Math.min(7, Math.max(1, count)) : edSched === "interval" ? Math.min(30, Math.max(1, count)) : 1,
       targetTotal: Math.max(0, +$("#ed-target").value || 0), targetDate: $("#ed-target-date").value || "",
+      checklist: S.parseChecklist($("#ed-checklist").value),
     };
     if (editing) fields.id = editing.id;
     S.upsertActivity(fields);

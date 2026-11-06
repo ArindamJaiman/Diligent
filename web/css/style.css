@@ -496,3 +496,11 @@ pre.sql { max-height: 220px; overflow: auto; background: var(--raise); border: 1
 /* Activity colours follow the theme where they'd clash: red night is all red, white is ink on paper. */
 :root[data-theme="night"] [style*="--c:"] { --c: #ff3b30 !important; }
 :root[data-theme="paper"] [style*="--c:#ffffff"] { --c: #141210 !important; }
+
+/* Checklists on activity cards */
+.act .checks { position: relative; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin: 8px 0 2px; }
+.act .checks .ck { display: inline-flex; align-items: center; gap: 6px; padding: 4px 10px 4px 5px; border-radius: 99px; border: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 60%, transparent); color: var(--text); font: inherit; font-size: 12px; cursor: pointer; transition: border-color 0.2s, opacity 0.2s; }
+.act .checks .ck .check { width: 16px; height: 16px; }
+.act .checks .ck .check.on::after { left: 4.5px; top: 1.5px; width: 4px; height: 8px; }
+.act .checks .ck.on { opacity: 0.6; text-decoration: line-through; }
+.act .checks .ck:hover { border-color: var(--c, var(--border-strong)); }

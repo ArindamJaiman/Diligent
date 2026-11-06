@@ -49,8 +49,8 @@ has shipped since the list was started.
 
 ## Tracking (app)
 
-- ✅ **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard"; app,
-  the activity's screen): each item logs an equal share of the goal, the last tick fills it,
+- ✅ **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard"; the
+  app's activity screen, and the web's cards and editor; app backups carry them to the web): each item logs an equal share of the goal, the last tick fills it,
   and they go into backups
 - ✅ **Numeric journal fields** on the web (Settings → Journal fields): your own daily numbers in
   the day log, charted in Stats and included in What goes with your good days
@@ -65,7 +65,7 @@ has shipped since the list was started.
 
 ## Focus
 
-- ✅ **Focus music** (app, Hub → Focus): press play on what played last, or open a playlist
+- ✅ **Focus music** (app, Hub → Focus; the web opens a playlist link): press play on what played last, or open a playlist
   link, when a session starts; pause on stop (only music it started) and during Pomodoro breaks
 - ✅ **Break suggestions** (stretch, water, eyes 20-20-20) during Pomodoro breaks (web)
 - ✅ **Session goals with notes:** "what did you finish?" and a 1–5 rating on stop, kept with the session (web)
@@ -99,5 +99,5 @@ has shipped since the list was started.
   notifications next, via Web Push)
 - [ ] **Wear OS complications** for the streak and today's percentage
 - ✅ **Backup encryption** with a passphrase for Drive / GitHub backups (AES-256-GCM, the
-  clipboard's format; restore and the web import ask for it)
+  clipboard's format; restore and the web import ask for it; the web exports encrypted too)
 - [ ] **Localisation** (Hindi first)

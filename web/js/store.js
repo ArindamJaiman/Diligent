@@ -358,6 +358,31 @@
     const r = touch(date, id); r.skip = !r.skip; r.t = Date.now();
     emit({ type: "progress", id, date });
   }
+  // ─── Checklists (the app's Checklists): sub-tasks worth an equal share of the goal ──
+  const CHECK_MAX = 12;
+  /** One item per line (commas and semicolons split too), trimmed, no repeats, up to 12. */
+  function parseChecklist(text) {
+    const seen = new Set(), out = [];
+    String(text || "").split(/[\n,;]/).map((x) => x.trim().slice(0, 60)).forEach((x) => { if (x && !seen.has(x) && out.length < CHECK_MAX) { seen.add(x); out.push(x); } });
+    return out;
+  }
+  const checklist = (a) => (Array.isArray(a.checklist) && !isLimit(a) ? a.checklist : []);
+  const ticks = (a, date) => ((rowOf(date, a.id) || {}).ticks || []).filter((i) => i < checklist(a).length);
+  /** Share of the daily goal one item is worth (0 for limits). */
+  const checkStep = (a) => { const n = checklist(a).length; return n && a.goal > 0 && !isLimit(a) ? a.goal / n : 0; };
+  /** Ticks or unticks item i: logs its share; the last tick fills the goal exactly. */
+  function toggleTick(id, i, date) {
+    date = date || today();
+    const a = byId(id); if (!a) return;
+    const items = checklist(a); if (i < 0 || i >= items.length) return;
+    const r = touch(date, id), set = new Set(ticks(a, date)), stepBy = checkStep(a);
+    if (set.has(i)) { set.delete(i); r.ticks = [...set].sort((x, y) => x - y); if (stepBy) add(id, -stepBy, date); else emit({ type: "progress", id, date }); return false; }
+    set.add(i); r.ticks = [...set].sort((x, y) => x - y);
+    if (!stepBy) emit({ type: "progress", id, date });
+    else if (set.size === items.length) add(id, Math.max(0, a.goal - r.p), date);
+    else add(id, stepBy, date);
+    return true;
+  }
   function note(id, text, date) {
     date = date || today();
     const r = touch(date, id); r.note = text; r.t = Date.now();
@@ -489,6 +514,13 @@
         rows++;
       });
       (data.dayLogs || []).forEach((l) => { if (l.date) state.dayLogs[l.date] = { mood: l.mood || 0, energy: l.energy || 0, note: l.note || "", t: l.updatedAt || Date.now() }; });
+      // Checklists: items by app activity id, ticks by "id|date".
+      const cl = data.checklists || {};
+      Object.entries(cl.items || {}).forEach(([appId, items]) => { const a = byId(ids[appId]); if (a && Array.isArray(items)) a.checklist = parseChecklist(items.join("\n")); });
+      Object.entries(cl.done || {}).forEach(([key, list]) => {
+        const [appId, date] = key.split("|"), id = ids[appId];
+        if (id && date && Array.isArray(list)) touch(date, id).ticks = list.filter((n) => Number.isInteger(n)).sort((x, y) => x - y);
+      });
       emit({ type: "import" });
       return `Imported the app backup: ${added} new activities, ${rows} days`;
     }
@@ -517,7 +549,7 @@
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, emit, save,
     active, byId, rowOf, progressOf, met, credit, skipped, isLimit, dayShare, streak, bestStreak, strength,
     isDue, neutral, describe, caption, weekPlan, isPlannedFor, streakUnit, pace, lifetime, isScheduledDay, weekStart, weekSummary, bestWeek, hoursOf, hoursOn, overallStreak, fmt, step,
-    add, set, toggleDone, toggleSkip, note, upsertActivity, removeActivity, move, dayLog, setDayLog,
+    add, set, toggleDone, toggleSkip, note, parseChecklist, checklist, ticks, checkStep, toggleTick, upsertActivity, removeActivity, move, dayLog, setDayLog,
     parseQuick, runQuick, matchActivity, exportJson, importJson, exportCsv,
   };
 })();
