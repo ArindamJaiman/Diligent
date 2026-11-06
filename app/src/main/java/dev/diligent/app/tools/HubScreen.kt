@@ -26,6 +26,7 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.automation.AutoLogService
 import dev.diligent.app.automation.AutomationsScreen
 import dev.diligent.app.cloud.ChallengesScreen
+import dev.diligent.app.cloud.ClipboardScreen
 import dev.diligent.app.cloud.CloudScreen
 import dev.diligent.app.cloud.CloudService
 import dev.diligent.app.cloud.RoomsScreen
@@ -98,6 +99,7 @@ object ToolRoutes {
     const val CLOUD = "tools/cloud"
     const val ROOMS = "tools/rooms"
     const val CHALLENGES = "tools/challenges"
+    const val CLIPBOARD = "tools/clipboard"
 
     /** Not screens: the Hub opens these activities directly. */
     const val DESK = "desk"
@@ -107,7 +109,7 @@ object ToolRoutes {
     const val LEETCODE = "leetcode"
     const val QUOTAPULSE = "quotapulse"
 
-    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN, INSIGHTS, ACHIEVEMENTS, REPORTS, GLYPH, CLOUD, ROOMS, CHALLENGES)
+    private val ALL = listOf(HUB, CONTESTS, PAPERS, TOP3, SCREEN_TIME, WEEKLY, GOALS, HEALTH, VERSUS, ROUTINES, AUTOMATIONS, FOCUS, PLAN, SHUTDOWN, INSIGHTS, ACHIEVEMENTS, REPORTS, GLYPH, CLOUD, ROOMS, CHALLENGES, CLIPBOARD)
 
     fun uri(route: String): String = "diligent://tool/" + route.removePrefix("tools/")
 
@@ -142,6 +144,7 @@ fun NavGraphBuilder.toolsGraph(nav: NavHostController) {
     composable(ToolRoutes.CLOUD) { CloudScreen(onBack = back) }
     composable(ToolRoutes.ROOMS) { RoomsScreen(onBack = back) }
     composable(ToolRoutes.CHALLENGES) { ChallengesScreen(onBack = back) }
+    composable(ToolRoutes.CLIPBOARD) { ClipboardScreen(onBack = back) }
 }
 
 data class HubTile(
@@ -293,7 +296,12 @@ class HubViewModel @Inject constructor(
             HubTile(ToolRoutes.QUOTAPULSE, "QuotaPulse", "AI usage: Claude, Codex, Gemini", Icons.Outlined.Speed, section = HubSections.TRACK),
             HubTile(ToolRoutes.ROOMS, "Study room", if (social.room.isBlank()) "Focus together with friends, live" else "In room ${social.room}", Icons.Outlined.Groups, section = HubSections.COMPETE),
             HubTile(ToolRoutes.CHALLENGES, "Challenges", "e.g. Quantum 100 h in November, with friends", Icons.Outlined.Flag, section = HubSections.COMPETE),
-            HubTile(ToolRoutes.CLOUD, "Cloud", cloudLine, Icons.Outlined.Cloud, section = HubSections.CONNECT)
+            HubTile(ToolRoutes.CLOUD, "Cloud", cloudLine, Icons.Outlined.Cloud, section = HubSections.CONNECT),
+            HubTile(
+                ToolRoutes.CLIPBOARD, "Clipboard",
+                if (cloudState.supabaseReady) "Shared with the web app and your rooms" else "Phone ↔ web clipboard (needs Cloud)",
+                Icons.Outlined.ContentPaste, section = HubSections.CONNECT
+            )
         )
     }
 }

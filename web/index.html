@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="en" data-theme="mono">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Diligent</title>
+<meta name="description" content="Track your discipline. Build consistency. Diligent for the web: liquid, monochrome, synced with the Android app.">
+<meta name="theme-color" content="#000000">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Doto:wght@400;700;900&family=Space+Mono:ital,wght@0,400;0,700;1,400&family=UnifrakturMaguntia&display=swap">
+<link rel="stylesheet" href="css/style.css">
+<script>
+  // Apply the saved theme before first paint.
+  try { const s = JSON.parse(localStorage.getItem("diligent.web.v1") || "{}").settings || {}; if (s.theme) document.documentElement.dataset.theme = s.theme; } catch {}
+</script>
+</head>
+<body>
+<canvas id="fluid" aria-hidden="true"></canvas>
+<div class="backdrop-fallback" id="fallback" hidden></div>
+<div class="grain" aria-hidden="true"></div>
+
+<!-- Goo: blur + alpha threshold, so overlapping blobs melt into one -->
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <filter id="goo">
+    <feGaussianBlur in="SourceGraphic" stdDeviation="7" result="blur" />
+    <feColorMatrix in="blur" mode="matrix" values="1 0 0 0 0  0 1 0 0 0  0 0 1 0 0  0 0 0 22 -9" result="goo" />
+    <feComposite in="SourceGraphic" in2="goo" operator="atop" />
+  </filter>
+</svg>
+
+<div class="app">
+  <header class="top">
+    <a class="brand" href="#today" data-magnetic="0.15"><b>Diligent</b><span id="brand-date">track your discipline</span></a>
+    <nav class="tabs" id="tabs" aria-label="Sections">
+      <div class="goo"><div class="blob"></div><div class="blob lag"></div></div>
+      <button data-view="today" class="on">Today</button>
+      <button data-view="focus">Focus</button>
+      <button data-view="stats">Stats</button>
+      <button data-view="clipboard">Clipboard<span class="badge" id="clip-badge" hidden></span></button>
+      <button data-view="room">Room</button>
+      <button data-view="settings">Settings</button>
+    </nav>
+    <button class="icon-btn" id="open-palette" title="Command palette (Ctrl K)" aria-label="Command palette" data-magnetic="0.3"><span class="kbd">⌘K</span></button>
+  </header>
+
+  <main id="main"></main>
+</div>
+
+<!-- Command palette -->
+<dialog class="palette" id="palette">
+  <input id="palette-input" placeholder="Type a command or log: “2h quantum”, “+3 lc”, “focus coding 50”" autocomplete="off" spellcheck="false">
+  <ul id="palette-list"></ul>
+</dialog>
+
+<!-- Activity editor -->
+<dialog id="editor">
+  <form method="dialog" id="editor-form">
+    <p class="label">Activity</p>
+    <label class="field" for="ed-name">Name</label>
+    <input id="ed-name" required maxlength="60" autocomplete="off">
+    <div class="row" style="align-items:flex-start">
+      <div style="flex:1">
+        <label class="field" for="ed-unit">Unit</label>
+        <select id="ed-unit"><option>hrs</option><option>mins</option><option>qs</option><option>pages</option><option>reps</option><option>times</option><option>km</option></select>
+      </div>
+      <div style="flex:1">
+        <label class="field" for="ed-goal">Daily goal</label>
+        <input id="ed-goal" type="number" min="0" step="any" required>
+      </div>
+    </div>
+    <label class="field">Goal type</label>
+    <div class="seg" id="ed-type">
+      <button type="button" data-v="at_least">At least</button>
+      <button type="button" data-v="at_most">At most</button>
+      <button type="button" data-v="quit">Quit</button>
+    </div>
+    <label class="field">Colour</label>
+    <div class="swatches" id="ed-colors"></div>
+    <div class="row" style="margin-top:22px">
+      <button type="button" class="btn danger sm" id="ed-delete">Archive</button>
+      <span class="spacer"></span>
+      <button type="button" class="btn ghost" value="cancel" id="ed-cancel">Cancel</button>
+      <button class="btn" value="ok" id="ed-save">Save</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Shortcuts -->
+<dialog id="keys">
+  <p class="label">Keyboard</p>
+  <div class="keys">
+    <span class="kbd">1 – 6</span><span>Switch section</span>
+    <span class="kbd">Ctrl K · /</span><span>Command palette and quick log</span>
+    <span class="kbd">L</span><span>Focus the quick-log box</span>
+    <span class="kbd">F</span><span>Start / stop focus</span>
+    <span class="kbd">N</span><span>New activity</span>
+    <span class="kbd">[ · ]</span><span>Previous / next day</span>
+    <span class="kbd">T</span><span>Back to today</span>
+    <span class="kbd">Ctrl V</span><span>On Clipboard: paste straight into a new clip</span>
+    <span class="kbd">Ctrl ↵</span><span>Send the clip you're typing</span>
+    <span class="kbd">?</span><span>This list</span>
+  </div>
+  <form method="dialog" class="row" style="margin-top:18px"><span class="spacer"></span><button class="btn">Close</button></form>
+</dialog>
+
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="js/quotes.js"></script>
+<script src="js/store.js"></script>
+<script src="js/cloud.js"></script>
+<script src="js/fluid.js"></script>
+<script src="js/cursor.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

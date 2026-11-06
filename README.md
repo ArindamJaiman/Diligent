@@ -13,6 +13,24 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - **Nothing-inspired widget** — Premium home screen widget matching Nothing OS design language
 - **Battery efficient** — Dark-first design, optimized widget updates, WorkManager scheduling
 
+## ✦ Web app
+
+**Diligent for the browser** lives in [`web/`](web/) and is published to GitHub Pages by CI:
+a WebGL fluid background that follows your cursor, a liquid blob cursor, cards that fill with
+liquid as you log, a focus timer, stats, study rooms, a command palette (`Ctrl K`) and three
+themes. It works offline on its own, imports the app's JSON backup, and syncs with the app
+through your Supabase project. Details: [docs/WEB.md](docs/WEB.md)
+
+### Shared clipboard
+- Copy on one device, paste on another: phone (Hub → **Clipboard**), any browser running the web
+  app, and everyone in a room with the same code
+- **Share → Diligent clipboard** from any Android app sends the text straight there
+- The web app also shares images, takes `Ctrl V` anywhere on its Clipboard tab and drag & drop
+- Stored in your own Supabase project, scoped by your owner id or the room code; nothing
+  polls in the background ([docs/CLOUD.md](docs/CLOUD.md#shared-clipboard))
+
+What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
+
 ## ✦ Features
 
 ### Core
@@ -106,7 +124,7 @@ A minimalist monochrome productivity tracking app for Android with home screen w
 - **Reports:** month / year wrap-up images, PDF report for any range, README stats card
 - **Quick log:** "2h quantum", "+3 lc", "gym done yesterday", typed or spoken; QS tile and launcher shortcuts
 - **Desk mode** and screen saver; **Glyph Matrix** toy for the Nothing Phone (3) ([docs/GLYPH.md](docs/GLYPH.md))
-- **Cloud:** nightly backup to Drive / Dropbox / a private GitHub repo, Supabase sync, web dashboard, laptop browser extension, **study rooms** and **challenges**, webhook / Notion export ([docs/CLOUD.md](docs/CLOUD.md))
+- **Cloud:** nightly backup to Drive / Dropbox / a private GitHub repo, Supabase sync, web app, **shared clipboard**, laptop browser extension, **study rooms** and **challenges**, webhook / Notion export ([docs/CLOUD.md](docs/CLOUD.md))
 - **Now widget** (the card that fits the moment) and a **Wear OS tile** (`wear` module)
 - Look & feel: red night and paper themes, four launcher icons, haptics and chimes, app lock
 

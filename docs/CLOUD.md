@@ -7,7 +7,7 @@ nightly job runs at 23:40 (and on **RUN NOW**).
 |---|---|---|
 | Automatic backup | A folder you pick (Google Drive, Dropbox, the phone): 7 rolling files, one per weekday | nothing else |
 | GitHub backup | `diligent-backup.json` in a private repo; the repo history keeps every night | fine-grained token with *Contents: write* on that repo |
-| Sync, web dashboard, laptop extension, rooms, challenges | Your Supabase project | project URL + anon key, and the SQL below |
+| Sync, web app, laptop extension, rooms, challenges, shared clipboard | Your Supabase project | project URL + anon key, and the SQL below |
 | Nightly export | A webhook (Zapier, Make, Google Apps Script) and/or a Notion database | webhook URL; Notion integration token + database id |
 
 Tokens and keys are stored encrypted with the Android Keystore (`SecretStore`).
@@ -43,6 +43,10 @@ create table if not exists diligent_challenges (
   code text primary key, title text, keyword text, target double precision,
   unit text, start_date text, end_date text);
 
+create table if not exists diligent_clips (
+  scope text not null, id text not null, text text, kind text default 'text',
+  device text, created_at bigint, primary key (scope, id));
+
 create table if not exists diligent_scores (
   code text not null, member text not null, name text, total double precision,
   updated_at bigint, primary key (code, member));
@@ -57,6 +61,7 @@ alter table diligent_desktop enable row level security;
 alter table diligent_presence enable row level security;
 alter table diligent_challenges enable row level security;
 alter table diligent_scores enable row level security;
+alter table diligent_clips enable row level security;
 
 create policy own_days on diligent_days for all
   using (owner = diligent_header('x-diligent-owner'))
@@ -70,6 +75,11 @@ create policy room_presence on diligent_presence for all
 create policy room_challenges on diligent_challenges for all
   using (code = diligent_header('x-diligent-room'))
   with check (code = diligent_header('x-diligent-room'));
+create policy clips on diligent_clips for all
+  using (length(scope) > 5 and (scope = diligent_header('x-diligent-owner')
+         or scope = 'room:' || diligent_header('x-diligent-room')))
+  with check (length(scope) > 5 and (scope = diligent_header('x-diligent-owner')
+         or scope = 'room:' || diligent_header('x-diligent-room')));
 create policy room_scores on diligent_scores for all
   using (code = diligent_header('x-diligent-room'))
   with check (code = diligent_header('x-diligent-room'));
@@ -86,6 +96,29 @@ create policy room_scores on diligent_scores for all
   the Study room screen is open. Nothing polls in the background.
 - **Challenges:** your total (activities whose name contains the keyword, between the dates) is
   pushed when you open Challenges and nightly.
+
+Already set up before the shared clipboard existed? Run only the `diligent_clips` table, its
+`enable row level security` line and the `clips` policy.
+
+## Shared clipboard
+
+Hub → Clipboard on the phone, the Clipboard tab in the web app (`web/`), and **Share →
+Diligent clipboard** from any Android app. Clips are scoped like everything else:
+
+- **My devices:** `scope` is your owner id, so only your devices see them.
+- **Room:** `scope` is `room:<CODE>` and requests carry the code in `x-diligent-room`; everyone
+  with the code sees them.
+- **This browser** (web only) never leaves the browser.
+
+Text is capped at 20,000 characters; the web app also shares images (downscaled to a data URL
+of at most ~250 KB). The phone lists image clips but leaves showing them to the web app.
+Nothing polls in the background: the phone refreshes every 10 s while the Clipboard screen is
+open, the web app every 4 s while its Clipboard tab is open (and every 30 s for the badge).
+
+## Web app
+
+`web/` is Diligent for the browser, with its own local data and the same Supabase project; see
+[WEB.md](WEB.md).
 
 ## Web dashboard
 

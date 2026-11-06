@@ -448,6 +448,22 @@
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:windowSoftInputMode="stateVisible|adjustResize" />
 
+        <!-- Share → "Diligent clipboard": sends shared text to the shared clipboard (Hub → Clipboard) -->
+        <activity
+            android:name=".cloud.ShareToClipboardActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:label="@string/share_clipboard_label"
+            android:noHistory="true"
+            android:taskAffinity=""
+            android:theme="@android:style/Theme.Translucent.NoTitleBar">
+            <intent-filter>
+                <action android:name="android.intent.action.SEND" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity>
+
         <!-- Launcher "Focus: …" shortcuts; acts only on intents with this install's token -->
         <activity
             android:name=".quicklog.ShortcutActivity"
