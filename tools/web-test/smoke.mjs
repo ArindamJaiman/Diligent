@@ -77,7 +77,19 @@ try {
   // Wait for the clock to tick rather than sampling it at a fixed moment (CI renders slowly).
   const ticked = await a.waitForFunction(() => { const t = document.getElementById("timer-clock"); return t && /^00:(0[1-9]|[1-5]\d)$/.test(t.textContent); }, null, { timeout: 15000 }).then(() => true, () => false);
   check(ticked && /Diligent$/.test(await a.title()) && (await a.title()).includes("Quantum"), "focus timer runs and shows in the tab title");
+  await a.click("#distracted");
+  await a.keyboard.press("d");
+  await a.evaluate(() => { Diligent.store.state.focus.startedAt -= 5 * 60000; }); // make it a 5-minute session
   await a.click("#stop");
+  await a.waitForSelector("#session-dialog[open]");
+  await a.fill("#sd-done", "Read the Grover chapter");
+  await a.click('#sd-rate button[data-n="4"]');
+  await a.click("#sd-save");
+  await a.waitForFunction(() => Diligent.store.state.sessions[0].done === "Read the Grover chapter", null, { timeout: 5000 }).catch(() => {});
+  await a.waitForSelector(".done-note", { timeout: 5000 }).catch(() => {});
+  const sess = await a.evaluate(() => Diligent.store.state.sessions[0]);
+  check(sess.done === "Read the Grover chapter" && sess.rating === 4 && sess.distractions === 2 && (await a.locator(".done-note").count()) >= 1,
+    "after a session: what got done, a rating and the distractions are kept");
 
   await blur(a);
   await a.keyboard.press("4");
@@ -107,6 +119,10 @@ try {
     && sent.body.model === "claude-opus-5-5" && sent.body.fallbacks === "default" && Array.isArray(sent.body.messages)
     && !JSON.stringify(sent.body).includes("What went well"), "coach letter: request shape, and no notes in what's sent");
   check((await a.locator("#coach-letter").innerText()).includes("Shut down at 10") && await a.locator("#coach-letter .arrow").count() === 3, "coach letter renders the text blocks and the three experiments");
+  await a.click('#coach-period button[data-v="month"]');
+  await a.click("#coach-write");
+  await a.waitForTimeout(600);
+  check(sent.body.system.includes("monthly letter") && sent.body.messages[0].content.includes('"this_month_vs_last"'), "the monthly letter sends 30 days vs the 30 before");
   reply = { status: 200, json: { model: "claude-opus-5-5", stop_reason: "refusal", content: [] } };
   await a.click("#coach-write");
   await a.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("declined")), null, { timeout: 5000 }).catch(() => {});
@@ -255,7 +271,8 @@ try {
   await b.waitForFunction(() => document.querySelectorAll(".challenge .stand").length >= 1, null, { timeout: 8000 }).catch(() => {});
   // Both test devices share one owner id, so they are one member with one score row (like the app).
   const rows = db.tables.diligent_scores.filter((r) => r.code === chCode);
-  check(rows.length === 1 && rows[0].total === 2 && await b.evaluate((c) => Diligent.store.state.challenges.some((x) => x.code === c), chCode)
+  const expected = await a.evaluate((c) => Diligent.cloud.challengeTotal(Diligent.store.state.challenges.find((x) => x.code === c)), chCode);
+  check(rows.length === 1 && expected > 2 && Math.abs(rows[0].total - expected) < 0.01 && await b.evaluate((c) => Diligent.store.state.challenges.some((x) => x.code === c), chCode)
     && await b.locator(".challenge .stand").count() === 1, `a second device joins by code and the board shows the Quantum total (${rows.length} row, total ${rows[0] && rows[0].total})`);
 
   // Room passphrase: room clips are encrypted with it

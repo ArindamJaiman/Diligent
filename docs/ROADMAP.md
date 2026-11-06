@@ -27,7 +27,8 @@ has shipped since the list was started.
 - ✅ End-to-end encryption for room clips: a room passphrase, shared apart from the code
 - [ ] **Files** (PDFs, small zips) through Supabase Storage, with expiry
 - ✅ **Pin and expire** clips (keep pinned, delete the rest after 24 h; 7 days or forever on the web)
-- [ ] Browser extension: right-click → *Send to Diligent clipboard*
+- ✅ Browser extension: right-click → *Send to Diligent clipboard* (selection, link, image address
+  or page; encrypted with the clipboard passphrase when set)
 
 ## Web app
 
@@ -57,13 +58,13 @@ has shipped since the list was started.
 ## Focus
 
 - [ ] **Focus music**: play a chosen playlist / app when a session starts, stop it on stop
-- [ ] **Break suggestions** (stretch, water, eyes 20-20-20) during Pomodoro breaks
-- [ ] **Session goals with notes:** "what did you finish?" on stop, kept with the session
-- [ ] **Distraction log:** tap a button when you get distracted; see when it happens most
+- ✅ **Break suggestions** (stretch, water, eyes 20-20-20) during Pomodoro breaks (web)
+- ✅ **Session goals with notes:** "what did you finish?" and a 1–5 rating on stop, kept with the session (web)
+- ✅ **Distraction log:** Distracted (or D) during a session; a 7-day card of when it happens most (web)
 
 ## Insights
 
-- [ ] **Monthly letter** from Claude in addition to the weekly coach letter
+- ✅ **Monthly letter** from Claude in addition to the weekly coach letter (web: Week / Month)
 - [ ] **Correlations** across sleep, steps, mood and output with confidence ranges
 - [ ] **Forecast:** "at this pace you'll reach 200 h on 14 Dec" for every long-term target on the dashboard
 - ✅ **Coach letter on the web** with your own Anthropic API key (the app's weekly coach, from the browser)

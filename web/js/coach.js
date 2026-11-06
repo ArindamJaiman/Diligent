@@ -27,13 +27,14 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
   const setKey = (k) => { try { k ? localStorage.setItem(KEY, k.trim()) : localStorage.removeItem(KEY); } catch {} };
   const round1 = (x) => Math.round(x * 10) / 10;
 
-  /** What gets sent, also shown before sending. */
-  function summary() {
-    const t = S.today(), days = S.range(S.addDays(t, -13), t);
+  /** What gets sent, also shown before sending. "week": the last 14 days; "month": the last 30 vs the 30 before. */
+  function summary(period) {
+    const month = period === "month", span = month ? 30 : 7;
+    const t = S.today(), days = S.range(S.addDays(t, -(span * 2 - 1)), t);
     const sessions = state.sessions.filter((x) => S.iso(new Date(x.start)) >= days[0]);
     const byHour = new Array(24).fill(0);
     sessions.forEach((x) => { byHour[new Date(x.start).getHours()] += x.minutes; });
-    const week = S.range(S.addDays(t, -6), t), last = S.range(S.addDays(t, -13), S.addDays(t, -7));
+    const week = S.range(S.addDays(t, -(span - 1)), t), last = S.range(S.addDays(t, -(span * 2 - 1)), S.addDays(t, -span));
     const total = (a, ds) => ds.reduce((n, d) => n + S.progressOf(d, a.id), 0);
     const moods = days.map((d) => state.dayLogs[d]).filter((l) => l && l.mood);
     const good = days.filter((d) => (state.dayLogs[d] || {}).mood >= 4 && S.dayShare(d) != null);
@@ -45,7 +46,8 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
     if (sessions.length >= 3) patterns.push(`Most focus minutes start around ${peak}:00.`);
     return {
       today: t,
-      days: days.map((d) => {
+      period: month ? "last 30 days vs the 30 before" : "last 7 days vs the 7 before",
+      days: (month ? days.slice(-30) : days).map((d) => {
         const log = state.dayLogs[d] || {}, share = S.dayShare(d);
         const o = { date: d, hours: round1(S.hoursOn(d)), focus_sessions: sessions.filter((x) => S.iso(new Date(x.start)) === d).length };
         if (share != null) o.goals_hit_pct = Math.round(share * 100);
@@ -53,8 +55,8 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
         if (log.energy) o.energy_1_5 = log.energy;
         return o;
       }),
-      this_week_vs_last: S.active().map((a) => ({ activity: a.name, unit: a.unit, schedule: S.describe(a), this_week: round1(total(a, week)), last_week: round1(total(a, last)), streak: S.streak(a) })),
-      focus_14d: {
+      [month ? "this_month_vs_last" : "this_week_vs_last"]: S.active().map((a) => ({ activity: a.name, unit: a.unit, schedule: S.describe(a), current: round1(total(a, week)), previous: round1(total(a, last)), streak: S.streak(a) })),
+      [month ? "focus_60d" : "focus_14d"]: {
         sessions: sessions.length,
         minutes: sessions.reduce((n, x) => n + x.minutes, 0),
         avg_minutes: sessions.length ? Math.round(sessions.reduce((n, x) => n + x.minutes, 0) / sessions.length) : 0,
@@ -65,8 +67,11 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
     };
   }
 
+  const MONTHLY = SYSTEM_PROMPT.replace("a short weekly letter", "a monthly letter").replace("about 150-220 words", "about 220-300 words")
+    .replace("exactly three small, concrete experiments for next week", "exactly three small, concrete experiments for next month");
+
   /** Writes the letter; throws with a readable message. */
-  async function write(data) {
+  async function write(data, period) {
     const key = getKey();
     if (!key) throw new Error("Add your Anthropic API key first");
     let res;
@@ -86,8 +91,8 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
           model: MODEL,
           max_tokens: 16000,
           fallbacks: "default",
-          system: SYSTEM_PROMPT,
-          messages: [{ role: "user", content: "Here is my last two weeks as JSON:\n" + JSON.stringify(data) }],
+          system: period === "month" ? MONTHLY : SYSTEM_PROMPT,
+          messages: [{ role: "user", content: (period === "month" ? "Here is my last two months as JSON:\n" : "Here is my last two weeks as JSON:\n") + JSON.stringify(data) }],
         }),
       });
     } catch {
@@ -105,7 +110,7 @@ put rest first. Don't invent data that isn't in the summary, and don't lecture.`
     if (body.stop_reason === "refusal") throw new Error("Claude declined to write this one; try again later");
     const text = (body.content || []).filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
     if (!text) throw new Error("Empty reply");
-    state.coach = { letter: text, at: Date.now(), model: body.model || MODEL };
+    state.coach = { letter: text, at: Date.now(), model: body.model || MODEL, period: period === "month" ? "month" : "week" };
     S.save();
     return state.coach;
   }

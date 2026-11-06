@@ -1,4 +1,4 @@
-const fields = ["url", "key", "owner", "map"];
+const fields = ["url", "key", "owner", "map", "device", "pass"];
 chrome.storage.local.get("config").then(({ config = {} }) => {
   fields.forEach((f) => { if (config[f] !== undefined) document.getElementById(f).value = config[f]; });
 });

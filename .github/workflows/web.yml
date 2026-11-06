@@ -4,9 +4,9 @@ name: Web check
 # log, palette, focus, day sync between two devices, the shared clipboard and rooms.
 on:
   push:
-    paths: ["web/**", "tools/web-test/**", ".github/workflows/web.yml"]
+    paths: ["web/**", "companion/extension/**", "tools/web-test/**", ".github/workflows/web.yml"]
   pull_request:
-    paths: ["web/**", "tools/web-test/**", ".github/workflows/web.yml"]
+    paths: ["web/**", "companion/extension/**", "tools/web-test/**", ".github/workflows/web.yml"]
   workflow_dispatch:
 
 concurrency:

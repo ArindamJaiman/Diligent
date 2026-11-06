@@ -91,5 +91,5 @@ Desktop.ini
 *.bak
 
 # Web smoke test dependencies
-tools/web-test/node_modules/
+tools/web-test/node_modules
 tools/web-test/package-lock.json

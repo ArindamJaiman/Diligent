@@ -1,7 +1,11 @@
 {
   "name": "diligent-web-test",
   "private": true,
-  "description": "Browser smoke test for web/: serves it, fakes Supabase, drives it with Playwright.",
-  "scripts": { "test": "node smoke.mjs" },
-  "devDependencies": { "playwright": "1.63.0" }
+  "description": "Browser tests for web/ and the browser extension: serves them, fakes Supabase, drives them with Playwright.",
+  "scripts": {
+    "test": "node smoke.mjs && node extension.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
 }

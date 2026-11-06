@@ -161,6 +161,10 @@ totals.
 
 ## Laptop extension
 
+Right-click **Send to Diligent clipboard** sends selected text, a link, an image address or the
+page to your own clips (set the clipboard passphrase in its options to encrypt them, as in the
+app). The rest of this section is about time tracking.
+
 `companion/extension` is a Chrome / Edge extension (Manifest V3). Load it with
 *Extensions → Developer mode → Load unpacked*. In its options, set the Supabase details and map
 sites to activities, e.g. `github.com = Coding`, `leetcode.com = LeetCode`,
