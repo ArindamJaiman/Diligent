@@ -136,6 +136,10 @@ the Room tab). Room clips are then encrypted the same way. The room code can't b
 since it's stored next to the clips, so share the passphrase separately, and set it on every
 device in the room; without it a member sees those clips as 🔒 locked.
 
+**Room chat (web):** short messages in a room are stored in the same table as room clips, with
+`kind = 'chat'`, so they use the room's row policy, the room passphrase and Realtime pings with
+nothing new to set up. They're deleted after a day, and the clipboard lists (web and phone) skip them.
+
 **Instant updates (web):** the web app also opens a Supabase **Realtime** socket while the
 Clipboard or Room tab is open. After a change it sends a tiny "changed" ping (no data) on a
 channel named from a SHA-256 of your owner id or the room code, and other open tabs refetch

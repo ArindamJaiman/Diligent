@@ -50,7 +50,8 @@ has shipped since the list was started.
 - [ ] **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard")
 - [ ] **Numeric journal fields** (weight, resting heart rate, sleep score) charted next to activities
 - [ ] **Smart reschedule:** a missed weekly target moves its remaining sessions into the days left
-- [ ] **Undo snackbar** for every widget tap (reverts the last ± within 10 s)
+- ~~**Undo snackbar** for every widget tap~~ dropped: the widget's − already undoes a +, and an
+  extra control would crowd the small widget layouts
 - [ ] **Home-screen widget for one activity** with its own liquid fill, in Glance
 
 ## Focus
@@ -71,7 +72,8 @@ has shipped since the list was started.
 
 ## Social
 
-- [ ] **Room chat** (short messages, gone after 24 h) and nudges ("ping Alex to focus")
+- ✅ **Room chat** (web Room tab: short messages, gone after 24 h, encrypted with the room
+  passphrase when set) and **nudges** for room mates who aren't focusing
 - ✅ **Challenge templates** (LeetCode 30, Quantum 100 h, Deep work week, Gym 12, Reading 20 h,
   Papers sprint) in the app, and **challenges on the web** (Room tab) sharing the app's leaderboard
 - ✅ **Public profile page** (opt-in, web Settings → Public page): one self-contained HTML file

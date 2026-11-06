@@ -145,7 +145,8 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
             val pinColumn = rows.any { "pinned" in it.jsonObject }
             runCatching { db.delete(TABLE, "scope=eq.${scope(room)}&created_at=lt.$cut" + if (pinColumn) "&pinned=not.is.true" else "") }
         }
-        all.filter { it.pinned || it.createdAt >= cut }.sortedWith(compareByDescending<Clip> { it.pinned }.thenByDescending { it.createdAt })
+        // Room chat (web Room tab) lives in the same table as kind "chat"; it isn't a clip.
+        all.filter { it.kind != "chat" && (it.pinned || it.createdAt >= cut) }.sortedWith(compareByDescending<Clip> { it.pinned }.thenByDescending { it.createdAt })
     }
 
     /** Pins or unpins by rewriting the row (the tiny client has no PATCH). */

@@ -231,6 +231,16 @@ try {
   check(db.tables.diligent_presence.some((r) => r.room === "SMOKE1"), "joining a room publishes presence");
   check(await a.locator(".pool .mblob:not(.core)").count() >= 1, "room members show as liquid blobs");
 
+  // Room chat: A says something, B (in the same room) sees it; the clipboard doesn't list it
+  await a.fill("#chat-text", "anyone up for a 50 min block?");
+  await a.press("#chat-text", "Enter");
+  await a.waitForSelector(".msg.mine");
+  await b.evaluate(() => { Diligent.store.state.cloud.room = "SMOKE1"; Diligent.store.save(); location.hash = "#today"; });
+  await b.evaluate(() => { location.hash = "#room"; });
+  await b.waitForFunction(() => document.body.innerText.includes("anyone up for a 50 min"), null, { timeout: 8000 }).then(() => true, () => false);
+  check((await b.locator(".msg").allInnerTexts()).some((t) => t.includes("anyone up for a 50 min block?"))
+    && !(await a.evaluate(async () => (await Diligent.cloud.clips("room")).some((c) => c.text.includes("50 min block")))), "room chat reaches the other device and stays out of the clipboard");
+
   // Challenges: start one from a template, a second device joins with the code, both on the board
   await a.click('[data-tpl="1"]');
   check((await a.inputValue("#ch-kw")) === "Quantum", "a challenge template fills the form");
@@ -256,7 +266,7 @@ try {
   await a.fill("#clip-text", "notes for the room");
   await a.click("#clip-send");
   await a.waitForFunction(() => document.body.innerText.includes("notes for the room"), null, { timeout: 8000 }).catch(() => {});
-  const roomRow = db.tables.diligent_clips.find((r) => r.scope === "room:SMOKE1");
+  const roomRow = db.tables.diligent_clips.find((r) => r.scope === "room:SMOKE1" && r.kind !== "chat");
   check(!!roomRow && roomRow.text.startsWith("enc1:") && (await a.locator(".clip pre").allInnerTexts()).includes("notes for the room"),
     "room clips are encrypted with the room passphrase and read back");
 

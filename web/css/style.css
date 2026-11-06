@@ -377,6 +377,14 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .member.on .avatar::after { content: ""; position: absolute; inset: -6px; border-radius: 50%; border: 1px solid var(--good); animation: ring 2s var(--ease) infinite; }
 @keyframes ring { from { transform: scale(0.9); opacity: 0.8; } to { transform: scale(1.35); opacity: 0; } }
 .code { font: 900 40px/1 var(--font-dot); letter-spacing: 0.2em; }
+.chat { margin-top: 16px; }
+.msgs { max-height: 300px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-right: 4px; }
+.msg { align-self: flex-start; max-width: 78%; padding: 8px 12px; border-radius: 16px 16px 16px 4px; background: var(--raise); border: 1px solid var(--border); font-size: 13px;
+  display: flex; flex-direction: column; gap: 2px; animation: clip-in 0.5s var(--spring); }
+.msg b { font-size: 10.5px; color: var(--dim); }
+.msg i { font-style: normal; font-size: 9.5px; color: var(--faint); align-self: flex-end; }
+.msg.mine { align-self: flex-end; border-radius: 16px 16px 4px 16px; background: color-mix(in srgb, var(--good) 14%, var(--surface-solid)); border-color: color-mix(in srgb, var(--good) 35%, transparent); }
+.msg.nudge { border-style: dashed; }
 .challenges { grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); }
 .sbar em { position: absolute; top: -2px; width: 2px; height: 12px; margin-left: -1px; background: var(--text); opacity: 0.35; border-radius: 1px; }
 .challenge .standings { margin-top: 10px; display: flex; flex-direction: column; gap: 7px; }

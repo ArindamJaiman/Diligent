@@ -1181,6 +1181,46 @@
     if ((state.challenges || []).length && Date.now() - boardsAt > 4000) loadBoards();
   }
 
+
+  // ─── Room chat ───────────────────────────────────────
+  let chatList = [], chatDraft = "";
+  const me = () => state.settings.name || "Me";
+  function chatCard() {
+    const msgs = chatList.map((m) => `<div class="msg${m.from === me() ? " mine" : ""}${m.text.startsWith("👋") ? " nudge" : ""}">
+        ${m.from === me() ? "" : `<b>${esc(m.from || "?")}</b>`}<span>${m.locked ? "🔒 encrypted · set the room passphrase" : esc(m.text)}</span><i>${new Date(m.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</i></div>`).join("");
+    return `<div class="card spot chat"><p class="label">Room chat <span class="grow"></span><span class="tiny">messages are gone after a day</span></p>
+      <div class="msgs" id="msgs">${msgs || `<p class="tiny">Say hi, share what you're on, or nudge someone to start.</p>`}</div>
+      <div class="row" style="margin-top:10px"><input id="chat-text" maxlength="${C.CHAT_MAX}" placeholder="Message the room… (Enter to send)" style="flex:1" value="${esc(chatDraft)}" autocomplete="off"><button class="btn" id="chat-send">Send</button></div>
+    </div>`;
+  }
+  async function loadChat() {
+    try { chatList = await C.chat(); } catch { return; }
+    const box = $("#msgs");
+    if (box && view === "room") {
+      const tmp = document.createElement("div"); tmp.innerHTML = chatCard();
+      box.innerHTML = tmp.querySelector("#msgs").innerHTML; // swap only the messages, so typing isn't interrupted
+      box.scrollTop = box.scrollHeight;
+    }
+  }
+  function chatAfter() {
+    const input = $("#chat-text"); if (!input) return;
+    const send = async () => {
+      const text = input.value.trim(); if (!text) return;
+      input.value = ""; chatDraft = "";
+      try { await C.say(text); bloop("soft"); } catch (e) { toast(e.message, 4000); }
+      loadChat();
+    };
+    input.oninput = () => { chatDraft = input.value; };
+    input.onkeydown = (e) => { if (e.key === "Enter") { e.preventDefault(); send(); } };
+    $("#chat-send").onclick = send;
+    $$("[data-nudge]").forEach((b) => b.onclick = async () => {
+      try { await C.say(`👋 ${me()} nudged ${b.dataset.nudge} to start a focus session`); toast(`Nudged ${b.dataset.nudge}`); bloop(); } catch (e) { toast(e.message); }
+      loadChat();
+    });
+    const box = $("#msgs"); if (box) box.scrollTop = box.scrollHeight;
+    loadChat();
+  }
+
   function roomView() { return roomCore() + challengesSection(); }
   function roomCore() {
     if (!C.ready()) return `<div class="card spot"><p class="label">Study room</p><p>Rooms live in your own Supabase project, the same one the app uses.</p><button class="btn" onclick="location.hash='#settings'">Set up cloud</button></div>`;
@@ -1192,7 +1232,8 @@
     const now = Date.now();
     const on = roomMembers.filter((m) => m.activity && now - m.updatedAt < 10 * 60000), off = roomMembers.filter((m) => !on.includes(m));
     const mcard = (m, live) => `<div class="card member spot${live ? " on" : ""}"><div class="avatar">${esc((m.name || "?").slice(0, 1).toUpperCase())}</div>
-      <div style="min-width:0"><b>${esc(m.name)}</b><div class="tiny">${live ? `${esc(m.activity)} · ${Math.max(0, Math.round((now - m.since) / 60000))} min${m.until > now ? " · until " + new Date(m.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : "seen " + ago(m.updatedAt)}</div></div></div>`;
+      <div style="min-width:0;flex:1"><b>${esc(m.name)}</b><div class="tiny">${live ? `${esc(m.activity)} · ${Math.max(0, Math.round((now - m.since) / 60000))} min${m.until > now ? " · until " + new Date(m.until).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }) : ""}` : "seen " + ago(m.updatedAt)}</div></div>
+      ${!live && m.name !== me() ? `<button class="btn ghost sm" data-nudge="${esc(m.name)}" title="Send a nudge in the room chat">Nudge</button>` : ""}</div>`;
     return `<div class="card spot"><p class="label">Room <span class="grow"></span><span class="live">LIVE</span></p>
       <div class="row"><span class="code">${esc(room)}</span><span class="spacer"></span><button class="btn ghost sm" id="room-copy">Copy code</button><button class="btn ghost sm" id="room-clip">Room clipboard</button><button class="btn danger sm" id="room-leave">Leave</button></div>
       <p class="tiny">Your status updates when you start or stop the focus timer, here or on the phone.</p>
@@ -1200,6 +1241,7 @@
       <p class="tiny">${(state.cloud.roomPasses || {})[room] ? "🔒 Room clips are encrypted. Everyone in the room needs the same passphrase; share it apart from the code." : "Share a passphrase apart from the code and set it on every device to keep room clips unreadable to anyone with just the code."}</p>
       ${roomError ? `<p class="small" style="color:var(--bad)">${esc(roomError)}</p>` : ""}</div>
       ${roomPool(roomMembers, now)}
+      ${chatCard()}
       <p class="label" style="margin-top:22px">Focusing · ${on.length}</p>
       <div class="grid members">${on.map((m) => mcard(m, true)).join("") || `<p class="tiny">Nobody is focusing right now. Start a timer and you'll be first.</p>`}</div>
       ${off.length ? `<p class="label" style="margin-top:22px">Around</p><div class="grid members">${off.map((m) => mcard(m, false)).join("")}</div>` : ""}`;
@@ -1252,9 +1294,11 @@
     // On entering (not on every re-render, which would loop): your own status may have changed.
     if (roomFetched !== state.cloud.room || Date.now() - roomFetchedAt > 4000) refreshRoom();
     // On a ping only re-read the members: pushing presence back would ping everyone again.
+    chatAfter();
+    // A ping means presence or chat changed: re-read both, re-rendering only when nobody is typing.
     const offLive = C.watch("room:" + state.cloud.room, async () => {
       try { roomMembers = await C.members(); roomError = ""; } catch {}
-      if (view === "room") render(false);
+      if (view === "room" && !typing()) render(false); else loadChat();
     });
     const t = setInterval(() => { if (!document.hidden) refreshRoom(); }, 15000);
     return () => { clearInterval(t); offLive(); };

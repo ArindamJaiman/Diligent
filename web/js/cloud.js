@@ -158,7 +158,30 @@
       const pinCol = rows.some((r) => "pinned" in r);
       rest(`diligent_clips?${where}&created_at=lt.${cut}${pinCol ? "&pinned=not.is.true" : ""}`, { method: "DELETE", headers: scopeHeaders(scope) }).catch(() => {});
     }
-    return order(list.filter(fresh));
+    return order(list.filter((c) => c.kind !== "chat" && fresh(c)));
+  }
+
+  // ─── Room chat: short messages that are gone after a day ──
+  // Stored as room clips with kind "chat", so they reuse the room's row policy, the room
+  // passphrase (end-to-end) and Realtime pings; the clipboard lists skip them.
+  const CHAT_TTL = 24 * 3600e3, CHAT_MAX = 500;
+  async function chat() {
+    if (!ready() || !cfg().room) return [];
+    const where = `scope=eq.${encodeURIComponent(scopeId("room"))}&kind=eq.chat`;
+    const rows = await rest(`diligent_clips?${where}&select=*&order=created_at.desc&limit=60`, { headers: scopeHeaders("room") });
+    const cut = Date.now() - CHAT_TTL;
+    if (rows.some((r) => r.created_at < cut)) rest(`diligent_clips?${where}&created_at=lt.${cut}`, { method: "DELETE", headers: scopeHeaders("room") }).catch(() => {});
+    const pass = passphrase("room");
+    const list = await Promise.all(rows.filter((r) => r.created_at >= cut).map(async (r) => {
+      const plain = await unseal(r.text, pass);
+      return { id: r.id, text: plain == null ? "" : plain, locked: plain == null, from: r.device, createdAt: r.created_at };
+    }));
+    return list.reverse();
+  }
+  function say(text) {
+    text = String(text || "").trim().slice(0, CHAT_MAX);
+    if (!text) return Promise.resolve();
+    return pushClip("room", text, "chat", S.state.settings.name || "Me");
   }
 
   async function setPinned(scope, clip, pinned) {
@@ -180,12 +203,12 @@
     }
   }
 
-  async function pushClip(scope, text, kind) {
+  async function pushClip(scope, text, kind, from) {
     kind = kind || "text";
     if (!text) return;
     if (kind === "text") text = String(text).slice(0, MAX_CHARS);
     else if (text.length > MAX_IMAGE) throw new Error("That image is too big to share (max ~250 KB). Try a screenshot of a smaller area.");
-    const clip = { id: S.uid(), text, kind, device: device(), createdAt: Date.now() };
+    const clip = { id: S.uid(), text, kind, device: from || device(), createdAt: Date.now() };
     if (scope === "local") {
       S.state.clips.unshift(clip);
       S.state.clips = S.state.clips.slice(0, 100);
@@ -399,6 +422,7 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
+    chat, say, CHAT_MAX,
     CHALLENGE_TEMPLATES, createChallenge, joinChallenge, leaveChallenge, standings, challengeTotal,
     watch, scopeKey, liveState: () => live.state, encrypting: (scope) => !!passphrase(scope || "mine"),
   };
