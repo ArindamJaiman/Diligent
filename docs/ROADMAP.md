@@ -24,7 +24,7 @@ has shipped since the list was started.
 - [ ] **End-to-end encryption** for clips: derive a key from the owner id / room code so the
   Supabase project only stores ciphertext
 - [ ] **Files** (PDFs, small zips) through Supabase Storage, with expiry
-- [ ] **Pin and expire** clips (keep pinned, delete the rest after 24 h)
+- ✅ **Pin and expire** clips (keep pinned, delete the rest after 24 h; 7 days or forever on the web)
 - [ ] Browser extension: right-click → *Send to Diligent clipboard*
 
 ## Web app

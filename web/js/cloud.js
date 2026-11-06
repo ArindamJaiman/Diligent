@@ -92,12 +92,47 @@
   function scopeHeaders(scope) { return scope === "room" ? { "x-diligent-room": (cfg().room || "").toUpperCase() } : {}; }
   const MAX_CHARS = 20000, MAX_IMAGE = 350000;
 
+  /** Unpinned clips older than this are deleted (0 = keep forever). Pinned ones always stay. */
+  const ttlMs = () => { const h = S.state.settings.clipTtl; return (h == null ? 24 : +h) * 3600e3; };
+  const order = (list) => list.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
+  const fresh = (c) => c.pinned || !ttlMs() || Date.now() - c.createdAt < ttlMs();
+
   async function clips(scope) {
-    if (scope === "local") return S.state.clips.slice().sort((a, b) => b.createdAt - a.createdAt);
+    if (scope === "local") {
+      const keep = S.state.clips.filter(fresh);
+      if (keep.length !== S.state.clips.length) { S.state.clips = keep; S.save(); }
+      return order(keep.slice());
+    }
     if (!ready()) throw new Error("Add your Supabase project in Settings to share between devices");
     if (scope === "room" && !cfg().room) return [];
-    const rows = await rest(`diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}&select=id,text,kind,device,created_at&order=created_at.desc&limit=60`, { headers: scopeHeaders(scope) });
-    return rows.map((r) => ({ id: r.id, text: r.text, kind: r.kind || "text", device: r.device, createdAt: r.created_at }));
+    const where = `scope=eq.${encodeURIComponent(scopeId(scope))}`;
+    // select=* so a table made before the pinned column still works
+    const rows = await rest(`diligent_clips?${where}&select=*&order=created_at.desc&limit=80`, { headers: scopeHeaders(scope) });
+    const list = rows.map((r) => ({ id: r.id, text: r.text, kind: r.kind || "text", device: r.device, createdAt: r.created_at, pinned: !!r.pinned }));
+    if (ttlMs() && list.some((c) => !fresh(c))) {
+      const cut = Date.now() - ttlMs();
+      const pinCol = rows.some((r) => "pinned" in r);
+      rest(`diligent_clips?${where}&created_at=lt.${cut}${pinCol ? "&pinned=not.is.true" : ""}`, { method: "DELETE", headers: scopeHeaders(scope) }).catch(() => {});
+    }
+    return order(list.filter(fresh));
+  }
+
+  async function setPinned(scope, clip, pinned) {
+    if (scope === "local") {
+      const c = S.state.clips.find((x) => x.id === clip.id); if (c) c.pinned = pinned;
+      S.emit({ type: "clips" });
+      if (channel) channel.postMessage("changed");
+      return;
+    }
+    try {
+      await rest("diligent_clips?on_conflict=scope,id", {
+        method: "POST", headers: scopeHeaders(scope), prefer: "resolution=merge-duplicates,return=minimal",
+        body: [{ scope: scopeId(scope), id: clip.id, text: clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt, pinned }],
+      });
+    } catch (e) {
+      if (/pinned/.test(e.message)) throw new Error("Pinning needs the pinned column: run the clipboard SQL in docs/CLOUD.md again");
+      throw e;
+    }
   }
 
   async function pushClip(scope, text, kind) {
@@ -132,8 +167,11 @@
   }
 
   async function clearClips(scope) {
-    if (scope === "local") { S.state.clips = []; S.emit({ type: "clips" }); if (channel) channel.postMessage("changed"); return; }
-    await rest(`diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}`, { method: "DELETE", headers: scopeHeaders(scope) });
+    if (scope === "local") { S.state.clips = S.state.clips.filter((c) => c.pinned); S.emit({ type: "clips" }); if (channel) channel.postMessage("changed"); return; }
+    // Clears the unpinned ones; falls back to everything on a table without the pinned column.
+    const where = `diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}`;
+    try { await rest(where + "&pinned=not.is.true", { method: "DELETE", headers: scopeHeaders(scope) }); }
+    catch { await rest(where, { method: "DELETE", headers: scopeHeaders(scope) }); }
   }
 
   // ─── Rooms ────────────────────────────────────────────
@@ -178,7 +216,7 @@
   const newCode = () => Array.from({ length: 6 }, () => "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"[Math.floor(Math.random() * 32)]).join("");
 
   D.cloud = {
-    ready, device, sync, clips, pushClip, deleteClip, clearClips, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
+    ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
   };
 })();

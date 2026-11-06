@@ -710,17 +710,21 @@
           <textarea id="clip-text" placeholder="Type, paste or drop text or an image… (Ctrl ↵ to send)" maxlength="${C.MAX_CHARS}"></textarea>
           <div class="row"><button class="btn" id="clip-send" data-cursor="send">Send</button><button class="btn ghost" id="clip-paste">Paste from clipboard</button><span class="spacer"></span>
             <label class="btn ghost sm" style="cursor:pointer">Image<input type="file" id="clip-file" accept="image/*" hidden></label>
-            ${clipList.length ? `<button class="btn danger sm" id="clip-clear">Clear all</button>` : ""}</div>
+            ${clipList.some((c) => !c.pinned) ? `<button class="btn danger sm" id="clip-clear">Clear unpinned</button>` : ""}</div>
         </div>
+        <div class="row" style="margin-top:10px"><span class="tiny">Keep unpinned clips for</span>
+          <div class="seg" id="clip-ttl">${[[24, "1 day"], [168, "7 days"], [0, "Forever"]].map(([h, l]) => `<button data-v="${h}" class="${(state.settings.clipTtl == null ? 24 : +state.settings.clipTtl) === h ? "on" : ""}">${l}</button>`).join("")}</div>
+          <span class="tiny">· pinned clips stay</span></div>
         ${clipError ? `<p class="small" style="color:var(--bad)">${esc(clipError)}</p>` : ""}
       </div>
       <div class="clips" id="clips" style="margin-top:16px">${clipList.map(clipCard).join("") || `<p class="tiny">No clips yet. Send one here, from Diligent on your phone, or share text to “Diligent clipboard” from any Android app.</p>`}</div>`;
   }
   function clipCard(c) {
     const fresh = c.createdAt > clipSeen - 1 && c.device !== C.device();
-    return `<div class="card clip spot${fresh ? " fresh" : ""}" data-id="${esc(c.id)}">
+    return `<div class="card clip spot${fresh ? " fresh" : ""}${c.pinned ? " pinned" : ""}" data-id="${esc(c.id)}">
       ${c.kind === "image" ? `<img src="${esc(c.text)}" alt="Shared image" loading="lazy">` : `<pre>${linkify(c.text)}</pre>`}
-      <footer><span class="who">${esc(c.device || "?")} · ${ago(c.createdAt)}</span>
+      <footer><span class="who">${c.pinned ? "📌 " : ""}${esc(c.device || "?")} · ${ago(c.createdAt)}</span>
+        <button class="btn sm ghost" data-clip="pin" title="${c.pinned ? "Unpin" : "Pin: keep it past the expiry"}" aria-label="${c.pinned ? "Unpin" : "Pin"}">${c.pinned ? "Unpin" : "Pin"}</button>
         <button class="btn sm" data-clip="copy" data-cursor="copy">Copy</button><button class="btn sm ghost" data-clip="del" aria-label="Delete">✕</button></footer></div>`;
   }
   async function loadClips(quietly) {
@@ -742,8 +746,8 @@
   function renderClipList() {
     const el = $("#clips"); if (!el) return;
     el.innerHTML = clipList.map(clipCard).join("") || `<p class="tiny">No clips yet.</p>`;
-    const clr = $("#clip-clear");
-    if (!clr && clipList.length) render(false);
+    const clr = $("#clip-clear"), want = clipList.some((c) => !c.pinned);
+    if (!!clr !== want) render(false);
   }
   async function copyText(text) {
     try { await navigator.clipboard.writeText(text); return true; } catch {
@@ -809,7 +813,8 @@
       } catch { toast("The browser blocked clipboard access. Paste with Ctrl V instead."); }
     };
     $("#clip-file").onchange = async (e) => { const f = e.target.files[0]; if (f) sendClip(await imageToDataUrl(f), "image"); };
-    const clr = $("#clip-clear"); if (clr) clr.onclick = async () => { if (confirm("Delete every clip here?")) { try { await C.clearClips(clipScope); } catch (err) { toast(err.message); } loadClips(); } };
+    $("#clip-ttl").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.settings.clipTtl = +b.dataset.v; S.save(); render(false); };
+    const clr = $("#clip-clear"); if (clr) clr.onclick = async () => { if (confirm("Delete every unpinned clip here?")) { try { await C.clearClips(clipScope); } catch (err) { toast(err.message); } loadClips(); } };
     const drop = $("#drop");
     drop.ondragover = (e) => { e.preventDefault(); drop.classList.add("over"); };
     drop.ondragleave = () => drop.classList.remove("over");
@@ -827,6 +832,9 @@
       if (b.dataset.clip === "copy") {
         try { if (c.kind === "image") await copyImage(c.text); else await copyText(c.text); b.textContent = "Copied"; inkAt(b, "#4ade80"); bloop(); setTimeout(() => (b.textContent = "Copy"), 1400); }
         catch { toast("Couldn't copy here"); }
+      } else if (b.dataset.clip === "pin") {
+        try { await C.setPinned(clipScope, c, !c.pinned); c.pinned = !c.pinned; bloop("soft"); } catch (err) { toast(err.message, 4000); }
+        loadClips();
       } else {
         card.style.transition = "transform .4s var(--spring), opacity .3s"; card.style.transform = "scale(.8)"; card.style.opacity = "0";
         try { await C.deleteClip(clipScope, c.id); } catch (err) { toast(err.message); }
@@ -902,7 +910,8 @@
   // ─── Settings ────────────────────────────────────────
   const SQL = `create table if not exists diligent_clips (
   scope text not null, id text not null, text text, kind text default 'text',
-  device text, created_at bigint, primary key (scope, id));
+  device text, created_at bigint, pinned boolean default false, primary key (scope, id));
+alter table diligent_clips add column if not exists pinned boolean default false;
 alter table diligent_clips enable row level security;
 create policy clips on diligent_clips for all
   using (length(scope) > 5 and (scope = diligent_header('x-diligent-owner')

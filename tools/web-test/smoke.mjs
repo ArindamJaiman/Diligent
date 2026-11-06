@@ -116,6 +116,18 @@ try {
   await a.locator(".clip").first().locator('[data-clip="copy"]').click();
   check(await a.evaluate(() => navigator.clipboard.readText()) === "reply from the phone", "copy puts the clip on the system clipboard");
 
+  // Pin the laptop clip, age both by two days: the pinned one stays, the other expires.
+  await a.locator('.clip:has-text("hello from the laptop") [data-clip="pin"]').click();
+  await a.waitForSelector(".clip.pinned");
+  db.tables.diligent_clips.forEach((r) => { r.created_at -= 48 * 3600e3; });
+  await a.evaluate(() => { location.hash = "#today"; });
+  await a.evaluate(() => { location.hash = "#clipboard"; });
+  await a.waitForFunction(() => document.querySelectorAll(".clip").length === 1, null, { timeout: 8000 }).catch(() => {});
+  const left = await a.locator(".clip pre").allInnerTexts();
+  check(left.length === 1 && left[0] === "hello from the laptop", "pinned clips stay, unpinned ones expire after a day");
+  await a.waitForTimeout(400);
+  check(db.tables.diligent_clips.length === 1 && db.tables.diligent_clips[0].pinned === true, "expired clips are deleted from Supabase");
+
   await blur(a);
   await a.keyboard.press("5");
   await a.fill("#room-code", "SMOKE1");

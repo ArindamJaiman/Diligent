@@ -12,6 +12,22 @@ function allowed(table, row, h) {
   return true;
 }
 
+/** eq, gt, gte, lt, is (true/false/null) and not.<op>. */
+function filter(k, v) {
+  const [op, ...rest] = v.split(".");
+  if (op === "not") { const inner = filter(k, rest.join(".")); return (r) => !inner(r); }
+  const val = rest.join(".");
+  return (r) => {
+    const x = r[k];
+    if (op === "eq") return String(x) === val;
+    if (op === "gt") return +x > +val;
+    if (op === "gte") return String(x) >= val;
+    if (op === "lt") return +x < +val;
+    if (op === "is") return val === "null" ? x == null : String(!!x) === val && x != null;
+    return true;
+  };
+}
+
 export function startMockSupabase(port) {
   const tables = {};
   const server = http.createServer((req, res) => {
@@ -25,9 +41,7 @@ export function startMockSupabase(port) {
     const filters = [];
     for (const [k, v] of url.searchParams) {
       if (["select", "order", "limit", "on_conflict"].includes(k)) continue;
-      const [op, ...rest] = v.split(".");
-      const val = rest.join(".");
-      filters.push((r) => (op === "eq" ? String(r[k]) === val : op === "gt" ? +r[k] > +val : op === "gte" ? String(r[k]) >= val : true));
+      filters.push(filter(k, v));
     }
     const match = (r) => allowed(table, r, req.headers) && filters.every((f) => f(r));
     let body = "";

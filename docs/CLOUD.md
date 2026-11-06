@@ -45,7 +45,8 @@ create table if not exists diligent_challenges (
 
 create table if not exists diligent_clips (
   scope text not null, id text not null, text text, kind text default 'text',
-  device text, created_at bigint, primary key (scope, id));
+  device text, created_at bigint, pinned boolean default false, primary key (scope, id));
+alter table diligent_clips add column if not exists pinned boolean default false;
 
 create table if not exists diligent_scores (
   code text not null, member text not null, name text, total double precision,
@@ -112,7 +113,9 @@ tile flashes an invisible screen to do it). Clips are scoped like everything els
   with the code sees them.
 - **This browser** (web only) never leaves the browser.
 
-Text is capped at 20,000 characters; the web app also shares images (downscaled to a data URL
+**Pin** a clip to keep it. Unpinned clips are deleted after a day (the web app can keep them
+for 7 days or forever instead: Clipboard → *Keep unpinned clips for*), by whichever device lists
+them next. Text is capped at 20,000 characters; the web app also shares images (downscaled to a data URL
 of at most ~250 KB). The phone lists image clips but leaves showing them to the web app.
 Nothing polls in the background: the phone refreshes every 10 s while the Clipboard screen is
 open, the web app every 4 s while its Clipboard tab is open (and every 30 s for the badge).

@@ -51,6 +51,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.booleanOrNull
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.contentOrNull
@@ -63,7 +64,15 @@ import javax.inject.Inject
 import javax.inject.Singleton
 
 /** One clip on the shared clipboard. */
-data class Clip(val id: String, val text: String, val device: String, val createdAt: Long, val kind: String = "text") {
+data class Clip(
+    val id: String,
+    val text: String,
+    val device: String,
+    val createdAt: Long,
+    val kind: String = "text",
+    /** Pinned clips never expire. */
+    val pinned: Boolean = false
+) {
     /** Images come from the web app as data URLs; the phone lists them but doesn't render them. */
     val isImage: Boolean get() = kind == "image"
 }
@@ -89,17 +98,50 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
 
     private fun device(): String = cloud.state.value.displayName.ifBlank { Build.MODEL ?: "Android" }
 
+    /**
+     * Newest first, pinned on top. Unpinned clips older than [EXPIRE_MS] are dropped here and
+     * deleted from Supabase. select=* keeps tables made before the pinned column working.
+     */
     suspend fun list(room: String = ""): List<Clip> = withContext(Dispatchers.IO) {
         val db = db(room) ?: return@withContext emptyList()
-        db.select(TABLE, "scope=eq.${scope(room)}&select=id,text,kind,device,created_at&order=created_at.desc&limit=$LIMIT").map { e ->
+        val rows = db.select(TABLE, "scope=eq.${scope(room)}&select=*&order=created_at.desc&limit=$LIMIT")
+        val all = rows.map { e ->
             val o = e.jsonObject
             Clip(
                 id = o["id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 text = o["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
                 device = o["device"]?.jsonPrimitive?.contentOrNull ?: "?",
                 createdAt = o["created_at"]?.jsonPrimitive?.longOrNull ?: 0L,
-                kind = o["kind"]?.jsonPrimitive?.contentOrNull ?: "text"
+                kind = o["kind"]?.jsonPrimitive?.contentOrNull ?: "text",
+                pinned = o["pinned"]?.jsonPrimitive?.booleanOrNull == true
             )
+        }
+        val cut = System.currentTimeMillis() - EXPIRE_MS
+        if (all.any { !it.pinned && it.createdAt < cut }) {
+            val pinColumn = rows.any { "pinned" in it.jsonObject }
+            runCatching { db.delete(TABLE, "scope=eq.${scope(room)}&created_at=lt.$cut" + if (pinColumn) "&pinned=not.is.true" else "") }
+        }
+        all.filter { it.pinned || it.createdAt >= cut }.sortedWith(compareByDescending<Clip> { it.pinned }.thenByDescending { it.createdAt })
+    }
+
+    /** Pins or unpins by rewriting the row (the tiny client has no PATCH). */
+    suspend fun setPinned(clip: Clip, pinned: Boolean, room: String = "") = withContext(Dispatchers.IO) {
+        val db = db(room) ?: error("Set up Supabase in Hub → Cloud first")
+        try {
+            db.upsert(TABLE, "scope,id", buildJsonArray {
+                add(buildJsonObject {
+                    put("scope", scope(room))
+                    put("id", clip.id)
+                    put("text", clip.text)
+                    put("kind", clip.kind)
+                    put("device", clip.device)
+                    put("created_at", clip.createdAt)
+                    put("pinned", pinned)
+                })
+            })
+        } catch (e: java.io.IOException) {
+            if (e.message?.contains("pinned") == true) error("Pinning needs the pinned column: run the clipboard SQL in docs/CLOUD.md again")
+            throw e
         }
     }
 
@@ -123,15 +165,18 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
         db(room)?.delete(TABLE, "scope=eq.${scope(room)}&id=eq.$id")
     }
 
-    /** Clears every clip in the scope. */
+    /** Clears the unpinned clips in the scope. */
     suspend fun clear(room: String = "") = withContext(Dispatchers.IO) {
-        db(room)?.delete(TABLE, "scope=eq.${scope(room)}")
+        db(room)?.delete(TABLE, "scope=eq.${scope(room)}&pinned=not.is.true")
     }
 
     companion object {
         const val TABLE = "diligent_clips"
         const val LIMIT = 50
         const val MAX_CHARS = 20_000
+
+        /** Unpinned clips are kept for a day. */
+        const val EXPIRE_MS = 24L * 60 * 60 * 1000
     }
 }
 
@@ -276,6 +321,12 @@ class ClipboardViewModel @Inject constructor(
         }
     }
 
+    fun togglePin(clip: Clip) = viewModelScope.launch {
+        runCatching { service.setPinned(clip, !clip.pinned, _room.value) }
+            .onFailure { messages.emit(it.message ?: "Couldn't pin") }
+        refresh()
+    }
+
     fun delete(clip: Clip) = viewModelScope.launch {
         runCatching { service.delete(clip.id, _room.value) }
         _clips.value = _clips.value.filterNot { it.id == clip.id }
@@ -283,7 +334,7 @@ class ClipboardViewModel @Inject constructor(
 
     fun clear() = viewModelScope.launch {
         runCatching { service.clear(_room.value) }
-        _clips.value = emptyList()
+        _clips.value = _clips.value.filter { it.pinned }
     }
 }
 
@@ -338,20 +389,21 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
         }
         ToolSection("CLIPS · ${clips.size}")
         if (clips.isEmpty()) ToolNote("Nothing yet. Send something here, from the web app, or share text to Diligent from any app.")
-        clips.forEach { clip -> ClipCard(clip, onCopy = { viewModel.copy(clip) }, onDelete = { viewModel.delete(clip) }) }
-        if (clips.isNotEmpty()) ToolButton("CLEAR ALL", Modifier.fillMaxWidth(), outlined = true) { viewModel.clear() }
+        clips.forEach { clip -> ClipCard(clip, onCopy = { viewModel.copy(clip) }, onPin = { viewModel.togglePin(clip) }, onDelete = { viewModel.delete(clip) }) }
+        if (clips.any { !it.pinned }) ToolButton("CLEAR UNPINNED", Modifier.fillMaxWidth(), outlined = true) { viewModel.clear() }
         ToolNote("Tip: add the \"Send clipboard\" Quick Settings tile to send whatever you copied in one tap.")
-        ToolNote("Refreshes every 10 s while this screen is open; nothing runs in the background. Clips are capped at ${ClipboardService.MAX_CHARS} characters and the newest ${ClipboardService.LIMIT} are shown.")
+        ToolNote("Refreshes every 10 s while this screen is open; nothing runs in the background. Clips are capped at ${ClipboardService.MAX_CHARS} characters and the newest ${ClipboardService.LIMIT} are shown. Unpinned clips are deleted after a day; pinned ones stay.")
     }
 }
 
 @Composable
-private fun ClipCard(clip: Clip, onCopy: () -> Unit, onDelete: () -> Unit) {
+private fun ClipCard(clip: Clip, onCopy: () -> Unit, onPin: () -> Unit, onDelete: () -> Unit) {
     ToolCard(onClick = onCopy) {
         Text(if (clip.isImage) "🖼 Image · open the web app to see it" else clip.text.take(600), style = toolLabel(11.sp), color = DiligentColors.White, maxLines = 8)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Text("${clip.device} · ${ToolFormat.clock(clip.createdAt)} · tap to copy", style = toolLabel(9.sp), color = DiligentColors.Gray600, modifier = Modifier.weight(1f))
+            Text("${if (clip.pinned) "📌 " else ""}${clip.device} · ${ToolFormat.clock(clip.createdAt)} · tap to copy", style = toolLabel(9.sp), color = DiligentColors.Gray600, modifier = Modifier.weight(1f))
+            Text(if (clip.pinned) "UNPIN" else "PIN", style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500, modifier = Modifier.padding(start = 8.dp).clickable(onClick = onPin))
             Text("DELETE", style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500, modifier = Modifier.padding(start = 8.dp).clickable(onClick = onDelete))
         }
     }
