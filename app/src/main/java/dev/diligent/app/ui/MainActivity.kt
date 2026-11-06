@@ -27,6 +27,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.rememberNavController
 import dagger.hilt.android.AndroidEntryPoint
+import dev.diligent.app.cloud.AutoSendClip
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.premium.AppLock
 import dev.diligent.app.premium.LookAndFeel
@@ -120,6 +121,12 @@ class MainActivity : ComponentActivity() {
         updater.inForeground = true
         // Opening the app is the only time it looks for an update (at most every 6 h).
         updater.checkIfDue()
+    }
+
+    /** The clipboard can only be read while a window has focus (Android 10+). */
+    override fun onWindowFocusChanged(hasFocus: Boolean) {
+        super.onWindowFocusChanged(hasFocus)
+        if (hasFocus && !locked.value) AutoSendClip.onFocus(this)
     }
 
     override fun onStop() {

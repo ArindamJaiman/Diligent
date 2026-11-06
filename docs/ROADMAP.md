@@ -18,9 +18,10 @@ has shipped since the list was started.
 
 - ✅ **Clipboard Quick Settings tile:** "Send clipboard" sends the phone clipboard in one tap
 - ✅ **Clipboard widget:** the newest clip on the home screen with COPY, SEND MINE and ↻
-- [ ] **Auto-send on copy** (opt-in, foreground only: Android 10+ only lets the focused app read
-  the clipboard) and a "copy on the laptop → notification on the phone" mode using Supabase
-  Realtime instead of polling
+- ✅ **Auto-send on copy** (opt-in, Hub → Clipboard): when Diligent comes to the front, text
+  copied since goes to your clips (Android 10+ only lets the focused app read the clipboard);
+  its own copies, sensitive ones (password managers) and repeats are skipped
+- [ ] "Copy on the laptop → notification on the phone" using Supabase Realtime instead of polling
 - ✅ **End-to-end encryption** for your own clips with a clipboard passphrase (AES-256-GCM,
   PBKDF2): the Supabase project only stores ciphertext. Keying from the owner id or room code
   would protect nothing, since both are stored next to the clips

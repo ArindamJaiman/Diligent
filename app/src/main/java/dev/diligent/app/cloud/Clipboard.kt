@@ -17,6 +17,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -42,6 +43,7 @@ import dev.diligent.app.tools.ToolFormat
 import dev.diligent.app.tools.ToolNote
 import dev.diligent.app.tools.ToolScaffold
 import dev.diligent.app.tools.ToolSection
+import dev.diligent.app.tools.ToolToggle
 import dev.diligent.app.tools.toolLabel
 import dev.diligent.app.ui.theme.DiligentColors
 import kotlinx.coroutines.Dispatchers
@@ -475,6 +477,15 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
                 ToolButton("SEND", Modifier.weight(1f), enabled = draft.isNotBlank()) { viewModel.push(draft); draft = "" }
                 ToolButton("SEND PHONE CLIPBOARD", Modifier.weight(1f), outlined = true) { viewModel.pushSystemClipboard() }
             }
+            val context = LocalContext.current
+            var autoSend by remember { mutableStateOf(AutoSendClip.enabled(context)) }
+            Spacer(Modifier.height(8.dp))
+            ToolToggle(
+                title = "Auto-send what I copy",
+                subtitle = "When you open Diligent, text you copied since goes to your clips. Passwords and other sensitive copies are skipped",
+                checked = autoSend,
+                onChecked = { on -> autoSend = on; AutoSendClip.setEnabled(context, on) }
+            )
         }
         ToolSection("CLIPS · ${clips.size}")
         if (clips.isEmpty()) ToolNote("Nothing yet. Send something here, from the web app, or share text to Diligent from any app.")
