@@ -41,7 +41,8 @@ and download a fresh copy whenever you want to update it.
 
 - Kept in the browser's `localStorage` (`diligent.web.v1`), live across tabs.
 - **Export JSON / CSV** in Settings. **Import** takes this site's export or the Android app's
-  JSON backup (Settings → Backup in the app): activities are matched by name.
+  JSON backup (Settings → Backup in the app), encrypted ones too (it asks for the backup
+  passphrase): activities are matched by name.
 - **Sync:** paste the Supabase URL, anon key and owner id from the app's Hub → Cloud. Days go
   both ways by activity name, newer edit wins, like the app's sync. Activities the web app
   hasn't seen are created from the synced rows. Auto sync runs on open, 20 s after a change and

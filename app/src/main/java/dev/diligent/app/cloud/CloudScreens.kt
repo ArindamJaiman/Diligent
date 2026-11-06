@@ -5,6 +5,7 @@ import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -94,6 +95,8 @@ fun CloudScreen(onBack: () -> Unit, viewModel: CloudViewModel = hiltViewModel())
     val folder = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocumentTree()) { uri -> uri?.let { viewModel.folderPicked(it) } }
     var githubRepo by remember(s.githubRepo) { mutableStateOf(s.githubRepo) }
     var githubToken by remember { mutableStateOf("") }
+    var backupPass by remember { mutableStateOf("") }
+    var hasBackupPass by remember { mutableStateOf(viewModel.cloud.hasSecret(CloudService.BACKUP_PASSPHRASE)) }
     var supabaseUrl by remember(s.supabaseUrl) { mutableStateOf(s.supabaseUrl) }
     var supabaseKey by remember { mutableStateOf("") }
     var name by remember(s.displayName) { mutableStateOf(s.displayName) }
@@ -134,6 +137,29 @@ fun CloudScreen(onBack: () -> Unit, viewModel: CloudViewModel = hiltViewModel())
                 }
             }
             ToolNote("diligent-backup.json is replaced each night; the repo's history keeps every version.")
+            Spacer(Modifier.height(10.dp))
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                ToolField(backupPass, { backupPass = it }, if (hasBackupPass) "backup passphrase saved · type to replace" else "backup passphrase (optional)", Modifier.weight(1f))
+                ToolButton("SAVE", enabled = backupPass.isNotBlank()) {
+                    viewModel.setSecret(CloudService.BACKUP_PASSPHRASE, backupPass)
+                    backupPass = ""
+                    hasBackupPass = true
+                }
+            }
+            if (hasBackupPass) {
+                Text(
+                    "REMOVE PASSPHRASE",
+                    style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500,
+                    modifier = Modifier.padding(top = 6.dp).clickable {
+                        viewModel.cloud.setSecret(CloudService.BACKUP_PASSPHRASE, null)
+                        hasBackupPass = false
+                    }
+                )
+            }
+            ToolNote(
+                if (hasBackupPass) "🔒 Backups are encrypted before they leave the phone. Keep the passphrase somewhere safe: without it they can't be restored."
+                else "With a passphrase, folder and GitHub backups are encrypted (AES-256) before they leave the phone. Restore and the web app's import ask for it."
+            )
         }
 
         ToolSection("SYNC · WEB DASHBOARD · ROOMS")

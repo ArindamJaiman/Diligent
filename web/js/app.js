@@ -1523,7 +1523,7 @@ create policy clips on diligent_clips for all
           ${sw("notify", "Notifications", "Pomodoro and target alerts while the tab is in the background")}
         </div>
         <div class="card spot"><p class="label">Data</p>
-          <p class="tiny">Import accepts this site's backup or the Android app's JSON backup (Settings → Backup).</p>
+          <p class="tiny">Import accepts this site's backup or the Android app's JSON backup (Settings → Backup), including encrypted ones (it asks for the backup passphrase).</p>
           <div class="row"><button class="btn ghost sm" id="d-export">Export JSON</button><button class="btn ghost sm" id="d-csv">Export CSV</button>
             <label class="btn ghost sm" style="cursor:pointer">Import<input type="file" id="d-import" accept="application/json,.json" hidden></label>
             <span class="spacer"></span><button class="btn danger sm" id="d-reset">Reset</button></div>
@@ -1581,7 +1581,21 @@ create policy clips on diligent_clips for all
     };
     $("#d-export").onclick = () => download(`diligent-web-${S.today()}.json`, S.exportJson(), "application/json");
     $("#d-csv").onclick = () => download(`diligent-${S.today()}.csv`, S.exportCsv(), "text/csv");
-    $("#d-import").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { toast(S.importJson(await f.text()), 4000); } catch (err) { toast("Import failed: " + err.message, 4000); } };
+    $("#d-import").onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try {
+        let text = await f.text();
+        if (text.trim().startsWith("enc1:")) { // an app backup made with a backup passphrase
+          const pass = prompt("This backup is encrypted. Its backup passphrase (from the app's Hub → Cloud):");
+          if (!pass) return;
+          const plain = await C.decryptWith(text, pass);
+          if (plain == null) throw new Error("that passphrase doesn't open this backup");
+          text = plain;
+        }
+        toast(S.importJson(text), 4000);
+      } catch (err) { toast("Import failed: " + err.message, 4000); }
+      e.target.value = "";
+    };
     $("#d-reset").onclick = () => { if (confirm("Delete everything Diligent keeps in this browser?") && confirm("Really? This can't be undone.")) { localStorage.removeItem("diligent.web.v1"); location.reload(); } };
     $("#s-keys").onclick = (e) => { e.preventDefault(); $("#keys").showModal(); };
     $("#jf-add").onclick = () => {

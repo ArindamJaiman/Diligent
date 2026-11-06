@@ -34,6 +34,15 @@ class ClipCryptoTest {
         assertNull(ClipCrypto.decrypt(ClipCrypto.PREFIX + "not base64!", "right"))
     }
 
+    @Test
+    fun backupSizedPayloadRoundTrips() {
+        val json = buildString { append("{\"activities\":["); repeat(3000) { append("{\"id\":$it,\"name\":\"Activity $it ✓\"},") }; append("{}]}") }
+        val stored = ClipCrypto.encrypt(json, "backup pass")
+        assertTrue(ClipCrypto.isEncrypted(stored))
+        assertEquals(json, ClipCrypto.decrypt(stored, "backup pass"))
+        assertNull(ClipCrypto.decrypt(stored, "wrong"))
+    }
+
     /** Written by the web app's WebCrypto code (web/js/cloud.js) with a fixed IV. */
     @Test
     fun readsTheWebAppsClips() {

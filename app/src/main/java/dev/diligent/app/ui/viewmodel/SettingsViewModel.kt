@@ -1,5 +1,8 @@
 package dev.diligent.app.ui.viewmodel
 
+import dev.diligent.app.cloud.ClipCrypto
+import dev.diligent.app.cloud.CloudService
+import dev.diligent.app.quotapulse.data.SecretStore
 import android.content.Context
 import android.net.Uri
 import androidx.lifecycle.ViewModel
@@ -49,7 +52,8 @@ import javax.inject.Inject
 class SettingsViewModel @Inject constructor(
     private val repository: DiligentRepository,
     @ApplicationContext private val context: Context,
-    val updater: AppUpdater
+    val updater: AppUpdater,
+    private val secrets: SecretStore
 ) : ViewModel() {
 
     val updateState: StateFlow<UpdateState> = updater.state
@@ -268,9 +272,16 @@ class SettingsViewModel @Inject constructor(
     fun restoreFromJson(uri: Uri) {
         viewModelScope.launch {
             try {
-                val json = withContext(Dispatchers.IO) {
+                val raw = withContext(Dispatchers.IO) {
                     context.contentResolver.openInputStream(uri)?.use { it.bufferedReader().readText() }
                 } ?: throw IllegalStateException("Cannot read file")
+                // Encrypted backups (a backup passphrase in Hub → Cloud) start with "enc1:".
+                val json = if (ClipCrypto.isEncrypted(raw.trim())) {
+                    val pass = secrets.get(CloudService.BACKUP_PASSPHRASE)
+                        ?: throw IllegalStateException("this backup is encrypted: set its passphrase in Hub → Cloud → Automatic backup, then restore again")
+                    ClipCrypto.decrypt(raw.trim(), pass)
+                        ?: throw IllegalStateException("the backup passphrase in Hub → Cloud doesn't open this backup")
+                } else raw
 
                 val backup = backupJson.decodeFromString<BackupData>(json)
 

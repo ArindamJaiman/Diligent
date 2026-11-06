@@ -473,6 +473,7 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
+    decryptWith: (stored, pass) => unseal(stored.trim(), pass),
     chat, say, CHAT_MAX, pushFile, fetchFile, canAttach, MAX_FILE,
     CHALLENGE_TEMPLATES, createChallenge, joinChallenge, leaveChallenge, standings, challengeTotal,
     watch, scopeKey, liveState: () => live.state, encrypting: (scope) => !!passphrase(scope || "mine"),

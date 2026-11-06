@@ -176,7 +176,16 @@ class CloudService @Inject constructor(
 
     // ─── Backups ────────────────────────────────────────────────
 
-    private suspend fun backupJson(): String = BackupData.json.encodeToString(BackupData.snapshot(repository))
+    /**
+     * The backup file's text: plain JSON, or with a backup passphrase set, "enc1:…" (AES-256-GCM,
+     * the same format as encrypted clips) so Drive / Dropbox / GitHub only ever hold ciphertext.
+     * Restore (Settings) and the web app's import both read it back with the passphrase.
+     */
+    private suspend fun backupJson(): String {
+        val plain = BackupData.json.encodeToString(BackupData.snapshot(repository))
+        val pass = secrets.get(BACKUP_PASSPHRASE)?.takeIf { it.isNotBlank() } ?: return plain
+        return ClipCrypto.encrypt(plain, pass)
+    }
 
     /** Seven rolling files, one per weekday (diligent-backup-mon.json …), in the chosen folder. */
     private suspend fun backupToFolder(tree: Uri): String {
@@ -399,5 +408,6 @@ class CloudService @Inject constructor(
         const val SUPABASE_KEY = "supabase_anon_key"
         const val GITHUB_TOKEN = "github_backup_token"
         const val NOTION_TOKEN = "notion_token"
+        const val BACKUP_PASSPHRASE = "backup_passphrase"
     }
 }

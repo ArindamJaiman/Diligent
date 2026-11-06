@@ -91,5 +91,6 @@ has shipped since the list was started.
 - [ ] **iOS / desktop** through the web app's PWA (done for reading and logging; push
   notifications next, via Web Push)
 - [ ] **Wear OS complications** for the streak and today's percentage
-- [ ] **Backup encryption** with a passphrase for Drive / GitHub backups
+- ✅ **Backup encryption** with a passphrase for Drive / GitHub backups (AES-256-GCM, the
+  clipboard's format; restore and the web import ask for it)
 - [ ] **Localisation** (Hindi first)

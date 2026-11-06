@@ -12,6 +12,12 @@ nightly job runs at 23:40 (and on **RUN NOW**).
 
 Tokens and keys are stored encrypted with the Android Keystore (`SecretStore`).
 
+**Encrypted backups.** Set a *backup passphrase* under Automatic backup and both the folder and
+GitHub backups are written as `enc1:…` (AES-256-GCM, key from PBKDF2-SHA256 with 100 000
+rounds, the same format as encrypted clips), so Drive, Dropbox or GitHub only ever hold
+ciphertext. Settings → Restore and the web app's Import ask for the passphrase. Without it the
+backups can't be read, by anyone, including you.
+
 ## Supabase set-up
 
 1. Create a free project at supabase.com.

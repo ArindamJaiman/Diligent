@@ -273,6 +273,26 @@ try {
   await a.waitForFunction(() => document.body.innerText.includes("🔒 Encrypted"), null, { timeout: 8000 }).then(() => true, () => false);
   check((await a.locator(".clip pre").allInnerTexts()).some((t) => t.includes("🔒 Encrypted")), "without the passphrase the clip shows as locked");
 
+  // Encrypted app backup: the import asks for the passphrase and restores it
+  {
+    const backup = JSON.stringify({ activities: [{ id: 901, name: "Violin", unit: "mins", dailyGoal: 30, goalType: "at_least" }], dailyProgress: [{ activityId: 901, date: "2026-10-01", progress: 30, isCompleted: true }], dayLogs: [] });
+    const enc = await a.evaluate(async (plain) => {
+      const pass = "backup pass", te = new TextEncoder();
+      const base = await crypto.subtle.importKey("raw", te.encode(pass), "PBKDF2", false, ["deriveKey"]);
+      const key = await crypto.subtle.deriveKey({ name: "PBKDF2", salt: te.encode("diligent-clips-v1"), iterations: 100000, hash: "SHA-256" }, base, { name: "AES-GCM", length: 256 }, false, ["encrypt"]);
+      const iv = crypto.getRandomValues(new Uint8Array(12));
+      const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, key, te.encode(plain)));
+      const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+      return "enc1:" + btoa(String.fromCharCode(...out));
+    }, backup);
+    await blur(a);
+    await a.keyboard.press("7");
+    a.once("dialog", (d) => d.accept("backup pass"));
+    await a.setInputFiles("#d-import", { name: "diligent-backup-fri.json", mimeType: "application/json", buffer: Buffer.from(enc) });
+    await a.waitForFunction(() => Diligent.store.state.activities.some((x) => x.name === "Violin"), null, { timeout: 8000 }).catch(() => {});
+    check(await a.evaluate(() => { const S = Diligent.store, v = S.state.activities.find((x) => x.name === "Violin"); return !!v && S.progressOf("2026-10-01", v.id) === 30; }), "an encrypted app backup imports with its passphrase");
+  }
+
   // Files: encrypted before upload, downloaded and decrypted intact, deleted with the clip
   await a.evaluate(() => { Diligent.store.state.cloud.clipPass = "correct horse"; Diligent.store.save(); location.hash = "#today"; });
   await a.evaluate(() => { location.hash = "#clipboard"; });
