@@ -76,7 +76,7 @@ export function startMockSupabase(port) {
       res.end();
     });
   });
-  const realtime = { broadcasts: 0, sockets: new Set() };
+  const realtime = { broadcasts: 0, delivered: 0, sockets: new Set() };
   server.on("upgrade", (req, socket) => {
     if (!req.url.startsWith("/realtime/v1/websocket")) return socket.destroy();
     const accept = crypto.createHash("sha1").update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
@@ -111,7 +111,7 @@ export function startMockSupabase(port) {
         else if (m.event === "heartbeat") send({ topic: "phoenix", event: "phx_reply", payload: { status: "ok", response: {} }, ref: m.ref });
         else if (m.event === "broadcast" && client.topics.has(m.topic)) {
           realtime.broadcasts++;
-          for (const other of realtime.sockets) if (other !== client && other.topics.has(m.topic)) other.send({ topic: m.topic, event: "broadcast", payload: m.payload, ref: null });
+          for (const other of realtime.sockets) if (other !== client && other.topics.has(m.topic) && ++realtime.delivered) other.send({ topic: m.topic, event: "broadcast", payload: m.payload, ref: null });
         }
       }
     });

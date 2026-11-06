@@ -107,9 +107,73 @@
   const active = () => state.activities.filter((a) => !a.archived).sort((x, y) => x.order - y.order);
   const byId = (id) => state.activities.find((a) => a.id === id);
 
-  /** Share of today's activities that are done (skips don't count against you). */
+  // ─── Schedules (the app's Schedule object) ─────────────
+  // daily · weekdays (scheduleDays bitmask Mon=1 … Sun=64; other days are rest days) ·
+  // weekly (scheduleCount times Mon–Sun, any days; streaks count met weeks) ·
+  // interval (every scheduleCount days: the days in between are neutral)
+  const ALL_DAYS = 127;
+  const dayBit = (date) => 1 << ((parse(date).getDay() + 6) % 7);
+  const schedType = (a) => a.scheduleType || "daily";
+  const schedCount = (a) => Math.max(1, +a.scheduleCount || 1);
+  const isScheduledDay = (a, date) => schedType(a) !== "weekdays" || ((a.scheduleDays ?? ALL_DAYS) & dayBit(date)) !== 0;
+  function weekStart(date) { const d = parse(date); d.setDate(d.getDate() - ((d.getDay() + 6) % 7)); return iso(d); }
+  const doneOn = (a, date) => !isLimit(a) && met(a, date);
+  function doneThisWeek(a, date, inclusive) {
+    let n = 0;
+    for (let d = weekStart(date); inclusive ? d <= date : d < date; d = addDays(d, 1)) if (doneOn(a, d)) n++;
+    return n;
+  }
+  /** Skipped, a rest day, or (every N days) a day before the next one falls due. */
+  function neutral(a, date) {
+    if (skipped(a, date) || !isScheduledDay(a, date)) return true;
+    if (schedType(a) === "interval") for (let k = 1; k < schedCount(a); k++) if (doneOn(a, addDays(date, -k))) return true;
+    return false;
+  }
+  /** Whether the activity still asks for something on this day by its schedule (done or not). */
+  function isDue(a, date) {
+    if (skipped(a, date)) return false;
+    switch (schedType(a)) {
+      case "weekdays": return isScheduledDay(a, date);
+      case "weekly": return doneOn(a, date) || doneThisWeek(a, date, false) < Math.min(7, schedCount(a));
+      case "interval": return doneOn(a, date) || !neutral(a, date);
+      default: return true;
+    }
+  }
+  /** "every day", "Mon · Wed · Fri", "3× a week", "every 2 days". */
+  function describe(a) {
+    const t = schedType(a);
+    if (t === "weekdays") {
+      const m = (a.scheduleDays ?? ALL_DAYS) & ALL_DAYS;
+      if (m === ALL_DAYS) return "every day";
+      if (m === 0b0011111) return "weekdays";
+      if (m === 0b1100000) return "weekends";
+      return ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].filter((_, i) => m & (1 << i)).join(" · ");
+    }
+    if (t === "weekly") return `${Math.min(7, schedCount(a))}× a week`;
+    if (t === "interval") return schedCount(a) <= 1 ? "every day" : `every ${schedCount(a)} days`;
+    return "every day";
+  }
+  /** "rest day", "2/3 this week", "week done · 3/3", "next in 2 days", or null on an ordinary due day. */
+  function caption(a, date) {
+    if (skipped(a, date)) return "skipped";
+    const t = schedType(a);
+    if (t === "weekdays") return isScheduledDay(a, date) ? null : "rest day";
+    if (t === "weekly") {
+      const target = Math.min(7, schedCount(a)), n = doneThisWeek(a, date, true);
+      return n >= target ? `week done · ${n}/${target}` : `${n}/${target} this week`;
+    }
+    if (t === "interval" && !doneOn(a, date)) {
+      for (let k = 1; k < schedCount(a); k++) if (doneOn(a, addDays(date, -k))) {
+        const left = schedCount(a) - k;
+        return left === 1 ? "next tomorrow" : `next in ${left} days`;
+      }
+    }
+    return null;
+  }
+
+  /** Share of the day's due activities that are done (rest days and skips don't count against you). */
   function dayShare(date) {
-    const list = active().filter((a) => !skipped(a, date) && since(a) <= date);
+    const list = active().filter((a) => since(a) <= date && isDue(a, date));
     if (!list.length) return null;
     const hasData = state.progress[date] && Object.keys(state.progress[date]).length;
     if (!hasData && date !== today()) return null;
@@ -122,34 +186,74 @@
     const created = iso(new Date(a.createdAt || Date.now()));
     return first && first < created ? first : created;
   }
+  /** Weekly schedules count met weeks; the current week only counts once it's met. */
+  function weekStreak(a, upTo) {
+    let n = 0, w = weekStart(upTo);
+    const target = Math.min(7, schedCount(a)), start = weekStart(since(a));
+    if (doneThisWeek(a, addDays(w, 6), true) < target) w = addDays(w, -7);
+    for (let i = 0; i < 520 && w >= start; i++, w = addDays(w, -7)) {
+      if (doneThisWeek(a, addDays(w, 6), true) >= target) n++; else break;
+    }
+    return n;
+  }
+  const streakUnit = (a) => (schedType(a) === "weekly" ? "weeks" : "days");
   function streak(a) {
+    if (schedType(a) === "weekly") return weekStreak(a, today());
     let n = 0, d = today();
     if (!met(a, d)) d = addDays(d, -1); // today is still open
     const start = since(a);
     for (let i = 0; i < 3000 && d >= start; i++, d = addDays(d, -1)) {
-      if (skipped(a, d)) continue;
-      if (met(a, d)) n++; else break;
+      if (met(a, d)) { n++; continue; }
+      if (neutral(a, d)) continue;
+      break;
     }
     return n;
   }
   function bestStreak(a) {
     let best = 0, cur = 0;
+    if (schedType(a) === "weekly") {
+      const target = Math.min(7, schedCount(a));
+      for (let w = weekStart(since(a)); w <= today(); w = addDays(w, 7)) {
+        if (doneThisWeek(a, addDays(w, 6), true) >= target) { cur++; best = Math.max(best, cur); } else if (addDays(w, 6) < today()) cur = 0;
+      }
+      return best;
+    }
     for (const d of range(since(a), today())) {
-      if (skipped(a, d)) continue;
-      if (met(a, d)) { cur++; best = Math.max(best, cur); } else cur = 0;
+      if (met(a, d)) { cur++; best = Math.max(best, cur); }
+      else if (!neutral(a, d) && d !== today()) cur = 0;
     }
     return best;
   }
-  /** Loop-style habit strength 0..1: exponential average of daily credit, 13-day half life. */
+  /** Loop-style habit strength 0..1: exponential average of credit on due days, 13-day half life. */
   function strength(a) {
     const alpha = 1 - Math.pow(0.5, 1 / 13);
     let s = 0;
     const start = addDays(today(), -120);
     for (const d of range(start, today())) {
-      if (skipped(a, d)) continue;
+      if (!met(a, d) && !isDue(a, d)) continue;
       s = s + alpha * (credit(a, d) - s);
     }
     return s;
+  }
+
+  // ─── Long-term targets ("200 h by 31 Dec"): the app's TargetPace ─
+  function lifetime(a) { let n = 0; for (const d in state.progress) { const r = state.progress[d][a.id]; if (r) n += r.p || 0; } return n; }
+  /** null without a target; else total, target, ahead (+/−), needed per day, days left, projected finish. */
+  function pace(a) {
+    if (!(+a.targetTotal > 0) || !a.targetDate) return null;
+    const t = today(), start = since(a), deadline = a.targetDate;
+    const days = (x, y) => Math.round((parse(y) - parse(x)) / 864e5);
+    const span = Math.max(1, days(start, deadline));
+    const elapsed = Math.min(span, Math.max(0, days(start, t)));
+    const daysLeft = Math.max(0, days(t, deadline));
+    const total = lifetime(a), target = +a.targetTotal;
+    const expected = (target * elapsed) / span;
+    const remaining = Math.max(0, target - total);
+    const needed = daysLeft === 0 ? remaining : remaining / (daysLeft + 1);
+    let recent = 0; for (let k = 0; k < 14; k++) recent += progressOf(addDays(t, -k), a.id);
+    recent /= 14;
+    const projected = remaining <= 0 ? t : recent > 0 ? addDays(t, Math.ceil(remaining / recent)) : null;
+    return { total, target, expected, ahead: total - expected, needed, daysLeft, projected, deadline };
   }
   function hoursOf(a, p) { return a.unit === "hrs" ? p : a.unit === "mins" ? p / 60 : 0; }
   function hoursOn(date) { return active().reduce((n, a) => n + hoursOf(a, progressOf(date, a.id)), 0); }
@@ -321,6 +425,9 @@
           state.activities.push(a);
           added++;
         }
+        // Schedules and long-term targets come across too (the app's own field names).
+        if (x.scheduleType) Object.assign(a, { scheduleType: x.scheduleType, scheduleDays: x.scheduleDays ?? 127, scheduleCount: x.scheduleCount || 1 });
+        if (+x.targetTotal > 0 && x.targetDate) Object.assign(a, { targetTotal: +x.targetTotal, targetDate: x.targetDate });
         ids[x.id] = a.id;
       });
       data.dailyProgress.forEach((r) => {
@@ -358,7 +465,8 @@
   D.store = {
     state, uid, COLORS, today, iso, parse, addDays, range,
     on: (fn) => { listeners.add(fn); return () => listeners.delete(fn); }, emit, save,
-    active, byId, rowOf, progressOf, met, credit, skipped, isLimit, dayShare, streak, bestStreak, strength, hoursOf, hoursOn, overallStreak, fmt, step,
+    active, byId, rowOf, progressOf, met, credit, skipped, isLimit, dayShare, streak, bestStreak, strength,
+    isDue, neutral, describe, caption, streakUnit, pace, lifetime, isScheduledDay, hoursOf, hoursOn, overallStreak, fmt, step,
     add, set, toggleDone, toggleSkip, note, upsertActivity, removeActivity, move, dayLog, setDayLog,
     parseQuick, runQuick, matchActivity, exportJson, importJson, exportCsv,
   };

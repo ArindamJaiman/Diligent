@@ -88,6 +88,22 @@ try {
   await a.locator("#heat i").nth(-2).click();
   check(await a.evaluate(() => location.hash) === "#today" && (await a.locator(".daynav h3").innerText()) !== "TODAY", "heatmap opens a past day");
 
+  // Schedules and long-term targets, set in the activity editor
+  await blur(a);
+  await a.keyboard.press("t");
+  await a.locator('.act:has(h3:text-is("Gym")) h3').click();
+  await a.click('#ed-sched button[data-v="weekly"]');
+  await a.fill("#ed-count", "3");
+  await a.click("#ed-save");
+  await a.waitForTimeout(200);
+  check(/\d\/3 this week|week done/.test(await a.locator('.act:has(h3:text-is("Gym")) .meta').innerText()), "a 3× a week schedule shows its weekly count");
+  await a.locator('.act:has(h3:text-is("Quantum Computing")) h3').click();
+  await a.fill("#ed-target", "200");
+  await a.fill("#ed-target-date", await a.evaluate(() => Diligent.store.addDays(Diligent.store.today(), 60)));
+  await a.click("#ed-save");
+  await a.waitForTimeout(200);
+  check((await a.locator('.act:has(h3:text-is("Quantum Computing")) .target').innerText()).includes("by"), "a long-term target shows its pace on the card");
+
   await connect(a, "Laptop");
   await a.reload();
   await a.waitForSelector(".act");
@@ -113,12 +129,13 @@ try {
   check(await a.evaluate(() => Diligent.cloud.liveState()) === "open", "the clipboard opens a Realtime socket");
   await b.waitForFunction(() => Diligent.cloud.liveState() === "open", null, { timeout: 5000 }).catch(() => {});
   await a.waitForTimeout(500); // let both joins land
-  const sentAt = Date.now();
+  const sentAt = Date.now(), deliveredBefore = db.realtime.delivered;
   await b.fill("#clip-text", "reply from the phone");
   await b.keyboard.press("Control+Enter");
   await a.waitForFunction(() => document.body.innerText.includes("reply from the phone"), null, { timeout: 20000 });
   const took = Date.now() - sentAt;
-  check(took < 2500 && db.realtime.broadcasts > 0, `the reply arrives through a Realtime ping (${took} ms, polling is 16 s while live)`);
+  // The ping reached the other tab, and the clip arrived well before a 16 s poll would bring it.
+  check(db.realtime.delivered > deliveredBefore && took < 8000, `the reply arrives through a Realtime ping (${took} ms, polling is 16 s while live)`);
   await a.locator(".clip").first().locator('[data-clip="copy"]').click();
   check(await a.evaluate(() => navigator.clipboard.readText()) === "reply from the phone", "copy puts the clip on the system clipboard");
 

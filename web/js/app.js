@@ -305,14 +305,20 @@
   function actCard(a, date) {
     const p = S.progressOf(date, a.id), row = S.rowOf(date, a.id) || {};
     const met = S.met(a, date);
-    const st = S.streak(a);
+    const st = S.streak(a), weeks = S.streakUnit(a) === "weeks";
     const timed = a.unit === "hrs" || a.unit === "mins";
     const goalLabel = a.goalType === "at_most" ? `max ${S.fmt(a, a.goal)}` : a.goalType === "quit" ? "quit" : `/ ${S.fmt(a, a.goal)}`;
-    return `<article class="card act spot${met && !S.isLimit(a) ? " met" : ""}${row.skip ? " skip" : ""}" data-id="${a.id}" style="--c:${esc(a.color)}">
+    const due = S.isDue(a, date), cap = S.caption(a, date);
+    const meta = !row.skip && !due && !met && cap ? cap[0].toUpperCase() + cap.slice(1) + " · the streak is safe" : cap && !row.skip ? `${cap} · ${cardMeta(a, date)}` : cardMeta(a, date);
+    const pace = S.pace(a);
+    const target = pace ? `<div class="target" title="Target ${esc(S.fmt(a, pace.target))} by ${pace.deadline}"><div class="meter"><i style="width:${Math.min(100, pace.total / pace.target * 100)}%"></i><b style="left:${Math.min(100, pace.expected / pace.target * 100)}%"></b></div>
+      <span class="${pace.ahead >= 0 ? "ahead" : ""}">${pace.ahead >= 0 ? "▲" : "▼"} ${esc(S.fmt(a, Math.abs(pace.ahead)))} ${pace.ahead >= 0 ? "ahead" : "behind"} · ${esc(S.fmt(a, pace.target))} by ${esc(S.parse(pace.deadline).toLocaleDateString(undefined, { day: "numeric", month: "short" }))}</span></div>` : "";
+    return `<article class="card act spot${met && !S.isLimit(a) ? " met" : ""}${row.skip || (!due && !met) ? " skip" : ""}" data-id="${a.id}" style="--c:${esc(a.color)}">
       ${tank(0, esc(a.color))}
-      <header><span class="dot"></span><h3 class="clickable" data-act="edit" title="Edit">${esc(a.name)}</h3>${st > 0 ? `<span class="chip${st >= 7 ? " hot" : ""}" title="Streak">${st >= 7 ? "🔥" : "◆"} ${st}</span>` : ""}</header>
+      <header><span class="dot"></span><h3 class="clickable" data-act="edit" title="Edit">${esc(a.name)}</h3>${st > 0 ? `<span class="chip${st >= (weeks ? 4 : 7) ? " hot" : ""}" title="Streak (${weeks ? "weeks" : "days"})">${st >= (weeks ? 4 : 7) ? "🔥" : "◆"} ${st}${weeks ? "w" : ""}</span>` : ""}</header>
       <div class="amount clickable" data-act="set" title="Set an exact value">${esc(S.fmt(a, p))}<small>${esc(goalLabel)}</small></div>
-      <div class="meta">${esc(cardMeta(a, date))}</div>
+      <div class="meta">${esc(meta)}</div>
+      ${target}
       ${row.note ? `<div class="note">“${esc(row.note)}”</div>` : ""}
       <div class="ctl">
         <button class="btn round" data-act="dec" aria-label="Less" data-magnetic="0.3">−</button>
@@ -559,7 +565,7 @@
       const pts = last30.map((d, i) => `${(i / 29) * 110},${24 - S.credit(a, d) * 22}`).join(" ");
       const str = S.strength(a);
       return `<tr style="--c:${esc(a.color)}"><td><span class="row"><span class="dot"></span>${esc(a.name)}</span></td>
-        <td class="num">${S.streak(a)}</td><td class="num">${S.bestStreak(a)}</td>
+        <td class="num">${S.streak(a)}${S.streakUnit(a) === "weeks" ? "w" : ""}</td><td class="num">${S.bestStreak(a)}${S.streakUnit(a) === "weeks" ? "w" : ""}</td>
         <td><div class="row"><div class="meter" style="flex:1"><i style="width:${Math.round(str * 100)}%"></i></div><span class="tiny">${Math.round(str * 100)}%</span></div></td>
         <td class="num">${esc(S.fmt(a, total))}</td>
         <td><svg class="spark" viewBox="0 0 110 26" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${esc(a.color)}" stroke-width="1.5" stroke-linejoin="round"/></svg></td></tr>`;
@@ -581,6 +587,7 @@
           : `<p class="tiny">Rate your mood in Today → Day log and this shows what goes with your good days.</p>`}
         </div>
       </div>
+      ${targetsCard()}
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
@@ -685,6 +692,18 @@
     dlg.showModal();
   }
 
+  function targetsCard() {
+    const list = S.active().map((a) => ({ a, p: S.pace(a) })).filter((x) => x.p);
+    if (!list.length) return "";
+    const day = (d) => S.parse(d).toLocaleDateString(undefined, { day: "numeric", month: "short", year: "numeric" });
+    return `<div class="card spot" style="margin-top:16px"><p class="label">Targets</p>${list.map(({ a, p }) => `
+      <div class="target big" style="--c:${esc(a.color)}">
+        <div class="row"><span class="dot"></span><b>${esc(a.name)}</b><span class="spacer"></span><span class="mono">${esc(S.fmt(a, p.total))} / ${esc(S.fmt(a, p.target))}</span></div>
+        <div class="meter"><i style="width:${Math.min(100, p.total / p.target * 100)}%"></i><b style="left:${Math.min(100, p.expected / p.target * 100)}%" title="Where a straight line to the deadline says you'd be today"></b></div>
+        <span class="${p.ahead >= 0 ? "ahead" : ""}">${p.ahead >= 0 ? "▲" : "▼"} ${esc(S.fmt(a, Math.abs(p.ahead)))} ${p.ahead >= 0 ? "ahead" : "behind"} · need ${esc(S.fmt(a, p.needed))}/day for ${p.daysLeft} days · by ${day(p.deadline)}</span>
+        <span class="tiny">${p.projected ? `At your 14-day pace you finish on ${day(p.projected)}` : "No recent progress to project from"}</span>
+      </div>`).join("")}</div>`;
+  }
   function statsAfter() {
     const wc = $("#weekly-card"); if (wc) wc.onclick = openWeeklyCard;
     const h = $("#heat"); if (!h) return;
@@ -937,7 +956,7 @@ create policy clips on diligent_clips for all
     return `<div class="grid two">
       <div class="stack">
         <div class="card spot"><p class="label">Activities</p>
-          ${S.active().map((a) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);--c:${esc(a.color)}"><span class="dot"></span><span style="flex:1">${esc(a.name)} <span class="tiny">· ${a.goalType === "at_most" ? "max " : a.goalType === "quit" ? "quit · " : ""}${esc(S.fmt(a, a.goal))}</span></span>
+          ${S.active().map((a) => `<div class="row" style="padding:8px 0;border-bottom:1px solid var(--border);--c:${esc(a.color)}"><span class="dot"></span><span style="flex:1">${esc(a.name)} <span class="tiny">· ${a.goalType === "at_most" ? "max " : a.goalType === "quit" ? "quit · " : ""}${esc(S.fmt(a, a.goal))} · ${esc(S.describe(a))}</span></span>
             <button class="btn sm ghost" data-mv="-1" data-id="${a.id}" aria-label="Move up">↑</button><button class="btn sm ghost" data-mv="1" data-id="${a.id}" aria-label="Move down">↓</button><button class="btn sm" data-edit="${a.id}">Edit</button></div>`).join("")}
           <button class="btn ghost" id="set-add" style="margin-top:12px">+ New activity</button>
           ${archived.length ? `<p class="label" style="margin-top:18px">Archived</p>${archived.map((a) => `<div class="row" style="padding:4px 0"><span style="flex:1" class="muted">${esc(a.name)}</span><button class="btn sm ghost" data-restore="${a.id}">Restore</button></div>`).join("")}` : ""}
@@ -1023,7 +1042,7 @@ create policy clips on diligent_clips for all
   }
 
   // ─── Activity editor ─────────────────────────────────
-  let editing = null, edType = "at_least", edColor = S.COLORS[0];
+  let editing = null, edType = "at_least", edColor = S.COLORS[0], edSched = "daily", edDays = 127;
   function openEditor(a) {
     editing = a;
     $("#ed-name").value = a ? a.name : "";
@@ -1032,6 +1051,11 @@ create policy clips on diligent_clips for all
     $("#ed-goal").value = a ? a.goal : 1;
     edType = a ? a.goalType : "at_least";
     edColor = a ? a.color : S.COLORS[state.activities.length % S.COLORS.length];
+    edSched = (a && a.scheduleType) || "daily";
+    edDays = a && a.scheduleDays != null ? a.scheduleDays : 127;
+    $("#ed-count").value = (a && a.scheduleCount > 1 && a.scheduleCount) || (edSched === "interval" ? 2 : 3);
+    $("#ed-target").value = a && +a.targetTotal > 0 ? a.targetTotal : "";
+    $("#ed-target-date").value = (a && a.targetDate) || "";
     $("#ed-delete").hidden = !a;
     paintEditor();
     $("#editor").showModal();
@@ -1039,9 +1063,17 @@ create policy clips on diligent_clips for all
   }
   function paintEditor() {
     $$("#ed-type button").forEach((b) => b.classList.toggle("on", b.dataset.v === edType));
+    $$("#ed-sched button").forEach((b) => b.classList.toggle("on", b.dataset.v === edSched));
+    $("#ed-days").hidden = edSched !== "weekdays";
+    $("#ed-days").innerHTML = ["M", "T", "W", "T", "F", "S", "S"].map((l, i) => `<button type="button" data-bit="${1 << i}" class="${edDays & (1 << i) ? "on" : ""}" aria-label="${["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"][i]}">${l}</button>`).join("");
+    $("#ed-count-row").hidden = edSched !== "weekly" && edSched !== "interval";
+    $("#ed-count").max = edSched === "weekly" ? 7 : 30;
+    $("#ed-count-label").textContent = edSched === "weekly" ? "times a week (Mon–Sun, any days); the streak counts weeks" : "days between; the days in between don't break the streak";
     $("#ed-colors").innerHTML = S.COLORS.map((c) => `<button type="button" style="--c:${c}" data-c="${c}" class="${c === edColor ? "on" : ""}" aria-label="${c}"></button>`).join("");
   }
   $("#ed-type").onclick = (e) => { const b = e.target.closest("button"); if (b) { edType = b.dataset.v; paintEditor(); } };
+  $("#ed-sched").onclick = (e) => { const b = e.target.closest("button"); if (b) { edSched = b.dataset.v; paintEditor(); } };
+  $("#ed-days").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; const next = edDays ^ +b.dataset.bit; if (next) { edDays = next; paintEditor(); } };
   $("#ed-colors").onclick = (e) => { const b = e.target.closest("button"); if (b) { edColor = b.dataset.c; paintEditor(); } };
   $("#ed-cancel").onclick = () => $("#editor").close();
   $("#ed-delete").onclick = () => { if (editing && confirm(`Archive ${editing.name}? Its history is kept.`)) { S.removeActivity(editing.id); $("#editor").close(); } };
@@ -1049,7 +1081,13 @@ create policy clips on diligent_clips for all
     e.preventDefault();
     const name = $("#ed-name").value.trim();
     if (!name) return;
-    const fields = { name, unit: $("#ed-unit").value, goal: Math.max(0, +$("#ed-goal").value || 0), goalType: edType, color: edColor };
+    const count = Math.round(+$("#ed-count").value || 1);
+    const fields = {
+      name, unit: $("#ed-unit").value, goal: Math.max(0, +$("#ed-goal").value || 0), goalType: edType, color: edColor,
+      scheduleType: edSched, scheduleDays: edSched === "weekdays" ? edDays : 127,
+      scheduleCount: edSched === "weekly" ? Math.min(7, Math.max(1, count)) : edSched === "interval" ? Math.min(30, Math.max(1, count)) : 1,
+      targetTotal: Math.max(0, +$("#ed-target").value || 0), targetDate: $("#ed-target-date").value || "",
+    };
     if (editing) fields.id = editing.id;
     S.upsertActivity(fields);
     $("#editor").close();

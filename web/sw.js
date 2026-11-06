@@ -1,6 +1,6 @@
 // Offline shell: the app files come from the cache first and refresh in the background.
 // Supabase and font requests always go to the network.
-const CACHE = "diligent-web-v5"; // bump whenever web files change
+const CACHE = "diligent-web-v6"; // bump whenever web files change
 const SHELL = ["./", "index.html", "css/style.css", "js/quotes.js", "js/store.js", "js/cloud.js", "js/fluid.js", "js/cursor.js", "js/app.js", "icon.svg", "manifest.webmanifest"];
 
 self.addEventListener("install", (e) => {

@@ -77,6 +77,17 @@
       <button type="button" data-v="at_most">At most</button>
       <button type="button" data-v="quit">Quit</button>
     </div>
+    <label class="field">Schedule</label>
+    <div class="seg" id="ed-sched">
+      <button type="button" data-v="daily">Every day</button>
+      <button type="button" data-v="weekdays">Some days</button>
+      <button type="button" data-v="weekly">N× a week</button>
+      <button type="button" data-v="interval">Every N days</button>
+    </div>
+    <div class="scale" id="ed-days" style="margin-top:10px"></div>
+    <div class="row" id="ed-count-row" style="margin-top:10px"><input id="ed-count" type="number" min="1" max="30" style="width:90px"><span class="tiny" id="ed-count-label"></span></div>
+    <label class="field">Long-term target (optional)</label>
+    <div class="row"><input id="ed-target" type="number" min="0" step="any" placeholder="e.g. 200" style="flex:1" aria-label="Target total"><input id="ed-target-date" type="date" style="flex:1" aria-label="Target date"></div>
     <label class="field">Colour</label>
     <div class="swatches" id="ed-colors"></div>
     <div class="row" style="margin-top:22px">
