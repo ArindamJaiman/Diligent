@@ -305,7 +305,7 @@
   }
 
   // ─── Backup ───────────────────────────────────────────
-  function exportJson() { return JSON.stringify(Object.assign({}, state, { cloud: Object.assign({}, state.cloud, { key: "" }), exportedAt: new Date().toISOString() }), null, 2); }
+  function exportJson() { return JSON.stringify(Object.assign({}, state, { cloud: Object.assign({}, state.cloud, { key: "", clipPass: "" }), exportedAt: new Date().toISOString() }), null, 2); }
 
   /** Accepts this site's export or the Android app's backup (Settings → Backup). */
   function importJson(text) {

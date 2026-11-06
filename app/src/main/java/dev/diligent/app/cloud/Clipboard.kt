@@ -36,6 +36,7 @@ import dagger.hilt.components.SingletonComponent
 import dev.diligent.app.tools.ToolButton
 import dev.diligent.app.tools.ToolCard
 import dev.diligent.app.tools.ToolChip
+import dev.diligent.app.tools.ToolColors
 import dev.diligent.app.tools.ToolField
 import dev.diligent.app.tools.ToolFormat
 import dev.diligent.app.tools.ToolNote
@@ -71,7 +72,11 @@ data class Clip(
     val createdAt: Long,
     val kind: String = "text",
     /** Pinned clips never expire. */
-    val pinned: Boolean = false
+    val pinned: Boolean = false,
+    /** The text as stored in Supabase ("enc1:…" when encrypted); re-sent as is when pinning. */
+    val stored: String = text,
+    /** Encrypted with a passphrase this device doesn't have. */
+    val locked: Boolean = false
 ) {
     /** Images come from the web app as data URLs; the phone lists them but doesn't render them. */
     val isImage: Boolean get() = kind == "image"
@@ -98,6 +103,15 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
 
     private fun device(): String = cloud.state.value.displayName.ifBlank { Build.MODEL ?: "Android" }
 
+    /** Your own clips are end-to-end encrypted once a passphrase is set; room clips stay plain. */
+    private fun passphrase(room: String): String? =
+        if (room.isBlank()) cloud.secret(PASS_SECRET)?.takeIf { it.isNotBlank() } else null
+
+    val encrypting: Boolean get() = cloud.hasSecret(PASS_SECRET)
+
+    /** Blank removes it. Kept in the Keystore-backed SecretStore, never uploaded. */
+    fun setPassphrase(value: String?) = cloud.setSecret(PASS_SECRET, value)
+
     /**
      * Newest first, pinned on top. Unpinned clips older than [EXPIRE_MS] are dropped here and
      * deleted from Supabase. select=* keeps tables made before the pinned column working.
@@ -105,11 +119,16 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
     suspend fun list(room: String = ""): List<Clip> = withContext(Dispatchers.IO) {
         val db = db(room) ?: return@withContext emptyList()
         val rows = db.select(TABLE, "scope=eq.${scope(room)}&select=*&order=created_at.desc&limit=$LIMIT")
+        val pass = passphrase(room)
         val all = rows.map { e ->
             val o = e.jsonObject
+            val stored = o["text"]?.jsonPrimitive?.contentOrNull.orEmpty()
+            val plain = ClipCrypto.decrypt(stored, pass)
             Clip(
                 id = o["id"]?.jsonPrimitive?.contentOrNull.orEmpty(),
-                text = o["text"]?.jsonPrimitive?.contentOrNull.orEmpty(),
+                text = plain.orEmpty(),
+                stored = stored,
+                locked = plain == null,
                 device = o["device"]?.jsonPrimitive?.contentOrNull ?: "?",
                 createdAt = o["created_at"]?.jsonPrimitive?.longOrNull ?: 0L,
                 kind = o["kind"]?.jsonPrimitive?.contentOrNull ?: "text",
@@ -132,7 +151,7 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
                 add(buildJsonObject {
                     put("scope", scope(room))
                     put("id", clip.id)
-                    put("text", clip.text)
+                    put("text", clip.stored)
                     put("kind", clip.kind)
                     put("device", clip.device)
                     put("created_at", clip.createdAt)
@@ -149,11 +168,12 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
         val clean = text.take(MAX_CHARS)
         if (clean.isBlank()) return@withContext
         val db = db(room) ?: error("Set up Supabase in Hub → Cloud first")
+        val stored = passphrase(room)?.let { ClipCrypto.encrypt(clean, it) } ?: clean
         db.upsert(TABLE, "scope,id", buildJsonArray {
             add(buildJsonObject {
                 put("scope", scope(room))
                 put("id", UUID.randomUUID().toString())
-                put("text", clean)
+                put("text", stored)
                 put("kind", "text")
                 put("device", device())
                 put("created_at", System.currentTimeMillis())
@@ -174,6 +194,7 @@ class ClipboardService @Inject constructor(private val cloud: CloudService) {
         const val TABLE = "diligent_clips"
         const val LIMIT = 50
         const val MAX_CHARS = 20_000
+        const val PASS_SECRET = "clip_passphrase"
 
         /** Unpinned clips are kept for a day. */
         const val EXPIRE_MS = 24L * 60 * 60 * 1000
@@ -278,6 +299,15 @@ class ClipboardViewModel @Inject constructor(
     val room: StateFlow<String> = _room.asStateFlow()
     val messages = MutableSharedFlow<String>()
     val ready: Boolean get() = service.ready
+    private val _encrypting = MutableStateFlow(service.encrypting)
+    val encrypting: StateFlow<Boolean> = _encrypting.asStateFlow()
+
+    fun setPassphrase(value: String) = viewModelScope.launch {
+        service.setPassphrase(value)
+        _encrypting.value = service.encrypting
+        messages.emit(if (service.encrypting) "Passphrase saved · new clips are encrypted on this phone" else "Passphrase removed · new clips are sent plain")
+        refresh()
+    }
 
     fun setRoom(code: String) {
         val clean = code.trim().uppercase()
@@ -316,6 +346,10 @@ class ClipboardViewModel @Inject constructor(
     }
 
     fun copy(clip: Clip) {
+        if (clip.locked) {
+            viewModelScope.launch { messages.emit("Encrypted with a passphrase this phone doesn't have") }
+            return
+        }
         if (clip.isImage) {
             viewModelScope.launch { messages.emit("Images open in the web app") }
             return
@@ -383,6 +417,21 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
                 ToolField(roomDraft, { roomDraft = it.uppercase() }, "room code (optional)", Modifier.weight(1f))
                 ToolButton("USE", enabled = roomDraft.length >= 4 && roomDraft != room) { viewModel.setRoom(roomDraft) }
             }
+            if (room.isBlank()) {
+                val encrypting by viewModel.encrypting.collectAsStateWithLifecycle()
+                var pass by remember { mutableStateOf("") }
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ToolField(pass, { pass = it }, if (encrypting) "passphrase saved · type to replace" else "passphrase (optional, end-to-end)", Modifier.weight(1f))
+                    ToolButton("SAVE", enabled = pass.isNotBlank()) { viewModel.setPassphrase(pass); pass = "" }
+                }
+                if (encrypting) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("🔒 Encrypted on this phone before it's sent. Use the same passphrase on the web app.", style = toolLabel(9.sp), color = ToolColors.Good, modifier = Modifier.weight(1f))
+                        Text("REMOVE", style = toolLabel(9.sp, bold = true), color = DiligentColors.Gray500, modifier = Modifier.padding(start = 8.dp).clickable { viewModel.setPassphrase("") })
+                    }
+                }
+            }
         }
         ToolCard {
             ToolField(draft, { draft = it }, "type or paste a clip", Modifier.fillMaxWidth(), onDone = {
@@ -406,7 +455,12 @@ fun ClipboardScreen(onBack: () -> Unit, viewModel: ClipboardViewModel = hiltView
 @Composable
 private fun ClipCard(clip: Clip, onCopy: () -> Unit, onPin: () -> Unit, onDelete: () -> Unit) {
     ToolCard(onClick = onCopy) {
-        Text(if (clip.isImage) "🖼 Image · open the web app to see it" else clip.text.take(600), style = toolLabel(11.sp), color = DiligentColors.White, maxLines = 8)
+        Text(
+            when {
+                clip.locked -> "🔒 Encrypted · set the same clipboard passphrase to read it"
+                clip.isImage -> "🖼 Image · open the web app to see it"
+                else -> clip.text.take(600)
+            }, style = toolLabel(11.sp), color = DiligentColors.White, maxLines = 8)
         Spacer(Modifier.height(6.dp))
         Row(verticalAlignment = Alignment.CenterVertically) {
             Text("${if (clip.pinned) "📌 " else ""}${clip.device} · ${ToolFormat.clock(clip.createdAt)} · tap to copy", style = toolLabel(9.sp), color = DiligentColors.Gray600, modifier = Modifier.weight(1f))

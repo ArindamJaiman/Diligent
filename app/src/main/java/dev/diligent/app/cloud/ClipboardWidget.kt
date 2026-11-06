@@ -54,7 +54,7 @@ import androidx.glance.text.Text as GText
 object ClipCache {
     private const val PREFS = "clipboard_widget"
 
-    data class Entry(val text: String, val device: String, val at: Long, val image: Boolean)
+    data class Entry(val text: String, val device: String, val at: Long, val image: Boolean, val locked: Boolean = false)
 
     private fun prefs(context: Context) = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
@@ -62,20 +62,20 @@ object ClipCache {
         val p = prefs(context)
         val at = p.getLong("at", 0L)
         if (at == 0L) return null
-        return Entry(p.getString("text", "").orEmpty(), p.getString("device", "").orEmpty(), at, p.getBoolean("image", false))
+        return Entry(p.getString("text", "").orEmpty(), p.getString("device", "").orEmpty(), at, p.getBoolean("image", false), p.getBoolean("locked", false))
     }
 
     private fun write(context: Context, entry: Entry?) {
         val edit = prefs(context).edit()
         if (entry == null) edit.clear() else edit.putString("text", entry.text.take(2_000)).putString("device", entry.device)
-            .putLong("at", entry.at).putBoolean("image", entry.image)
+            .putLong("at", entry.at).putBoolean("image", entry.image).putBoolean("locked", entry.locked)
         edit.apply()
     }
 
     /** After listing your own clips: keep the newest (not the pinned ones on top). */
     fun update(context: Context, clips: List<Clip>) {
         val newest = clips.maxByOrNull { it.createdAt }
-        write(context, newest?.let { Entry(if (it.isImage) "" else it.text, it.device, it.createdAt, it.isImage) })
+        write(context, newest?.let { Entry(if (it.isImage || it.locked) "" else it.text, it.device, it.createdAt, it.isImage, it.locked) })
         ClipboardWidget.refreshAsync(context)
     }
 
@@ -134,8 +134,8 @@ class ClipCopyAction : ActionCallback {
     override suspend fun onAction(context: Context, glanceId: GlanceId, parameters: ActionParameters) {
         val entry = ClipCache.read(context) ?: return
         withContext(Dispatchers.Main) {
-            if (entry.image) {
-                Toast.makeText(context, "Images open in the web app", Toast.LENGTH_SHORT).show()
+            if (entry.image || entry.locked) {
+                Toast.makeText(context, if (entry.locked) "Encrypted with a passphrase this phone doesn't have" else "Images open in the web app", Toast.LENGTH_SHORT).show()
                 return@withContext
             }
             val manager = context.getSystemService(ClipboardManager::class.java) ?: return@withContext
@@ -171,7 +171,11 @@ private fun ClipboardContent(entry: ClipCache.Entry?, ready: Boolean) {
                 entry == null -> GText("Tap ↻ for your newest clip.", style = wText(9.sp, WidgetPalette.Gray), maxLines = 2)
                 else -> {
                     GText(
-                        if (entry.image) "🖼 Image · open the web app to see it" else entry.text,
+                        when {
+                            entry.locked -> "🔒 Encrypted clip · set the passphrase in Hub → Clipboard"
+                            entry.image -> "🖼 Image · open the web app to see it"
+                            else -> entry.text
+                        },
                         style = wText(10.sp, WidgetPalette.White),
                         maxLines = 5
                     )
@@ -182,7 +186,7 @@ private fun ClipboardContent(entry: ClipCache.Entry?, ready: Boolean) {
         }
         if (ready) {
             Row(modifier = GlanceModifier.fillMaxWidth(), verticalAlignment = Alignment.Vertical.CenterVertically) {
-                WChip("COPY", actionRunCallback<ClipCopyAction>(), dim = entry == null || entry.image)
+                WChip("COPY", actionRunCallback<ClipCopyAction>(), dim = entry == null || entry.image || entry.locked)
                 WChip("SEND MINE", actionStartActivity(SendClipboardActivity.intent(context)))
             }
         }

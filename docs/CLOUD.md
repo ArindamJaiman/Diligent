@@ -122,6 +122,15 @@ of at most ~250 KB). The phone lists image clips but leaves showing them to the 
 Nothing polls in the background: the phone refreshes every 10 s while the Clipboard screen is
 open, the web app every 4 s while its Clipboard tab is open (and every 30 s for the badge).
 
+**End-to-end encryption:** set a **clipboard passphrase** (phone: Hub → Clipboard; web:
+Settings → Cloud) and your own clips are encrypted on the device before they're sent:
+AES-256-GCM with a key from the passphrase (PBKDF2-SHA256, 100,000 rounds), stored as
+`enc1:` + base64(iv ‖ ciphertext ‖ tag), the same on both. Supabase only ever holds
+ciphertext. Use the same passphrase on every device; a device without it lists those clips as
+🔒 locked. Plain clips from before keep working. The passphrase never leaves the device (the
+phone keeps it in the Keystore-backed secret store; the web app in that browser's storage,
+left out of exports). Room clips stay plain.
+
 **Instant updates (web):** the web app also opens a Supabase **Realtime** socket while the
 Clipboard or Room tab is open. After a change it sends a tiny "changed" ping (no data) on a
 channel named from a SHA-256 of your owner id or the room code, and other open tabs refetch

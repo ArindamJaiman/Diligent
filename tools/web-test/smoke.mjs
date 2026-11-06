@@ -134,6 +134,19 @@ try {
   await a.waitForTimeout(400);
   check(db.tables.diligent_clips.length === 1 && db.tables.diligent_clips[0].pinned === true, "expired clips are deleted from Supabase");
 
+  // End-to-end: with a shared passphrase Supabase stores only ciphertext; without it the clip is locked.
+  for (const p of [a, b]) await p.evaluate(() => { Diligent.store.state.cloud.clipPass = "correct horse"; Diligent.store.save(); });
+  await b.fill("#clip-text", "secret for my laptop");
+  await b.keyboard.press("Control+Enter");
+  await a.waitForFunction(() => document.body.innerText.includes("secret for my laptop"), null, { timeout: 20000 }).then(() => true, () => false);
+  const row = db.tables.diligent_clips.find((r) => String(r.text).startsWith("enc1:"));
+  check(!!row && !db.tables.diligent_clips.some((r) => String(r.text).includes("secret for my laptop")) && (await a.locator(".clip pre").allInnerTexts()).includes("secret for my laptop"),
+    "with a passphrase only ciphertext reaches Supabase, and the other device reads it");
+  await a.evaluate(() => { Diligent.store.state.cloud.clipPass = ""; Diligent.store.save(); location.hash = "#today"; });
+  await a.evaluate(() => { location.hash = "#clipboard"; });
+  await a.waitForFunction(() => document.body.innerText.includes("🔒 Encrypted"), null, { timeout: 8000 }).then(() => true, () => false);
+  check((await a.locator(".clip pre").allInnerTexts()).some((t) => t.includes("🔒 Encrypted")), "without the passphrase the clip shows as locked");
+
   await blur(a);
   await a.keyboard.press("5");
   await a.fill("#room-code", "SMOKE1");

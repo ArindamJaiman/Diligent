@@ -704,7 +704,7 @@
         <p class="label">Shared clipboard <span class="grow"></span>${clipScope !== "local" && C.ready() ? `<span class="live">LIVE</span>` : ""}</p>
         <div class="row" style="margin-bottom:14px">
           <div class="seg" id="clip-scope">${["local", "mine", "room"].map((s) => `<button data-v="${s}" class="${clipScope === s ? "on" : ""}">${esc(scopeLabel[s])}</button>`).join("")}</div>
-          <span class="tiny">${clipScope === "local" ? "Stays in this browser; live across its tabs." : clipScope === "mine" ? "Your phone (Hub → Clipboard), laptop and any browser signed in with your owner id." : state.cloud.room ? "Everyone with the room code sees these." : "Join a room in the Room tab first."}</span>
+          <span class="tiny">${clipScope === "local" ? "Stays in this browser; live across its tabs." : clipScope === "mine" ? "Your phone (Hub → Clipboard), laptop and any browser signed in with your owner id." + (C.encrypting("mine") ? " 🔒 End-to-end encrypted." : "") : state.cloud.room ? "Everyone with the room code sees these." : "Join a room in the Room tab first."}</span>
         </div>
         <div class="drop" id="drop">
           <textarea id="clip-text" placeholder="Type, paste or drop text or an image… (Ctrl ↵ to send)" maxlength="${C.MAX_CHARS}"></textarea>
@@ -722,10 +722,10 @@
   function clipCard(c) {
     const fresh = c.createdAt > clipSeen - 1 && c.device !== C.device();
     return `<div class="card clip spot${fresh ? " fresh" : ""}${c.pinned ? " pinned" : ""}" data-id="${esc(c.id)}">
-      ${c.kind === "image" ? `<img src="${esc(c.text)}" alt="Shared image" loading="lazy">` : `<pre>${linkify(c.text)}</pre>`}
+      ${c.locked ? `<pre class="muted">🔒 Encrypted. Set the same clipboard passphrase in Settings → Cloud to read it.</pre>` : c.kind === "image" ? `<img src="${esc(c.text)}" alt="Shared image" loading="lazy">` : `<pre>${linkify(c.text)}</pre>`}
       <footer><span class="who">${c.pinned ? "📌 " : ""}${esc(c.device || "?")} · ${ago(c.createdAt)}</span>
         <button class="btn sm ghost" data-clip="pin" title="${c.pinned ? "Unpin" : "Pin: keep it past the expiry"}" aria-label="${c.pinned ? "Unpin" : "Pin"}">${c.pinned ? "Unpin" : "Pin"}</button>
-        <button class="btn sm" data-clip="copy" data-cursor="copy">Copy</button><button class="btn sm ghost" data-clip="del" aria-label="Delete">✕</button></footer></div>`;
+        <button class="btn sm" data-clip="copy" data-cursor="copy" ${c.locked ? "disabled" : ""}>Copy</button><button class="btn sm ghost" data-clip="del" aria-label="Delete">✕</button></footer></div>`;
   }
   async function loadClips(quietly) {
     try {
@@ -949,6 +949,8 @@ create policy clips on diligent_clips for all
           <label class="field" for="c-owner">Owner id (Hub → Cloud in the app)</label>
           <div class="row"><input id="c-owner" value="${esc(c.owner)}" placeholder="uuid" style="flex:1" autocomplete="off"><button class="btn sm ghost" id="c-gen" title="Only if you don't use the app">New</button></div>
           <label class="field" for="c-device">This device's name</label><input id="c-device" value="${esc(c.device)}" placeholder="${esc(C.device())}">
+          <label class="field" for="c-pass">Clipboard passphrase (optional)</label><input id="c-pass" type="password" value="${esc(c.clipPass || "")}" placeholder="encrypts My devices clips end to end" autocomplete="new-password">
+          <p class="tiny">Set the same passphrase in Hub → Clipboard on the phone. Clips are encrypted here before they're sent; Supabase only stores ciphertext. Room clips stay plain.</p>
           <div class="row" style="margin-top:14px"><button class="btn" id="c-save">Save &amp; sync</button><span class="tiny" id="c-status">${c.lastPull ? "last sync " + ago(c.lastPull) : ""}</span></div>
           <label class="switch" style="margin-top:6px"><span class="txt"><b>Auto sync</b><br><span class="tiny">On open, 20 s after a change and every 5 min while this tab is open</span></span><input type="checkbox" id="c-auto" ${c.auto ? "checked" : ""}></label>
           <details style="margin-top:10px"><summary class="tiny" style="cursor:pointer">SQL for the shared clipboard (run once; the rest is in docs/CLOUD.md)</summary><pre class="sql">${esc(SQL)}</pre></details>
@@ -1008,7 +1010,7 @@ create policy clips on diligent_clips for all
     $("#c-gen").onclick = () => { if (!$("#c-owner").value || confirm("Make a new owner id? Only do this if you don't use the app, or your rows won't match.")) $("#c-owner").value = S.uid(); };
     $("#c-auto").onchange = (e) => { c.auto = e.target.checked; S.save(); };
     $("#c-save").onclick = async () => {
-      c.url = $("#c-url").value.trim().replace(/\/$/, ""); c.key = $("#c-key").value.trim(); c.owner = $("#c-owner").value.trim(); c.device = $("#c-device").value.trim();
+      c.url = $("#c-url").value.trim().replace(/\/$/, ""); c.key = $("#c-key").value.trim(); c.owner = $("#c-owner").value.trim(); c.device = $("#c-device").value.trim(); c.clipPass = $("#c-pass").value.trim();
       S.save();
       const st = $("#c-status"); st.textContent = "syncing…";
       try { const msg = await C.sync(); st.textContent = msg; toast("Synced · " + msg); } catch (e) { st.textContent = e.message; }

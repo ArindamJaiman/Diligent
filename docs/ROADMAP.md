@@ -21,8 +21,10 @@ has shipped since the list was started.
 - [ ] **Auto-send on copy** (opt-in, foreground only: Android 10+ only lets the focused app read
   the clipboard) and a "copy on the laptop → notification on the phone" mode using Supabase
   Realtime instead of polling
-- [ ] **End-to-end encryption** for clips: derive a key from the owner id / room code so the
-  Supabase project only stores ciphertext
+- ✅ **End-to-end encryption** for your own clips with a clipboard passphrase (AES-256-GCM,
+  PBKDF2): the Supabase project only stores ciphertext. Keying from the owner id or room code
+  would protect nothing, since both are stored next to the clips
+- [ ] End-to-end encryption for room clips (a room passphrase shared with the code)
 - [ ] **Files** (PDFs, small zips) through Supabase Storage, with expiry
 - ✅ **Pin and expire** clips (keep pinned, delete the rest after 24 h; 7 days or forever on the web)
 - [ ] Browser extension: right-click → *Send to Diligent clipboard*

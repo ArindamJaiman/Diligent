@@ -92,6 +92,41 @@
   function scopeHeaders(scope) { return scope === "room" ? { "x-diligent-room": (cfg().room || "").toUpperCase() } : {}; }
   const MAX_CHARS = 20000, MAX_IMAGE = 350000;
 
+
+  // ─── End-to-end encryption for your own clips ─────────
+  // AES-256-GCM, key from the clipboard passphrase (PBKDF2-SHA256, 100,000 rounds), stored as
+  // "enc1:" + base64(iv ‖ ciphertext ‖ tag): the same bytes the Android app's ClipCrypto writes.
+  // Room clips stay plain (everyone in the room would need the passphrase).
+  const ENC = "enc1:";
+  const clipKeys = new Map();
+  const passphrase = (scope) => (scope === "mine" && (S.state.cloud.clipPass || "").trim()) || null;
+  function clipKey(pass) {
+    if (!clipKeys.has(pass)) clipKeys.set(pass, (async () => {
+      const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(pass), "PBKDF2", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey({ name: "PBKDF2", salt: new TextEncoder().encode("diligent-clips-v1"), iterations: 100000, hash: "SHA-256" },
+        base, { name: "AES-GCM", length: 256 }, false, ["encrypt", "decrypt"]);
+    })());
+    return clipKeys.get(pass);
+  }
+  function b64(bytes) { let s = ""; for (let i = 0; i < bytes.length; i += 0x8000) s += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000)); return btoa(s); }
+  const unb64 = (s) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
+  async function seal(plain, pass) {
+    if (!crypto.subtle) throw new Error("Encryption needs https (or localhost); remove the passphrase to send plain clips");
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await clipKey(pass), new TextEncoder().encode(plain)));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return ENC + b64(out);
+  }
+  /** Plain text; plain clips pass through; null without the right passphrase. */
+  async function unseal(stored, pass) {
+    if (!stored || !stored.startsWith(ENC)) return stored;
+    if (!pass || !crypto.subtle) return null;
+    try {
+      const raw = unb64(stored.slice(ENC.length));
+      return new TextDecoder().decode(await crypto.subtle.decrypt({ name: "AES-GCM", iv: raw.subarray(0, 12) }, await clipKey(pass), raw.subarray(12)));
+    } catch { return null; }
+  }
+
   /** Unpinned clips older than this are deleted (0 = keep forever). Pinned ones always stay. */
   const ttlMs = () => { const h = S.state.settings.clipTtl; return (h == null ? 24 : +h) * 3600e3; };
   const order = (list) => list.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
@@ -108,7 +143,11 @@
     const where = `scope=eq.${encodeURIComponent(scopeId(scope))}`;
     // select=* so a table made before the pinned column still works
     const rows = await rest(`diligent_clips?${where}&select=*&order=created_at.desc&limit=80`, { headers: scopeHeaders(scope) });
-    const list = rows.map((r) => ({ id: r.id, text: r.text, kind: r.kind || "text", device: r.device, createdAt: r.created_at, pinned: !!r.pinned }));
+    const pass = passphrase(scope);
+    const list = await Promise.all(rows.map(async (r) => {
+      const plain = await unseal(r.text, pass);
+      return { id: r.id, text: plain == null ? "" : plain, raw: r.text, locked: plain == null, kind: r.kind || "text", device: r.device, createdAt: r.created_at, pinned: !!r.pinned };
+    }));
     if (ttlMs() && list.some((c) => !fresh(c))) {
       const cut = Date.now() - ttlMs();
       const pinCol = rows.some((r) => "pinned" in r);
@@ -127,7 +166,7 @@
     try {
       await rest("diligent_clips?on_conflict=scope,id", {
         method: "POST", headers: scopeHeaders(scope), prefer: "resolution=merge-duplicates,return=minimal",
-        body: [{ scope: scopeId(scope), id: clip.id, text: clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt, pinned }],
+        body: [{ scope: scopeId(scope), id: clip.id, text: clip.raw != null ? clip.raw : clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt, pinned }],
       });
       ping(scopeKey(scope));
     } catch (e) {
@@ -152,7 +191,7 @@
     if (!ready()) throw new Error("Add your Supabase project in Settings to share between devices");
     await rest("diligent_clips?on_conflict=scope,id", {
       method: "POST", headers: scopeHeaders(scope), prefer: "resolution=merge-duplicates,return=minimal",
-      body: [{ scope: scopeId(scope), id: clip.id, text: clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt }],
+      body: [{ scope: scopeId(scope), id: clip.id, text: passphrase(scope) ? await seal(clip.text, passphrase(scope)) : clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt }],
     });
     ping(scopeKey(scope));
     return clip;
@@ -292,6 +331,6 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
-    watch, scopeKey, liveState: () => live.state,
+    watch, scopeKey, liveState: () => live.state, encrypting: (scope) => !!passphrase(scope || "mine"),
   };
 })();
