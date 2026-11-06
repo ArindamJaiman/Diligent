@@ -315,6 +315,8 @@ label.field { display: block; font: 700 10px/1 var(--font-dot); letter-spacing: 
 @keyframes breathe { 50% { transform: scale(1.015); } }
 .sessions .s { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
 .sessions .s:last-child { border-bottom: 0; }
+.done-note { color: var(--good) !important; }
+.break-tip { position: absolute; top: 18%; left: 12%; right: 12%; z-index: 2; text-align: center; font: 700 11px/1.4 var(--font-dot); letter-spacing: 0.08em; color: var(--good); margin: 0; }
 .hours { display: grid; grid-template-columns: repeat(24, 1fr); gap: 3px; align-items: end; height: 80px; }
 .hours i { display: block; background: var(--text); border-radius: 3px 3px 1px 1px; min-height: 2px; opacity: 0.85; transition: height 0.8s var(--spring); }
 .hours-axis { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--dim); margin-top: 4px; }

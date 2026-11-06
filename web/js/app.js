@@ -96,7 +96,7 @@
       const minutes = f.mode === "pomo" ? (f.phase === "work" ? (now - f.phaseStart) / 60000 : 0) : (now - f.startedAt) / 60000;
       F.log(f, minutes);
       const total = f.logged;
-      if (total >= 0.5) state.sessions.unshift({ activityId: f.activityId, start: f.startedAt, end: now, minutes: Math.round(total), intention: f.intention, mode: f.mode });
+      if (total >= 0.5) state.sessions.unshift({ activityId: f.activityId, start: f.startedAt, end: now, minutes: Math.round(total), intention: f.intention, mode: f.mode, distractions: (f.distractions || []).length });
       state.sessions = state.sessions.slice(0, 500);
       state.focus = null;
       S.emit({ type: "focus" });
@@ -104,6 +104,7 @@
       updatePip();
       const a = S.byId(f.activityId);
       if (!silent) toast(total >= 0.5 ? `Logged ${Math.round(total)} min to ${a ? a.name : "?"}` : "Under 30 s: nothing logged");
+      if (!silent && total >= 0.5) askSession(state.sessions[0]);
       C.pushPresence().catch(() => {});
     },
     log(f, minutes) {
@@ -121,7 +122,7 @@
       if (f.mode === "pomo") {
         const len = (f.phase === "work" ? POMO_WORK : POMO_BREAK) * 60000;
         while (now - f.phaseStart >= len && state.focus) {
-          if (f.phase === "work") { F.log(f, POMO_WORK); notify("25 minutes logged. Take 5."); }
+          if (f.phase === "work") { F.log(f, POMO_WORK); f.tip = breakTip(); notify(`25 minutes logged. Take 5: ${f.tip.toLowerCase()}`); }
           else notify("Break over. Back to it.");
           f.phaseStart += len;
           f.phase = f.phase === "work" ? "break" : "work";
@@ -605,6 +606,59 @@
     return null;
   }
 
+
+  // ─── Focus extras: distractions, break tips, what got done ─
+  const BREAK_TIPS = [
+    "Stand up and stretch your back", "Drink a glass of water", "20-20-20: look 20 feet away for 20 seconds",
+    "Walk to the window and back", "Roll your shoulders and neck", "Breathe: 4 in, hold 7, out 8, three times",
+    "Shake out your hands and wrists", "Refill your water, not your feed",
+  ];
+  function breakTip() { return BREAK_TIPS[Math.floor(Math.random() * BREAK_TIPS.length)]; }
+  function distracted() {
+    const f = state.focus; if (!f) return;
+    (f.distractions ||= []).push(Date.now());
+    (state.distractions ||= []).push({ at: Date.now(), activityId: f.activityId });
+    state.distractions = state.distractions.slice(-1000);
+    S.save();
+    bloop("soft");
+    toast("Noted. Back to it.");
+    const b = $("#distracted"); if (b) b.textContent = `Distracted · ${f.distractions.length}`;
+  }
+  function distractionCard() {
+    const week = Date.now() - 7 * 864e5;
+    const list = (state.distractions || []).filter((d) => d.at >= week);
+    if (!list.length) return "";
+    const byHour = new Array(24).fill(0);
+    list.forEach((d) => { byHour[new Date(d.at).getHours()]++; });
+    const peak = byHour.indexOf(Math.max(...byHour));
+    const focusH = state.sessions.filter((s) => s.start >= week).reduce((n, s) => n + s.minutes, 0) / 60;
+    const max = Math.max(1, ...byHour);
+    return `<div class="card spot"><p class="label">Distractions · 7 days <span class="grow"></span><span class="tiny">${list.length} · ${focusH ? (list.length / focusH).toFixed(1) + " per focus hour" : ""}</span></p>
+      <div class="hours">${byHour.map((n, h) => `<i style="height:${Math.max(2, n / max * 100)}%;background:var(--bad)" title="${h}:00 · ${n}"></i>`).join("")}</div>
+      <div class="hours-axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div>
+      <p class="tiny" style="margin-top:8px">Most around ${peak}:00. Worth guarding that hour (Plan a block, turn on a focus sound).</p></div>`;
+  }
+  /** After a session: what got done, and how it went (both optional). */
+  function askSession(session) {
+    let dlg = $("#session-dialog");
+    if (!dlg) { dlg = document.createElement("dialog"); dlg.id = "session-dialog"; document.body.appendChild(dlg); }
+    const a = S.byId(session.activityId);
+    let rating = 0;
+    dlg.innerHTML = `<form method="dialog"><p class="label">${esc(a ? a.name : "Session")} · ${session.minutes} min</p>
+      <label class="field" for="sd-done">What did you finish?</label><input id="sd-done" maxlength="140" placeholder="${esc(session.intention || "Chapter 3 exercises")}" autocomplete="off">
+      <label class="field">How did it go?</label><div class="scale" id="sd-rate">${[1, 2, 3, 4, 5].map((n) => `<button type="button" data-n="${n}">${n}</button>`).join("")}</div>
+      <div class="row" style="margin-top:18px"><span class="spacer"></span><button class="btn ghost" value="skip">Skip</button><button class="btn" value="save" id="sd-save">Save</button></div></form>`;
+    $("#sd-rate", dlg).onclick = (e) => { const b = e.target.closest("button"); if (!b) return; rating = +b.dataset.n; $$("#sd-rate button", dlg).forEach((x) => x.classList.toggle("on", +x.dataset.n === rating)); };
+    dlg.onclose = () => {
+      if (dlg.returnValue !== "save") return;
+      session.done = $("#sd-done", dlg).value.trim();
+      if (rating) session.rating = rating;
+      S.emit({ type: "focus" });
+    };
+    dlg.showModal();
+    setTimeout(() => { const i = $("#sd-done", dlg); if (i) i.focus(); }, 50);
+  }
+
   // ─── Focus view ──────────────────────────────────────
   let focusPick = { activityId: null, mode: "timer", target: 50 };
   function focusView() {
@@ -624,10 +678,10 @@
       <div class="grid two">
         <div class="card spot timer-wrap" style="--c:${esc(color)}">
           <div class="timer${f ? " running" : ""}" id="timer">${tank(r ? r.level : 0, esc(color))}
-            <div class="readout"><b id="timer-clock">${r ? clock(r.ms) : focusPick.mode === "pomo" ? "25:00" : "00:00"}</b><span id="timer-label">${r ? esc(r.label) + " · " + esc(a ? a.name : "") : "Ready"}</span></div>
+            <p class="break-tip" id="break-tip" hidden></p><div class="readout"><b id="timer-clock">${r ? clock(r.ms) : focusPick.mode === "pomo" ? "25:00" : "00:00"}</b><span id="timer-label">${r ? esc(r.label) + " · " + esc(a ? a.name : "") : "Ready"}</span></div>
           </div>
           ${f ? `<p class="muted small" style="margin:18px 0 0">${f.intention ? "“" + esc(f.intention) + "”" : "Logged to " + esc(a ? a.name : "") + " when you stop."}</p>
-            <div class="row" style="margin-top:16px"><button class="btn" id="stop" data-cursor="stop">Stop &amp; log</button><button class="btn ghost" id="cancel">Discard</button>${"documentPictureInPicture" in window ? `<button class="btn ghost" id="pip" data-cursor="float" title="Keep the timer on top of other windows">Float</button>` : ""}</div>`
+            <div class="row" style="margin-top:16px"><button class="btn" id="stop" data-cursor="stop">Stop &amp; log</button><button class="btn ghost" id="distracted" title="Got pulled away? Tap it (or press D), then get back to it">Distracted${(f.distractions || []).length ? " · " + f.distractions.length : ""}</button><button class="btn ghost" id="cancel">Discard</button>${"documentPictureInPicture" in window ? `<button class="btn ghost" id="pip" data-cursor="float" title="Keep the timer on top of other windows">Float</button>` : ""}</div>`
           : `<div style="width:100%;max-width:440px;margin-top:22px">
             <label class="field" for="f-act">Activity</label>
             <select id="f-act">${timed.map((x) => `<option value="${x.id}" ${x.id === focusPick.activityId ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
@@ -649,8 +703,9 @@
           <div class="card spot"><p class="label">Best hours <span class="grow"></span><span class="tiny">${state.sessions.length ? "peak " + bestHour + ":00 · avg " + avg + " min" : ""}</span></p>
             <div class="hours">${byHour.map((m, h) => `<i style="height:${Math.max(2, m / maxH * 100)}%" title="${h}:00 · ${m} min"></i>`).join("")}</div>
             <div class="hours-axis"><span>0</span><span>6</span><span>12</span><span>18</span><span>23</span></div></div>
+          ${distractionCard()}
           <div class="card sessions spot"><p class="label">Sessions</p>
-            ${state.sessions.slice(0, 8).map((s) => { const x = S.byId(s.activityId); return `<div class="s"><span class="dot" style="--c:${esc(x ? x.color : "#fff")};margin-top:5px"></span><span style="flex:1">${esc(x ? x.name : "?")}${s.intention ? `<br><span class="tiny">${esc(s.intention)}</span>` : ""}</span><span class="muted">${s.minutes} min · ${new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span></div>`; }).join("") || `<p class="tiny">No sessions yet. They're kept here and in your stats.</p>`}
+            ${state.sessions.slice(0, 8).map((s) => { const x = S.byId(s.activityId); return `<div class="s"><span class="dot" style="--c:${esc(x ? x.color : "#fff")};margin-top:5px"></span><span style="flex:1">${esc(x ? x.name : "?")}${s.intention ? `<br><span class="tiny">${esc(s.intention)}</span>` : ""}${s.done ? `<br><span class="tiny done-note">✓ ${esc(s.done)}</span>` : ""}</span><span class="muted" style="text-align:right">${s.minutes} min · ${new Date(s.start).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}${s.rating ? `<br>${"★".repeat(s.rating)}` : ""}${s.distractions ? `<br><span class="tiny">${s.distractions} distraction${s.distractions === 1 ? "" : "s"}</span>` : ""}</span></div>`; }).join("") || `<p class="tiny">No sessions yet. They're kept here and in your stats.</p>`}
           </div>
         </div>
       </div>`;
@@ -663,6 +718,7 @@
     const ft = $("#f-target"); if (ft) ft.onclick = (e) => { const b = e.target.closest("button"); if (b) { focusPick.target = +b.dataset.v; render(false); } };
     const fs = $("#f-sound"); if (fs) fs.onclick = (e) => { const b = e.target.closest("button"); if (b) { state.settings.ambient = b.dataset.v; S.save(); $$("button", fs).forEach((x) => x.classList.toggle("on", x === b)); Ambient.preview(b.dataset.v); } };
     const pp = $("#pip"); if (pp) pp.onclick = openPip;
+    const dz = $("#distracted"); if (dz) dz.onclick = distracted;
     const sp = $("#stop"); if (sp) sp.onclick = () => { inkAt($("#timer"), (S.byId(state.focus.activityId) || {}).color, true); F.stop(); };
     const cn = $("#cancel"); if (cn) cn.onclick = () => { if (confirm("Discard this session without logging it?")) { const f = state.focus; f.mode = "timer"; f.startedAt = Date.now(); F.stop(true); toast("Discarded"); } };
   }
@@ -833,22 +889,24 @@
 
 
 
-  /** The weekly coach letter, written by Claude with your own API key (coach.js). */
+  let coachPeriod = "week";
+  /** The weekly (or monthly) coach letter, written by Claude with your own API key (coach.js). */
   function coachCard() {
     const has = !!D.coach.getKey(), c = state.coach;
     return `<div class="card spot coach" style="margin-top:16px">
-      <p class="label">Coach letter <span class="grow"></span>${c ? `<span class="tiny">${esc(ago(c.at))}</span>` : ""}</p>
+      <p class="label">Coach letter <span class="grow"></span>${c ? `<span class="tiny">${c.period === "month" ? "monthly · " : ""}${esc(ago(c.at))}</span>` : ""}</p>
       ${c ? `<div class="letter" id="coach-letter">${esc(c.letter).replace(/^→/gm, '<span class="arrow">→</span>')}</div>` : `<p class="tiny">A short, specific read of your last two weeks with three experiments for next week, written by Claude with your own Anthropic API key, like the app's weekly coach.</p>`}
       <div class="row" style="margin-top:12px">
-        ${has ? `<button class="btn" id="coach-write" data-cursor="write">${c ? "Write a new one" : "Write this week's letter"}</button>${c ? `<button class="btn ghost sm" id="coach-copy">Copy</button>` : ""}<span class="spacer"></span><button class="btn ghost sm" id="coach-key-clear">Remove key</button>`
+        ${has ? `<div class="seg" id="coach-period">${[["week", "Week"], ["month", "Month"]].map(([v, l]) => `<button data-v="${v}" class="${coachPeriod === v ? "on" : ""}">${l}</button>`).join("")}</div><button class="btn" id="coach-write" data-cursor="write">${coachPeriod === "month" ? "Write this month's letter" : "Write this week's letter"}</button>${c ? `<button class="btn ghost sm" id="coach-copy">Copy</button>` : ""}<span class="spacer"></span><button class="btn ghost sm" id="coach-key-clear">Remove key</button>`
           : `<input id="coach-key" type="password" autocomplete="off" placeholder="sk-ant-… (console.anthropic.com → API keys)" style="flex:1"><button class="btn" id="coach-key-save">Save key</button>`}
       </div>
       <details style="margin-top:10px"><summary class="tiny" style="cursor:pointer">What's sent</summary>
         <p class="tiny">Only numbers and activity names, to api.anthropic.com from this browser: share of goals, hours, mood and energy, focus by hour, and this week vs last. Never notes, Top 3 or clips. The key stays in this browser, outside synced and exported data.</p>
-        <pre class="sql">${esc(JSON.stringify(D.coach.summary(), null, 1))}</pre></details>
+        <pre class="sql">${esc(JSON.stringify(D.coach.summary(coachPeriod), null, 1))}</pre></details>
     </div>`;
   }
   function coachAfter() {
+    const cp0 = $("#coach-period"); if (cp0) cp0.onclick = (e) => { const b = e.target.closest("button"); if (b) { coachPeriod = b.dataset.v; render(false); } };
     const save = $("#coach-key-save");
     if (save) save.onclick = () => { const k = $("#coach-key").value.trim(); if (!k) return; D.coach.setKey(k); toast("Key saved in this browser"); render(false); };
     const clr = $("#coach-key-clear"); if (clr) clr.onclick = () => { if (confirm("Remove the API key from this browser?")) { D.coach.setKey(""); render(false); } };
@@ -856,7 +914,7 @@
     const w = $("#coach-write");
     if (w) w.onclick = async () => {
       w.disabled = true; w.textContent = "Writing…";
-      try { await D.coach.write(D.coach.summary()); bloop("win"); inkAt($(".coach"), "#4ade80", true); }
+      try { await D.coach.write(D.coach.summary(coachPeriod), coachPeriod); bloop("win"); inkAt($(".coach"), "#4ade80", true); }
       catch (e) { toast(e.message, 5000); }
       render(false);
     };
@@ -1554,6 +1612,7 @@ create policy clips on diligent_clips for all
     else if (k === "?") $("#keys").showModal();
     else if (k === "n") openEditor(null);
     else if (k === "f") { if (state.focus) F.stop(); else go("focus"); }
+    else if (k === "d" && state.focus) distracted();
     else if (k === "l") { go("today"); setTimeout(() => $("#quick") && $("#quick").focus(), 30); e.preventDefault(); }
     else if (view === "today" && k === "[") { viewDate = S.addDays(viewDate, -1); render(false); }
     else if (view === "today" && k === "]" && viewDate < S.today()) { viewDate = S.addDays(viewDate, 1); render(false); }
@@ -1619,6 +1678,7 @@ create policy clips on diligent_clips for all
       document.title = `${clock(r.ms)} · ${a ? a.name : ""} · Diligent`;
       const tc = $("#timer-clock"); if (tc) tc.textContent = clock(r.ms);
       const tl = $("#timer-label"); if (tl) tl.textContent = `${r.label} · ${a ? a.name : ""}`;
+      const bt = $("#break-tip"); if (bt) { const on = f.mode === "pomo" && f.phase === "break"; bt.hidden = !on; if (on) bt.textContent = "Break · " + (f.tip || (f.tip = breakTip())); }
       const tk = $("#timer .tank"); if (tk) tk.style.setProperty("--level", r.level);
       const mc = $("#mini-clock"); if (mc) mc.textContent = clock(r.ms);
     } else if (document.title !== "Diligent") document.title = "Diligent";
