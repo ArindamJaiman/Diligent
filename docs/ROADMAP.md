@@ -25,7 +25,8 @@ has shipped since the list was started.
   PBKDF2): the Supabase project only stores ciphertext. Keying from the owner id or room code
   would protect nothing, since both are stored next to the clips
 - ✅ End-to-end encryption for room clips: a room passphrase, shared apart from the code
-- [ ] **Files** (PDFs, small zips) through Supabase Storage, with expiry
+- ✅ **Files** through Supabase Storage (web): up to 10 MB, always encrypted before upload,
+  deleted with their clip
 - ✅ **Pin and expire** clips (keep pinned, delete the rest after 24 h; 7 days or forever on the web)
 - ✅ Browser extension: right-click → *Send to Diligent clipboard* (selection, link, image address
   or page; encrypted with the clipboard passphrase when set)

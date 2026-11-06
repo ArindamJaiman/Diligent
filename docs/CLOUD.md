@@ -136,6 +136,25 @@ the Room tab). Room clips are then encrypted the same way. The room code can't b
 since it's stored next to the clips, so share the passphrase separately, and set it on every
 device in the room; without it a member sees those clips as 🔒 locked.
 
+**Files (web):** Clipboard → **File** attaches anything up to 10 MB (PDFs, zips, docs). Files
+are always encrypted in the browser before upload, with your clipboard passphrase (or the room
+passphrase in a room), because anyone with the project's anon key could list the bucket; without
+a passphrase the button stays off. They live in a private Storage bucket under random names and
+are deleted when their clip expires, is deleted or is cleared. The phone lists file clips and
+leaves downloading to the web app. Run once to create the bucket:
+
+```sql
+insert into storage.buckets (id, name, public, file_size_limit)
+values ('diligent-files', 'diligent-files', false, 11534336)
+on conflict (id) do nothing;
+create policy diligent_files_insert on storage.objects for insert to anon
+  with check (bucket_id = 'diligent-files');
+create policy diligent_files_read on storage.objects for select to anon
+  using (bucket_id = 'diligent-files');
+create policy diligent_files_delete on storage.objects for delete to anon
+  using (bucket_id = 'diligent-files');
+```
+
 **Room chat (web):** short messages in a room are stored in the same table as room clips, with
 `kind = 'chat'`, so they use the room's row policy, the room passphrase and Realtime pings with
 nothing new to set up. They're deleted after a day, and the clipboard lists (web and phone) skip them.

@@ -132,6 +132,54 @@
     } catch { return null; }
   }
 
+
+  // ─── Files: encrypted on the device, stored in Supabase Storage ─
+  // Bucket "diligent-files" (private; SQL in docs/CLOUD.md). Everyone with the project's anon key
+  // could list the bucket, so a file is only ever uploaded encrypted with the clipboard / room
+  // passphrase (AES-GCM, same key as clips), under a random path. The clip row carries the
+  // (encrypted) path, name, size and type; deleting or expiring the clip deletes the file.
+  const BUCKET = "diligent-files", MAX_FILE = 10 * 1024 * 1024;
+  const storageUrl = (path) => `${cfg().url.replace(/\/$/, "")}/storage/v1/object/${BUCKET}${path ? "/" + path : ""}`;
+  const storageHeaders = (extra) => Object.assign({ apikey: cfg().key, Authorization: `Bearer ${cfg().key}` }, extra || {});
+  async function sealBytes(bytes, pass) {
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ct = new Uint8Array(await crypto.subtle.encrypt({ name: "AES-GCM", iv }, await clipKey(pass), bytes));
+    const out = new Uint8Array(12 + ct.length); out.set(iv); out.set(ct, 12);
+    return out;
+  }
+  async function unsealBytes(bytes, pass) {
+    return new Uint8Array(await crypto.subtle.decrypt({ name: "AES-GCM", iv: bytes.subarray(0, 12) }, await clipKey(pass), bytes.subarray(12)));
+  }
+  const canAttach = (scope) => scope !== "local" && ready() && !!passphrase(scope) && !!crypto.subtle;
+  async function pushFile(scope, file) {
+    if (scope === "local") throw new Error("Files go through your Supabase project: pick My devices or a room");
+    if (!ready()) throw new Error("Add your Supabase project in Settings first");
+    const pass = passphrase(scope);
+    if (!pass) throw new Error(scope === "room" ? "Set a room passphrase first: files are always encrypted" : "Set a clipboard passphrase first (Settings → Cloud): files are always encrypted");
+    if (file.size > MAX_FILE) throw new Error("Files up to 10 MB");
+    const path = `${S.uid()}.bin`;
+    const body = await sealBytes(new Uint8Array(await file.arrayBuffer()), pass);
+    const res = await fetch(storageUrl(path), { method: "POST", headers: storageHeaders({ "content-type": "application/octet-stream", "x-upsert": "false" }), body });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(res.status === 404 || /bucket/i.test(t) ? "Create the diligent-files bucket first (docs/CLOUD.md)" : `Storage ${res.status}${t ? ": " + t.slice(0, 100) : ""}`);
+    }
+    return pushClip(scope, JSON.stringify({ path, name: file.name || "file", size: file.size, type: file.type || "application/octet-stream" }), "file");
+  }
+  /** Downloads and decrypts a file clip; returns a Blob. */
+  async function fetchFile(scope, clip) {
+    const meta = JSON.parse(clip.text);
+    const res = await fetch(storageUrl(meta.path), { headers: storageHeaders() });
+    if (!res.ok) throw new Error(res.status === 404 || res.status === 400 ? "That file is gone (expired or deleted)" : `Storage ${res.status}`);
+    const plain = await unsealBytes(new Uint8Array(await res.arrayBuffer()), passphrase(scope));
+    return new Blob([plain], { type: meta.type || "application/octet-stream" });
+  }
+  async function deleteFiles(paths) {
+    if (!paths.length) return;
+    await fetch(storageUrl(""), { method: "DELETE", headers: storageHeaders({ "content-type": "application/json" }), body: JSON.stringify({ prefixes: paths }) }).catch(() => {});
+  }
+  const filePath = (c) => { if (c.kind !== "file" || c.locked) return null; try { return JSON.parse(c.text).path || null; } catch { return null; } };
+
   /** Unpinned clips older than this are deleted (0 = keep forever). Pinned ones always stay. */
   const ttlMs = () => { const h = S.state.settings.clipTtl; return (h == null ? 24 : +h) * 3600e3; };
   const order = (list) => list.sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0) || b.createdAt - a.createdAt);
@@ -154,6 +202,7 @@
       return { id: r.id, text: plain == null ? "" : plain, raw: r.text, locked: plain == null, kind: r.kind || "text", device: r.device, createdAt: r.created_at, pinned: !!r.pinned };
     }));
     if (ttlMs() && list.some((c) => !fresh(c))) {
+      deleteFiles(list.filter((c) => !fresh(c)).map(filePath).filter(Boolean));
       const cut = Date.now() - ttlMs();
       const pinCol = rows.some((r) => "pinned" in r);
       rest(`diligent_clips?${where}&created_at=lt.${cut}${pinCol ? "&pinned=not.is.true" : ""}`, { method: "DELETE", headers: scopeHeaders(scope) }).catch(() => {});
@@ -225,7 +274,8 @@
     return clip;
   }
 
-  async function deleteClip(scope, id) {
+  async function deleteClip(scope, id, clip) {
+    if (clip && filePath(clip)) await deleteFiles([filePath(clip)]);
     if (scope === "local") {
       S.state.clips = S.state.clips.filter((c) => c.id !== id);
       S.emit({ type: "clips" });
@@ -238,7 +288,8 @@
 
   async function clearClips(scope) {
     if (scope === "local") { S.state.clips = S.state.clips.filter((c) => c.pinned); S.emit({ type: "clips" }); if (channel) channel.postMessage("changed"); return; }
-    // Clears the unpinned ones; falls back to everything on a table without the pinned column.
+    // Their files go too. Clears the unpinned ones; falls back to everything on a table without the pinned column.
+    try { await deleteFiles((await clips(scope)).filter((c) => !c.pinned).map(filePath).filter(Boolean)); } catch {}
     const where = `diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}`;
     try { await rest(where + "&pinned=not.is.true", { method: "DELETE", headers: scopeHeaders(scope) }); }
     catch { await rest(where, { method: "DELETE", headers: scopeHeaders(scope) }); }
@@ -422,7 +473,7 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
-    chat, say, CHAT_MAX,
+    chat, say, CHAT_MAX, pushFile, fetchFile, canAttach, MAX_FILE,
     CHALLENGE_TEMPLATES, createChallenge, joinChallenge, leaveChallenge, standings, challengeTotal,
     watch, scopeKey, liveState: () => live.state, encrypting: (scope) => !!passphrase(scope || "mine"),
   };

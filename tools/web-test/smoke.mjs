@@ -273,6 +273,22 @@ try {
   await a.waitForFunction(() => document.body.innerText.includes("🔒 Encrypted"), null, { timeout: 8000 }).then(() => true, () => false);
   check((await a.locator(".clip pre").allInnerTexts()).some((t) => t.includes("🔒 Encrypted")), "without the passphrase the clip shows as locked");
 
+  // Files: encrypted before upload, downloaded and decrypted intact, deleted with the clip
+  await a.evaluate(() => { Diligent.store.state.cloud.clipPass = "correct horse"; Diligent.store.save(); location.hash = "#today"; });
+  await a.evaluate(() => { location.hash = "#clipboard"; });
+  await a.waitForSelector("#clip-attach:not([disabled])", { state: "attached" });
+  const pdf = Buffer.from("%PDF-1.4 smoke test " + "x".repeat(5000));
+  await a.setInputFiles("#clip-attach", { name: "notes.pdf", mimeType: "application/pdf", buffer: pdf });
+  await a.waitForSelector(".filebox");
+  const stored = [...db.objects.values()][0];
+  const [dlf] = await Promise.all([a.waitForEvent("download"), a.locator('.clip:has(.filebox) [data-clip="save"]').click()]);
+  const got = fs.readFileSync(await dlf.path());
+  check(stored && !stored.includes(Buffer.from("%PDF")) && dlf.suggestedFilename() === "notes.pdf" && got.equals(pdf), "files are encrypted in Storage and download intact");
+  await a.locator('.clip:has(.filebox) [data-clip="del"]').click();
+  await a.waitForTimeout(500);
+  check(db.objects.size === 0, "deleting a file clip deletes the file");
+  await a.evaluate(() => { Diligent.store.state.cloud.clipPass = ""; Diligent.store.save(); });
+
   await blur(a);
   await a.keyboard.press("6");
   await a.fill("#room-code", "SMOKE1");

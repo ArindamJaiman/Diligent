@@ -38,6 +38,7 @@ export function startMockSupabase(port) {
     res.setHeader("Access-Control-Allow-Methods", "GET,POST,DELETE,PATCH,OPTIONS");
     if (req.method === "OPTIONS") return res.end();
     const url = new URL(req.url, "http://x");
+    if (url.pathname.startsWith("/storage/v1/object/")) return storage(req, res, url);
     const table = url.pathname.replace("/rest/v1/", "");
     const rows = (tables[table] ||= []);
     const filters = [];
@@ -78,6 +79,22 @@ export function startMockSupabase(port) {
     });
   });
   const realtime = { broadcasts: 0, delivered: 0, sockets: new Set() };
+  // Storage: one bucket, objects by path (raw bytes)
+  const objects = new Map();
+  function storage(req, res, url) {
+    const rest = url.pathname.replace("/storage/v1/object/", "");
+    const [bucket, ...parts] = rest.split("/");
+    const path = parts.join("/");
+    const chunks = [];
+    req.on("data", (c) => chunks.push(c));
+    req.on("end", () => {
+      if (bucket !== "diligent-files") { res.statusCode = 404; return res.end('{"error":"Bucket not found"}'); }
+      if (req.method === "POST") { objects.set(path, Buffer.concat(chunks)); res.setHeader("Content-Type", "application/json"); return res.end(JSON.stringify({ Key: `${bucket}/${path}` })); }
+      if (req.method === "GET") { const b = objects.get(path); if (!b) { res.statusCode = 400; return res.end('{"error":"not_found"}'); } return res.end(b); }
+      if (req.method === "DELETE") { const { prefixes = [] } = JSON.parse(Buffer.concat(chunks).toString() || "{}"); prefixes.forEach((p) => objects.delete(p)); res.setHeader("Content-Type", "application/json"); return res.end("[]"); }
+      res.statusCode = 405; res.end();
+    });
+  }
   server.on("upgrade", (req, socket) => {
     if (!req.url.startsWith("/realtime/v1/websocket")) return socket.destroy();
     const accept = crypto.createHash("sha1").update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
@@ -120,5 +137,5 @@ export function startMockSupabase(port) {
     socket.on("close", () => realtime.sockets.delete(client));
     socket.on("error", () => realtime.sockets.delete(client));
   });
-  return new Promise((resolve) => server.listen(port, () => resolve({ server, tables, realtime })));
+  return new Promise((resolve) => server.listen(port, () => resolve({ server, tables, realtime, objects })));
 }

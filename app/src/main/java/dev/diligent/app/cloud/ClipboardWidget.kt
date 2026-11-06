@@ -75,7 +75,7 @@ object ClipCache {
     /** After listing your own clips: keep the newest (not the pinned ones on top). */
     fun update(context: Context, clips: List<Clip>) {
         val newest = clips.maxByOrNull { it.createdAt }
-        write(context, newest?.let { Entry(if (it.isImage || it.locked) "" else it.text, it.device, it.createdAt, it.isImage, it.locked) })
+        write(context, newest?.let { Entry(if (it.isImage || it.locked) "" else if (it.isFile) "📎 " + it.fileName else it.text, it.device, it.createdAt, it.isImage || it.isFile, it.locked) })
         ClipboardWidget.refreshAsync(context)
     }
 
@@ -173,6 +173,7 @@ private fun ClipboardContent(entry: ClipCache.Entry?, ready: Boolean) {
                     GText(
                         when {
                             entry.locked -> "🔒 Encrypted clip · set the passphrase in Hub → Clipboard"
+                            entry.image && entry.text.startsWith("📎") -> entry.text + " · download it in the web app"
                             entry.image -> "🖼 Image · open the web app to see it"
                             else -> entry.text
                         },

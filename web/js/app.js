@@ -1086,6 +1086,7 @@
           <textarea id="clip-text" placeholder="Type, paste or drop text or an image… (Ctrl ↵ to send)" maxlength="${C.MAX_CHARS}">${esc(clipDraft)}</textarea>
           <div class="row"><button class="btn" id="clip-send" data-cursor="send">Send</button><button class="btn ghost" id="clip-paste">Paste from clipboard</button><span class="spacer"></span>
             <label class="btn ghost sm" style="cursor:pointer">Image<input type="file" id="clip-file" accept="image/*" hidden></label>
+            <label class="btn ghost sm${C.canAttach(clipScope) ? "" : " off"}" style="cursor:pointer" title="${C.canAttach(clipScope) ? "PDFs, zips, anything up to 10 MB, encrypted before upload" : "Files need your Supabase project and a passphrase (Settings → Cloud, or the room passphrase): they're always encrypted"}">File<input type="file" id="clip-attach" hidden ${C.canAttach(clipScope) ? "" : "disabled"}></label>
             <button class="btn danger sm" id="clip-clear" ${clipList.some((c) => !c.pinned) ? "" : "hidden"}>Clear unpinned</button></div>
         </div>
         <div class="row" style="margin-top:10px"><span class="tiny">Keep unpinned clips for</span>
@@ -1095,13 +1096,18 @@
       </div>
       <div class="clips" id="clips" style="margin-top:16px">${clipList.map(clipCard).join("") || `<p class="tiny">No clips yet. Send one here, from Diligent on your phone, or share text to “Diligent clipboard” from any Android app.</p>`}</div>`;
   }
+  function fileBox(c) {
+    let m = {}; try { m = JSON.parse(c.text); } catch {}
+    const size = m.size >= 1048576 ? (m.size / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round((m.size || 0) / 1024)) + " KB";
+    return `<div class="filebox"><span class="fi">📎</span><div style="min-width:0"><b>${esc(m.name || "file")}</b><div class="tiny">${esc(size)} · encrypted</div></div></div>`;
+  }
   function clipCard(c) {
     const fresh = c.createdAt > clipSeen - 1 && c.device !== C.device();
     return `<div class="card clip spot${fresh ? " fresh" : ""}${c.pinned ? " pinned" : ""}" data-id="${esc(c.id)}">
-      ${c.locked ? `<pre class="muted">🔒 Encrypted. Set the same clipboard passphrase in Settings → Cloud to read it.</pre>` : c.kind === "image" ? `<img src="${esc(c.text)}" alt="Shared image" loading="lazy">` : `<pre>${linkify(c.text)}</pre>`}
+      ${c.locked ? `<pre class="muted">🔒 Encrypted. Set the same clipboard passphrase in Settings → Cloud to read it.</pre>` : c.kind === "file" ? fileBox(c) : c.kind === "image" ? `<img src="${esc(c.text)}" alt="Shared image" loading="lazy">` : `<pre>${linkify(c.text)}</pre>`}
       <footer><span class="who">${c.pinned ? "📌 " : ""}${esc(c.device || "?")} · ${ago(c.createdAt)}</span>
         <button class="btn sm ghost" data-clip="pin" title="${c.pinned ? "Unpin" : "Pin: keep it past the expiry"}" aria-label="${c.pinned ? "Unpin" : "Pin"}">${c.pinned ? "Unpin" : "Pin"}</button>
-        <button class="btn sm" data-clip="copy" data-cursor="copy" ${c.locked ? "disabled" : ""}>Copy</button><button class="btn sm ghost" data-clip="del" aria-label="Delete">✕</button></footer></div>`;
+        ${c.kind === "file" ? `<button class="btn sm" data-clip="save" data-cursor="save" ${c.locked ? "disabled" : ""}>Download</button>` : `<button class="btn sm" data-clip="copy" data-cursor="copy" ${c.locked ? "disabled" : ""}>Copy</button>`}<button class="btn sm ghost" data-clip="del" aria-label="Delete">✕</button></footer></div>`;
   }
   async function loadClips(quietly) {
     try {
@@ -1189,6 +1195,12 @@
         if (text) sendClip(text, "text"); else toast("Your clipboard is empty");
       } catch { toast("The browser blocked clipboard access. Paste with Ctrl V instead."); }
     };
+    const att = $("#clip-attach");
+    if (att) att.onchange = async (e) => {
+      const f = e.target.files[0]; if (!f) return;
+      try { toast(`Encrypting and uploading ${f.name}…`); await C.pushFile(clipScope, f); bloop(); await loadClips(); } catch (err) { toast(err.message, 5000); }
+      e.target.value = "";
+    };
     $("#clip-file").onchange = async (e) => { const f = e.target.files[0]; if (f) sendClip(await imageToDataUrl(f), "image"); };
     $("#clip-ttl").onclick = (e) => { const b = e.target.closest("button"); if (!b) return; state.settings.clipTtl = +b.dataset.v; S.save(); render(false); };
     const clr = $("#clip-clear"); if (clr) clr.onclick = async () => { if (confirm("Delete every unpinned clip here?")) { try { await C.clearClips(clipScope); } catch (err) { toast(err.message); } loadClips(); } };
@@ -1206,6 +1218,16 @@
     $("#clips").onclick = async (e) => {
       const b = e.target.closest("[data-clip]"); if (!b) return;
       const card = b.closest(".clip"), c = clipList.find((x) => x.id === card.dataset.id); if (!c) return;
+      if (b.dataset.clip === "save") {
+        b.textContent = "…";
+        try {
+          const blob = await C.fetchFile(clipScope, c), m = JSON.parse(c.text);
+          const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = m.name || "file"; a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        } catch (err) { toast(err.message, 4000); }
+        b.textContent = "Download";
+        return;
+      }
       if (b.dataset.clip === "copy") {
         try { if (c.kind === "image") await copyImage(c.text); else await copyText(c.text); b.textContent = "Copied"; inkAt(b, "#4ade80"); bloop(); setTimeout(() => (b.textContent = "Copy"), 1400); }
         catch { toast("Couldn't copy here"); }
@@ -1214,7 +1236,7 @@
         loadClips();
       } else {
         card.style.transition = "transform .4s var(--spring), opacity .3s"; card.style.transform = "scale(.8)"; card.style.opacity = "0";
-        try { await C.deleteClip(clipScope, c.id); } catch (err) { toast(err.message); }
+        try { await C.deleteClip(clipScope, c.id, c); } catch (err) { toast(err.message); }
         clipList = clipList.filter((x) => x.id !== c.id);
         setTimeout(renderClipList, 300);
       }

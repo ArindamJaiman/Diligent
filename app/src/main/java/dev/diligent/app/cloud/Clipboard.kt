@@ -80,6 +80,12 @@ data class Clip(
 ) {
     /** Images come from the web app as data URLs; the phone lists them but doesn't render them. */
     val isImage: Boolean get() = kind == "image"
+
+    /** Files (web: Clipboard → File) are encrypted in Supabase Storage; the phone lists them. */
+    val isFile: Boolean get() = kind == "file"
+
+    /** "report.pdf" from a file clip's (decrypted) details. */
+    val fileName: String get() = Regex("\"name\"\\s*:\\s*\"([^\"]*)\"").find(text)?.groupValues?.get(1) ?: "file"
 }
 
 /**
@@ -365,8 +371,8 @@ class ClipboardViewModel @Inject constructor(
             viewModelScope.launch { messages.emit("Encrypted with a passphrase this phone doesn't have") }
             return
         }
-        if (clip.isImage) {
-            viewModelScope.launch { messages.emit("Images open in the web app") }
+        if (clip.isImage || clip.isFile) {
+            viewModelScope.launch { messages.emit(if (clip.isFile) "Files download in the web app" else "Images open in the web app") }
             return
         }
         val manager = context.getSystemService(ClipboardManager::class.java) ?: return
@@ -485,6 +491,7 @@ private fun ClipCard(clip: Clip, onCopy: () -> Unit, onPin: () -> Unit, onDelete
         Text(
             when {
                 clip.locked -> "🔒 Encrypted · set the same clipboard passphrase to read it"
+                clip.isFile -> "📎 ${clip.fileName} · download it in the web app"
                 clip.isImage -> "🖼 Image · open the web app to see it"
                 else -> clip.text.take(600)
             }, style = toolLabel(11.sp), color = DiligentColors.White, maxLines = 8)
