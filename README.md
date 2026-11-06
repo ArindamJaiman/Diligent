@@ -44,7 +44,7 @@ What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
 - **Goal types:** at least (reach it), at most (a limit, e.g. max 1 h of YouTube) and quit (days clean)
 - **Habit strength** (Loop-style 0–100%) next to the streak
 - **Year heatmap** per activity: tap any day to change its progress, mark it done, skip it, rate it 1–5 or add a note
-- **Long-term targets** ("200 h by 31 Dec") with ahead/behind, pace needed and projected finish
+- **Long-term targets** ("200 h by 31 Dec") with ahead/behind, pace needed and projected finish, also as a one-line forecast on the dashboard card
 - **Day starts at** midnight to 6 AM, or follows your sleep, so 1 AM work counts for the evening before
 - **Commitment mode:** easier goals start a week later; optional accountability partner on the missed-goal alert
 - **Private activities** show as dots on widgets and the lock screen

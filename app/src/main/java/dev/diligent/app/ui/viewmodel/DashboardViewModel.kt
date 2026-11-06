@@ -11,8 +11,11 @@ import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.focus.data.FocusState
 import dev.diligent.app.focus.notify.FocusNotifier
 import dev.diligent.app.ui.components.FocusStart
+import dev.diligent.app.planning.TargetPace
+import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.TrackingSummary
+import java.time.LocalDate
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
@@ -49,7 +52,10 @@ class DashboardViewModel @Inject constructor(
         val progress: DailyProgress?,
         val streak: Int = 0,
         /** Streak unit, strength and today's schedule line; null until first computed. */
-        val summary: TrackingSummary? = null
+        val summary: TrackingSummary? = null,
+        /** "▲ 3.5 hrs ahead · done by 14 Dec" for activities with a long-term target. */
+        val forecast: String? = null,
+        val forecastAhead: Boolean = true
     ) {
         val currentProgress: Float get() = progress?.progress ?: 0f
         val isLimit: Boolean get() = Goals.isLimit(activity)
@@ -75,14 +81,32 @@ class DashboardViewModel @Inject constructor(
         combine(activities, todayProgress) { list, _ -> list }
             .mapLatest { list -> list.associate { it.id to repository.trackingSummary(it) } }
 
+    /** Pace against each long-term target, recalculated as progress changes. */
+    private val paces: Flow<Map<Long, Pair<String, Boolean>>> =
+        combine(activities, todayProgress) { list, _ -> list }
+            .mapLatest { list ->
+                val withTarget = list.filter { it.targetTotal > 0f && it.targetDate.isNotBlank() }
+                if (withTarget.isEmpty()) return@mapLatest emptyMap()
+                val today = DayClock.today()
+                val recent = repository.getAllProgressRangeSnapshot(today.minusDays(13).toString(), today.toString())
+                    .groupBy { it.activityId }
+                withTarget.mapNotNull { a ->
+                    val deadline = runCatching { LocalDate.parse(a.targetDate) }.getOrNull() ?: return@mapNotNull null
+                    val perDay = (recent[a.id].orEmpty().sumOf { it.progress.toDouble() } / 14).toFloat()
+                    val pace = TargetPace.compute(repository.getLifetimeTotal(a.id), a.targetTotal, repository.createdDate(a), deadline, today, perDay)
+                    a.id to (TargetPace.forecastLine(pace, a.unit, deadline) to (pace.ahead >= 0f || pace.total >= pace.target))
+                }.toMap()
+            }
+
     val activitiesWithProgress: StateFlow<List<ActivityWithProgress>> =
         combine(
             activities,
             todayProgress,
-            summaries.onStart { emit(emptyMap()) },
+            combine(summaries.onStart { emit(emptyMap()) }, paces.onStart { emit(emptyMap()) }) { s, p -> s to p },
             _sortMode,
             _searchQuery
-        ) { activities, todayProgress, summaries, sort, query ->
+        ) { activities, todayProgress, summariesAndPaces, sort, query ->
+            val (summaries, paces) = summariesAndPaces
             val progressMap = todayProgress.associateBy { it.activityId }
 
             activities
@@ -92,7 +116,9 @@ class DashboardViewModel @Inject constructor(
                         activity = activity,
                         progress = progressMap[activity.id],
                         streak = summaries[activity.id]?.streak?.current ?: 0,
-                        summary = summaries[activity.id]
+                        summary = summaries[activity.id],
+                        forecast = paces[activity.id]?.first,
+                        forecastAhead = paces[activity.id]?.second ?: true
                     )
                 }
                 .let { list ->

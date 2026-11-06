@@ -69,7 +69,8 @@ has shipped since the list was started.
 - ✅ **Correlations** on the web (Stats → What goes with your good days): mood, energy, focus
   minutes, distractions and the day before vs goals hit, with r, the number of days and a t-test
   confidence label; best and hardest weekday. (Sleep and steps stay in the app's Insights.)
-- [ ] **Forecast:** "at this pace you'll reach 200 h on 14 Dec" for every long-term target on the dashboard
+- ✅ **Forecast** on the app's dashboard cards for every long-term target: "▲ 3.5 hrs ahead · done
+  by 14 Dec" or "▼ 12 hrs behind · need 2.4/day" (the web shows the same on its cards and in Stats)
 - ✅ **Coach letter on the web** with your own Anthropic API key (the app's weekly coach, from the browser)
 - ✅ **Best-week replay** (web, Stats): your strongest finished week next to this one as liquid
   day columns, when its focus happened, and Replay to pour it in again

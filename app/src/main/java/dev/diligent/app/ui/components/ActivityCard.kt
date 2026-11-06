@@ -169,6 +169,16 @@ fun ActivityCard(
                     color = if (item.isOver) DiligentColors.OverRed else DiligentColors.Gray600
                 )
             }
+            // Long-term target forecast: "▲ 3.5 hrs ahead · done by 14 Dec"
+            item.forecast?.let { line ->
+                Text(
+                    text = line,
+                    style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 1.sp),
+                    color = if (item.forecastAhead) DiligentColors.CompletedGreen else DiligentColors.Gray700,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
 
             Spacer(modifier = Modifier.height(12.dp))
 

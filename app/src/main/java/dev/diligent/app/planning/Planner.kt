@@ -120,6 +120,27 @@ object TargetPace {
         }
         return Pace(total, target, needed, expected, total - expected, projected, daysLeft)
     }
+
+    private val dayMonth = java.time.format.DateTimeFormatter.ofPattern("d MMM", java.util.Locale.ENGLISH)
+
+    /** 3.5, 12, 0.3: whole numbers without decimals, the rest to one place. */
+    fun number(x: Float): String =
+        if (kotlin.math.abs(x - x.roundToInt()) < 0.05f) x.roundToInt().toString() else String.format(java.util.Locale.ENGLISH, "%.1f", x)
+
+    /**
+     * The dashboard's one-line forecast: "▲ 3.5 hrs ahead · done by 14 Dec",
+     * "▼ 12 hrs behind · need 2.4/day", or "🎯 target reached · 210/200 hrs".
+     */
+    fun forecastLine(pace: Pace, unit: String, deadline: LocalDate): String {
+        if (pace.total >= pace.target) return "🎯 target reached · ${number(pace.total)}/${number(pace.target)} $unit"
+        val lead = if (pace.ahead >= 0f) "▲ ${number(pace.ahead)} $unit ahead" else "▼ ${number(-pace.ahead)} $unit behind"
+        val finish = pace.projectedFinish
+        val tail = when {
+            finish != null && !finish.isAfter(deadline) -> "done by ${finish.format(dayMonth)}"
+            else -> "need ${number(pace.neededPerDay)}/day"
+        }
+        return "$lead · $tail"
+    }
 }
 
 /**
