@@ -109,10 +109,16 @@ try {
   await b.keyboard.press("4");
   await b.waitForSelector(".clip pre");
   check((await b.locator(".clip pre").allInnerTexts()).includes("hello from the laptop"), "a clip reaches the other device");
+  await a.waitForFunction(() => Diligent.cloud.liveState() === "open", null, { timeout: 5000 }).catch(() => {});
+  check(await a.evaluate(() => Diligent.cloud.liveState()) === "open", "the clipboard opens a Realtime socket");
+  await b.waitForFunction(() => Diligent.cloud.liveState() === "open", null, { timeout: 5000 }).catch(() => {});
+  await a.waitForTimeout(500); // let both joins land
+  const sentAt = Date.now();
   await b.fill("#clip-text", "reply from the phone");
   await b.keyboard.press("Control+Enter");
-  await a.waitForFunction(() => document.body.innerText.includes("reply from the phone"), null, { timeout: 9000 });
-  check(true, "the reply shows up live on the first device");
+  await a.waitForFunction(() => document.body.innerText.includes("reply from the phone"), null, { timeout: 20000 });
+  const took = Date.now() - sentAt;
+  check(took < 2500 && db.realtime.broadcasts > 0, `the reply arrives through a Realtime ping (${took} ms, polling is 16 s while live)`);
   await a.locator(".clip").first().locator('[data-clip="copy"]').click();
   check(await a.evaluate(() => navigator.clipboard.readText()) === "reply from the phone", "copy puts the clip on the system clipboard");
 

@@ -32,7 +32,7 @@ has shipped since the list was started.
 - ✅ **Edit past days in the heatmap** (click a dot → that day's view), like the app's year heatmap
 - [ ] **Schedules** (weekdays, N per week, every N days) and long-term targets on the web, to
   match the app's activity model
-- [ ] **Supabase Realtime** for rooms and the clipboard (instant instead of 4–15 s polling)
+- ✅ **Supabase Realtime** for rooms and the clipboard: broadcast pings make changes instant; polling is the fallback
 - [ ] **Plan view:** drag activity blocks onto a day timeline; import an .ics calendar
 - ✅ **Weekly review card** as a shareable PNG (Stats → Weekly card): download, share, copy or send to the clipboard
 - ✅ **Ambient sound** for focus (rain, brown noise, waves) generated with WebAudio

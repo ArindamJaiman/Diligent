@@ -129,6 +129,7 @@
         method: "POST", headers: scopeHeaders(scope), prefer: "resolution=merge-duplicates,return=minimal",
         body: [{ scope: scopeId(scope), id: clip.id, text: clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt, pinned }],
       });
+      ping(scopeKey(scope));
     } catch (e) {
       if (/pinned/.test(e.message)) throw new Error("Pinning needs the pinned column: run the clipboard SQL in docs/CLOUD.md again");
       throw e;
@@ -153,6 +154,7 @@
       method: "POST", headers: scopeHeaders(scope), prefer: "resolution=merge-duplicates,return=minimal",
       body: [{ scope: scopeId(scope), id: clip.id, text: clip.text, kind: clip.kind, device: clip.device, created_at: clip.createdAt }],
     });
+    ping(scopeKey(scope));
     return clip;
   }
 
@@ -164,6 +166,7 @@
       return;
     }
     await rest(`diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}&id=eq.${encodeURIComponent(id)}`, { method: "DELETE", headers: scopeHeaders(scope) });
+    ping(scopeKey(scope));
   }
 
   async function clearClips(scope) {
@@ -172,7 +175,77 @@
     const where = `diligent_clips?scope=eq.${encodeURIComponent(scopeId(scope))}`;
     try { await rest(where + "&pinned=not.is.true", { method: "DELETE", headers: scopeHeaders(scope) }); }
     catch { await rest(where, { method: "DELETE", headers: scopeHeaders(scope) }); }
+    ping(scopeKey(scope));
   }
+
+
+  // ─── Live: Supabase Realtime broadcast ────────────────
+  // Realtime's database-change feed can't see these rows (the row policies read custom
+  // headers), so clients send each other a tiny "changed" ping on a channel named from a
+  // SHA-256 of the scope, and refetch through the REST API when one arrives. Pings carry
+  // no data. If the socket can't open, polling carries on as before.
+  const live = { ws: null, state: "off", ref: 0, topics: new Map(), retry: 0, beat: 0, url: "" };
+  async function topicFor(key) {
+    const bytes = new TextEncoder().encode("diligent:" + key);
+    const hex = crypto.subtle ? Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes))).map((b) => b.toString(16).padStart(2, "0")).join("") : key.replace(/[^a-z0-9]/gi, "");
+    return "realtime:diligent-" + hex.slice(0, 32);
+  }
+  function liveSend(msg) { if (live.ws && live.ws.readyState === 1) live.ws.send(JSON.stringify(Object.assign({ ref: String(++live.ref) }, msg))); }
+  function liveJoin(topic) { liveSend({ topic, event: "phx_join", payload: { config: { broadcast: { self: false }, presence: { key: "" } } }, join_ref: String(live.ref + 1) }); }
+  function liveConnect() {
+    if (!ready() || !("WebSocket" in window)) return;
+    const url = cfg().url.replace(/^http/, "ws").replace(/\/$/, "") + "/realtime/v1/websocket?apikey=" + encodeURIComponent(cfg().key) + "&vsn=1.0.0";
+    if (live.ws && live.url === url && live.ws.readyState <= 1) return;
+    if (live.ws) try { live.ws.close(); } catch {}
+    live.url = url;
+    live.state = "connecting";
+    let ws;
+    try { ws = new WebSocket(url); } catch { live.state = "off"; return; }
+    live.ws = ws;
+    ws.onopen = () => {
+      live.state = "open"; live.retry = 0;
+      for (const topic of live.topics.keys()) liveJoin(topic);
+      clearInterval(live.beat);
+      live.beat = setInterval(() => liveSend({ topic: "phoenix", event: "heartbeat", payload: {} }), 25000);
+    };
+    ws.onmessage = (e) => {
+      let m; try { m = JSON.parse(e.data); } catch { return; }
+      if (m.event === "broadcast" && m.payload && m.payload.event === "changed") (live.topics.get(m.topic) || new Set()).forEach((fn) => fn(m.payload.payload || {}));
+    };
+    ws.onclose = () => {
+      clearInterval(live.beat);
+      if (live.ws !== ws) return;
+      live.state = "off"; live.ws = null;
+      if (live.topics.size && live.retry < 6) setTimeout(liveConnect, 1000 * Math.pow(2, live.retry++));
+    };
+    ws.onerror = () => {};
+  }
+  /** Calls fn when another device changes this scope ("mine" / "room"); returns an unsubscribe. */
+  function watch(key, fn) {
+    let topic = null, gone = false;
+    topicFor(key).then((t) => {
+      if (gone) return;
+      topic = t;
+      const set = live.topics.get(t) || new Set();
+      const first = !set.size;
+      set.add(fn); live.topics.set(t, set);
+      if (live.state === "open") { if (first) liveJoin(t); } else liveConnect();
+    });
+    return () => {
+      gone = true;
+      if (!topic) return;
+      const set = live.topics.get(topic); if (!set) return;
+      set.delete(fn);
+      if (!set.size) { live.topics.delete(topic); liveSend({ topic, event: "phx_leave", payload: {} }); }
+    };
+  }
+  async function ping(key, what) {
+    if (live.state !== "open") return;
+    const topic = await topicFor(key);
+    if (!live.topics.has(topic)) liveJoin(topic); // the server needs a join before a broadcast
+    liveSend({ topic, event: "broadcast", payload: { type: "broadcast", event: "changed", payload: { what: what || "clips" } } });
+  }
+  const scopeKey = (scope) => scope === "room" ? "room:" + (cfg().room || "").toUpperCase() : "owner:" + cfg().owner;
 
   // ─── Rooms ────────────────────────────────────────────
   /** Same one-way member id as the app, so you appear once whichever device you use. */
@@ -195,6 +268,7 @@
         started_at: f ? f.startedAt : 0, until_at: f && f.target ? f.startedAt + f.target * 60000 : 0, broken: false, updated_at: Date.now(),
       }],
     });
+    ping("room:" + room, "presence");
   }
 
   async function members() {
@@ -218,5 +292,6 @@
   D.cloud = {
     ready, device, sync, clips, pushClip, deleteClip, clearClips, setPinned, onClips: (fn) => { clipListeners.add(fn); return () => clipListeners.delete(fn); },
     pushPresence, members, leaveRoom, newCode, memberId, MAX_CHARS,
+    watch, scopeKey, liveState: () => live.state,
   };
 })();

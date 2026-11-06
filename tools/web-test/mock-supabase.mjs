@@ -1,6 +1,7 @@
 // A tiny PostgREST stand-in: eq/gt/gte filters, order, limit, upsert on_conflict, delete,
 // with the same header scoping as the row policies in docs/CLOUD.md.
 import http from "node:http";
+import crypto from "node:crypto";
 
 const KEYS = { diligent_days: ["owner", "date", "activity"], diligent_clips: ["scope", "id"], diligent_presence: ["room", "member"] };
 
@@ -75,5 +76,48 @@ export function startMockSupabase(port) {
       res.end();
     });
   });
-  return new Promise((resolve) => server.listen(port, () => resolve({ server, tables })));
+  const realtime = { broadcasts: 0, sockets: new Set() };
+  server.on("upgrade", (req, socket) => {
+    if (!req.url.startsWith("/realtime/v1/websocket")) return socket.destroy();
+    const accept = crypto.createHash("sha1").update(req.headers["sec-websocket-key"] + "258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest("base64");
+    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    const client = { socket, topics: new Set() };
+    realtime.sockets.add(client);
+    const send = (obj) => {
+      const data = Buffer.from(JSON.stringify(obj));
+      const head = data.length < 126 ? Buffer.from([0x81, data.length]) : Buffer.from([0x81, 126, data.length >> 8, data.length & 255]);
+      socket.write(Buffer.concat([head, data]));
+    };
+    let buf = Buffer.alloc(0);
+    socket.on("data", (chunk) => {
+      buf = Buffer.concat([buf, chunk]);
+      while (buf.length >= 2) {
+        const op = buf[0] & 15;
+        let len = buf[1] & 127, off = 2;
+        if (len === 126) { if (buf.length < 4) return; len = buf.readUInt16BE(2); off = 4; }
+        else if (len === 127) { if (buf.length < 10) return; len = Number(buf.readBigUInt64BE(2)); off = 10; }
+        const masked = buf[1] & 128;
+        if (buf.length < off + (masked ? 4 : 0) + len) return;
+        const mask = masked ? buf.subarray(off, off + 4) : null;
+        off += masked ? 4 : 0;
+        const payload = Buffer.from(buf.subarray(off, off + len));
+        if (mask) for (let i = 0; i < payload.length; i++) payload[i] ^= mask[i & 3];
+        buf = buf.subarray(off + len);
+        if (op === 8) { socket.end(); return; }
+        if (op !== 1) continue;
+        const m = JSON.parse(payload.toString());
+        if (m.event === "phx_join") { client.topics.add(m.topic); send({ topic: m.topic, event: "phx_reply", payload: { status: "ok", response: {} }, ref: m.ref }); }
+        else if (m.event === "phx_leave") client.topics.delete(m.topic);
+        else if (m.event === "heartbeat") send({ topic: "phoenix", event: "phx_reply", payload: { status: "ok", response: {} }, ref: m.ref });
+        else if (m.event === "broadcast" && client.topics.has(m.topic)) {
+          realtime.broadcasts++;
+          for (const other of realtime.sockets) if (other !== client && other.topics.has(m.topic)) other.send({ topic: m.topic, event: "broadcast", payload: m.payload, ref: null });
+        }
+      }
+    });
+    client.send = send;
+    socket.on("close", () => realtime.sockets.delete(client));
+    socket.on("error", () => realtime.sockets.delete(client));
+  });
+  return new Promise((resolve) => server.listen(port, () => resolve({ server, tables, realtime })));
 }

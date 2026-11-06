@@ -853,8 +853,15 @@
     };
     document.addEventListener("paste", onPaste);
     const offLocal = C.onClips(() => { if (clipScope === "local") loadClips(true); });
-    const timer = setInterval(() => { if (!document.hidden && clipScope !== "local") loadClips(true); }, 4000);
-    return () => { document.removeEventListener("paste", onPaste); offLocal(); clearInterval(timer); };
+    // Pings from other devices refetch at once; polling is the fallback (slower while live).
+    const offLive = clipScope !== "local" && C.ready() && (clipScope !== "room" || state.cloud.room) ? C.watch(C.scopeKey(clipScope), () => loadClips(true)) : () => {};
+    let polled = 0;
+    const timer = setInterval(() => {
+      if (document.hidden || clipScope === "local") return;
+      if (C.liveState() === "open" && ++polled % 4) return; // every 16 s while live, else every 4 s
+      loadClips(true);
+    }, 4000);
+    return () => { document.removeEventListener("paste", onPaste); offLocal(); offLive(); clearInterval(timer); };
   }
   function updateBadge(n) { const b = $("#clip-badge"); b.hidden = !n; b.textContent = n; }
   // Badge for clips from other devices while you're elsewhere.
@@ -903,8 +910,13 @@
     const l = $("#room-leave"); if (l) l.onclick = async () => { await C.leaveRoom(); roomMembers = []; render(false); };
     if (!C.ready() || !state.cloud.room) return null;
     if (roomFetched !== state.cloud.room) refreshRoom();
+    // On a ping only re-read the members: pushing presence back would ping everyone again.
+    const offLive = C.watch("room:" + state.cloud.room, async () => {
+      try { roomMembers = await C.members(); roomError = ""; } catch {}
+      if (view === "room") render(false);
+    });
     const t = setInterval(() => { if (!document.hidden) refreshRoom(); }, 15000);
-    return () => clearInterval(t);
+    return () => { clearInterval(t); offLive(); };
   }
 
   // ─── Settings ────────────────────────────────────────

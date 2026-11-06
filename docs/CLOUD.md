@@ -122,6 +122,14 @@ of at most ~250 KB). The phone lists image clips but leaves showing them to the 
 Nothing polls in the background: the phone refreshes every 10 s while the Clipboard screen is
 open, the web app every 4 s while its Clipboard tab is open (and every 30 s for the badge).
 
+**Instant updates (web):** the web app also opens a Supabase **Realtime** socket while the
+Clipboard or Room tab is open. After a change it sends a tiny "changed" ping (no data) on a
+channel named from a SHA-256 of your owner id or the room code, and other open tabs refetch
+at once; polling drops to every 16 s while the socket is up. Realtime's database-change feed
+isn't used because it can't see rows guarded by these header-based policies. This needs
+Realtime's public channels, which new projects allow by default (Project Settings → Realtime);
+if the socket can't open, the app quietly keeps polling.
+
 ## Web app
 
 `web/` is Diligent for the browser, with its own local data and the same Supabase project; see
