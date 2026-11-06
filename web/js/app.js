@@ -763,22 +763,13 @@
         <td class="num">${esc(S.fmt(a, total))}</td>
         <td><svg class="spark" viewBox="0 0 110 26" preserveAspectRatio="none"><polyline points="${pts}" fill="none" stroke="${esc(a.color)}" stroke-width="1.5" stroke-linejoin="round"/></svg></td></tr>`;
     }).join("");
-    const moods = last30.map((d) => state.dayLogs[d]).filter((l) => l && l.mood);
-    const good = last30.filter((d) => (state.dayLogs[d] || {}).mood >= 4);
-    const goodShare = good.length ? good.reduce((s, d) => s + (S.dayShare(d) || 0), 0) / good.length : null;
-    const restShare = last30.filter((d) => !good.includes(d) && S.dayShare(d) != null);
-    const rs = restShare.length ? restShare.reduce((s, d) => s + S.dayShare(d), 0) / restShare.length : null;
     return `
       <div class="row" style="margin-bottom:12px"><span class="label" style="margin:0">Your numbers</span><span class="spacer"></span><button class="btn ghost sm" id="weekly-card" data-cursor="share">Weekly card</button></div>
       <div class="grid tiles">${tiles.map(([v, l]) => `<div class="card tile spot"><b>${v}</b><span>${esc(l)}</span></div>`).join("")}</div>
       <div class="card spot" style="margin-top:16px"><p class="label">Last 12 months · share of goals hit <span class="grow"></span><span class="tiny">click a day to edit it</span></p><div class="heat" id="heat">${cells.join("")}</div></div>
       <div class="grid two" style="margin-top:16px">
         <div class="card spot"><p class="label">Last 14 days · goals hit by activity</p><div class="bars">${bars}</div><div class="bars-axis">${axis}</div></div>
-        <div class="card spot"><p class="label">Mood & output · 30 days</p>
-          ${moods.length ? `<p class="small">On days you rated <b>4–5</b> you hit <b>${Math.round((goodShare || 0) * 100)}%</b> of goals, vs <b>${Math.round((rs || 0) * 100)}%</b> on other days.</p>
-          <p class="tiny">Average mood ${(moods.reduce((s, l) => s + l.mood, 0) / moods.length).toFixed(1)} · energy ${(moods.filter((l) => l.energy).reduce((s, l) => s + l.energy, 0) / Math.max(1, moods.filter((l) => l.energy).length)).toFixed(1)}</p>`
-          : `<p class="tiny">Rate your mood in Today → Day log and this shows what goes with your good days.</p>`}
-        </div>
+        ${correlationsCard()}
       </div>
       ${bestWeekCard()}
       ${coachCard()}
@@ -918,6 +909,64 @@
       catch (e) { toast(e.message, 5000); }
       render(false);
     };
+  }
+
+
+  // ─── What goes with your good days: correlations, honestly labelled ─
+  function pearson(xs, ys) {
+    const n = xs.length; if (n < 3) return null;
+    const mx = xs.reduce((a, b) => a + b, 0) / n, my = ys.reduce((a, b) => a + b, 0) / n;
+    let sxy = 0, sxx = 0, syy = 0;
+    for (let i = 0; i < n; i++) { const dx = xs[i] - mx, dy = ys[i] - my; sxy += dx * dy; sxx += dx * dx; syy += dy * dy; }
+    return sxx && syy ? sxy / Math.sqrt(sxx * syy) : null;
+  }
+  /** How sure: a t-test on r (|t| > 2 ≈ p < 0.05), and enough days to mean anything. */
+  function confidence(r, n) {
+    if (r == null || n < 8) return { label: "not enough days yet", level: 0 };
+    const t = Math.abs(r) * Math.sqrt((n - 2) / Math.max(1e-9, 1 - r * r));
+    if (t >= 2.7 && Math.abs(r) >= 0.4) return { label: "strong", level: 3 };
+    if (t >= 2) return { label: "likely real", level: 2 };
+    return { label: "could be chance", level: 1 };
+  }
+  function correlations() {
+    const t = S.today(), days = S.range(S.addDays(t, -59), S.addDays(t, -1)).concat([t]);
+    const shareOf = (d) => S.dayShare(d);
+    const focusMin = (d) => state.sessions.filter((x) => S.iso(new Date(x.start)) === d).reduce((n, x) => n + x.minutes, 0);
+    const distractN = (d) => (state.distractions || []).filter((x) => S.iso(new Date(x.at)) === d).length;
+    const factors = [
+      { name: "mood", of: (d) => (state.dayLogs[d] || {}).mood || null, up: "a better mood", down: "a lower mood" },
+      { name: "energy", of: (d) => (state.dayLogs[d] || {}).energy || null, up: "more energy", down: "less energy" },
+      { name: "focus minutes", of: (d) => (state.sessions.length ? focusMin(d) : null), up: "more timed focus", down: "less timed focus" },
+      { name: "distractions", of: (d) => ((state.distractions || []).length ? distractNull(d) : null), up: "more distractions", down: "fewer distractions" },
+      { name: "the day before", of: (d) => shareOf(S.addDays(d, -1)), up: "a strong day before", down: "a weak day before" },
+    ];
+    function distractNull(d) { return focusMin(d) ? distractN(d) : null; }
+    const out = [];
+    for (const f of factors) {
+      const xs = [], ys = [];
+      for (const d of days) { const y = shareOf(d), x = f.of(d); if (y != null && x != null) { xs.push(x); ys.push(y); } }
+      const r = pearson(xs, ys), c = confidence(r, xs.length);
+      out.push({ f, r, n: xs.length, c });
+    }
+    // weekdays: best and worst average
+    const byDay = [0, 1, 2, 3, 4, 5, 6].map(() => []);
+    days.forEach((d) => { const y = shareOf(d); if (y != null) byDay[(S.parse(d).getDay() + 6) % 7].push(y); });
+    const avgs = byDay.map((l) => (l.length >= 3 ? l.reduce((a, b) => a + b, 0) / l.length : null));
+    return { out, avgs };
+  }
+  function correlationsCard() {
+    const { out, avgs } = correlations();
+    const names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+    const known = avgs.map((v, i) => ({ v, i })).filter((x) => x.v != null).sort((a, b) => b.v - a.v);
+    const lines = out.filter((x) => x.r != null && x.n >= 8).sort((a, b) => b.c.level - a.c.level || Math.abs(b.r) - Math.abs(a.r)).map(({ f, r, n, c }) =>
+      `<div class="corr lvl${c.level}"><span class="bar"><i style="width:${Math.round(Math.abs(r) * 100)}%;${r < 0 ? "background:var(--bad)" : ""}"></i></span>
+        <span>${Math.abs(r) < 0.1 ? `Your ${esc(f.name)} barely moves with how many goals you hit` : `${r > 0 ? esc(f.up) : esc(f.down)} goes with more goals hit`}
+        <span class="tiny">· r = ${r.toFixed(2)} · ${n} days · ${esc(c.label)}</span></span></div>`).join("");
+    return `<div class="card spot"><p class="label">What goes with your good days · 60 days</p>
+      ${lines || `<p class="tiny">Log a mood or energy in Today → Day log, use the focus timer, and after about a week and a half this shows what moves with your output, and how sure it is.</p>`}
+      ${known.length >= 3 ? `<p class="tiny" style="margin-top:10px">Best day: <b>${names[known[0].i]}</b> (${Math.round(known[0].v * 100)}%) · hardest: <b>${names[known[known.length - 1].i]}</b> (${Math.round(known[known.length - 1].v * 100)}%)</p>` : ""}
+      <p class="tiny" style="margin-top:6px">Correlation, not cause: "likely real" means a pattern this strong would rarely appear by chance over this many days.</p>
+    </div>`;
   }
 
   /** Best finished week vs this one, as liquid day columns; Replay pours the best week in again. */

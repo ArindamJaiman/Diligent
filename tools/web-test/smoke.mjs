@@ -93,6 +93,22 @@ try {
 
   await blur(a);
   await a.keyboard.press("4");
+  // Correlations: 30 days where mood tracks output should read as strong; noise shouldn't
+  await a.evaluate(() => {
+    const S = Diligent.store, st = S.state;
+    for (let k = 20; k < 50; k++) {
+      const d = S.addDays(S.today(), -k), good = k % 3 !== 0;
+      S.active().forEach((x) => S.set(x.id, good ? x.goal : x.goal * 0.2, d));
+      st.dayLogs[d] = { mood: good ? 4 + (k % 2) : 1 + (k % 2), energy: 1 + ((k * 7) % 5), note: "" };
+    }
+    S.save();
+  });
+  await a.evaluate(() => { location.hash = "#today"; }); await a.evaluate(() => { location.hash = "#stats"; });
+  await a.waitForSelector(".corr");
+  const corr = await a.locator(".corr").allInnerTexts();
+  check(corr.some((t) => /better mood goes with more goals hit/.test(t) && /strong/.test(t)) && !corr.some((t) => /energy/.test(t) && /strong/.test(t)),
+    "correlations: mood that tracks output reads as strong, noise doesn't");
+
   // Best week: seed two past weeks, the better one is picked and replays
   const bestMonday = await a.evaluate(() => {
     const S = Diligent.store, m1 = S.addDays(S.weekStart(S.today()), -14), m2 = S.addDays(m1, 7);
