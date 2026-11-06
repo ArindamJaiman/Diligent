@@ -38,7 +38,12 @@ runs commands, starts focus sessions, switches themes and takes quick-log lines.
   hasn't seen are created from the synced rows. Auto sync runs on open, 20 s after a change and
   every 5 minutes while the tab is open.
 - No account, no analytics, no server of ours: the only network calls are to your Supabase
-  project and Google Fonts.
+  project, Google Fonts, and api.anthropic.com when you write a coach letter.
+- **Coach letter** (Stats): a short read of your last two weeks with three experiments, written
+  by Claude (Opus 5.5) with your own Anthropic API key, called straight from the browser. Only
+  numbers and activity names are sent (Stats → Coach letter → What's sent shows the exact JSON);
+  never notes, Top 3 or clips. The key lives in its own browser-storage entry, outside synced
+  and exported data.
 
 ## Files
 

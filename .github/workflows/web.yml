@@ -17,6 +17,7 @@ jobs:
   smoke:
     name: Web smoke test
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -29,4 +30,5 @@ jobs:
         run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
       - name: Smoke test
         working-directory: tools/web-test
+        timeout-minutes: 8
         run: npm test

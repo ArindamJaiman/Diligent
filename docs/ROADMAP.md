@@ -65,6 +65,7 @@ has shipped since the list was started.
 - [ ] **Monthly letter** from Claude in addition to the weekly coach letter
 - [ ] **Correlations** across sleep, steps, mood and output with confidence ranges
 - [ ] **Forecast:** "at this pace you'll reach 200 h on 14 Dec" for every long-term target on the dashboard
+- ✅ **Coach letter on the web** with your own Anthropic API key (the app's weekly coach, from the browser)
 - ✅ **Best-week replay** (web, Stats): your strongest finished week next to this one as liquid
   day columns, when its focus happened, and Replay to pour it in again
 

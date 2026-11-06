@@ -340,6 +340,8 @@ table.list td.num { text-align: right; font-family: var(--font-dot); font-weight
 .meter i { display: block; height: 100%; border-radius: 99px; background: var(--c, var(--text)); transition: width 1s var(--spring); }
 .scroll-x { overflow-x: auto; }
 
+.letter { white-space: pre-wrap; font-size: 13.5px; line-height: 1.7; max-width: 70ch; }
+.letter .arrow { color: var(--good); font-weight: 700; }
 .bestweek .big { font: 900 34px/1.1 var(--font-dot); }
 .wrow { display: flex; gap: 8px; flex: 1; min-width: 260px; justify-content: flex-end; }
 .wcol { display: flex; flex-direction: column; align-items: center; gap: 4px; flex: 1; max-width: 54px; }

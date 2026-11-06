@@ -725,6 +725,7 @@
         </div>
       </div>
       ${bestWeekCard()}
+      ${coachCard()}
       ${targetsCard()}
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -831,6 +832,36 @@
   }
 
 
+
+  /** The weekly coach letter, written by Claude with your own API key (coach.js). */
+  function coachCard() {
+    const has = !!D.coach.getKey(), c = state.coach;
+    return `<div class="card spot coach" style="margin-top:16px">
+      <p class="label">Coach letter <span class="grow"></span>${c ? `<span class="tiny">${esc(ago(c.at))}</span>` : ""}</p>
+      ${c ? `<div class="letter" id="coach-letter">${esc(c.letter).replace(/^→/gm, '<span class="arrow">→</span>')}</div>` : `<p class="tiny">A short, specific read of your last two weeks with three experiments for next week, written by Claude with your own Anthropic API key, like the app's weekly coach.</p>`}
+      <div class="row" style="margin-top:12px">
+        ${has ? `<button class="btn" id="coach-write" data-cursor="write">${c ? "Write a new one" : "Write this week's letter"}</button>${c ? `<button class="btn ghost sm" id="coach-copy">Copy</button>` : ""}<span class="spacer"></span><button class="btn ghost sm" id="coach-key-clear">Remove key</button>`
+          : `<input id="coach-key" type="password" autocomplete="off" placeholder="sk-ant-… (console.anthropic.com → API keys)" style="flex:1"><button class="btn" id="coach-key-save">Save key</button>`}
+      </div>
+      <details style="margin-top:10px"><summary class="tiny" style="cursor:pointer">What's sent</summary>
+        <p class="tiny">Only numbers and activity names, to api.anthropic.com from this browser: share of goals, hours, mood and energy, focus by hour, and this week vs last. Never notes, Top 3 or clips. The key stays in this browser, outside synced and exported data.</p>
+        <pre class="sql">${esc(JSON.stringify(D.coach.summary(), null, 1))}</pre></details>
+    </div>`;
+  }
+  function coachAfter() {
+    const save = $("#coach-key-save");
+    if (save) save.onclick = () => { const k = $("#coach-key").value.trim(); if (!k) return; D.coach.setKey(k); toast("Key saved in this browser"); render(false); };
+    const clr = $("#coach-key-clear"); if (clr) clr.onclick = () => { if (confirm("Remove the API key from this browser?")) { D.coach.setKey(""); render(false); } };
+    const cp = $("#coach-copy"); if (cp) cp.onclick = async () => { await copyText(state.coach.letter); toast("Copied"); };
+    const w = $("#coach-write");
+    if (w) w.onclick = async () => {
+      w.disabled = true; w.textContent = "Writing…";
+      try { await D.coach.write(D.coach.summary()); bloop("win"); inkAt($(".coach"), "#4ade80", true); }
+      catch (e) { toast(e.message, 5000); }
+      render(false);
+    };
+  }
+
   /** Best finished week vs this one, as liquid day columns; Replay pours the best week in again. */
   function bestWeekCard() {
     const best = S.bestWeek();
@@ -884,6 +915,7 @@
       </div>`).join("")}</div>`;
   }
   function statsAfter() {
+    coachAfter();
     const rw = $("#replay-week"); if (rw) rw.onclick = replayWeek;
     const wc = $("#weekly-card"); if (wc) wc.onclick = openWeeklyCard;
     const h = $("#heat"); if (!h) return;
@@ -1329,6 +1361,7 @@ create policy clips on diligent_clips for all
       { icon: "⎘", label: "Send my clipboard to my devices", run: async () => { try { const t = await navigator.clipboard.readText(); await C.pushClip(C.ready() ? "mine" : "local", t); toast("Sent"); } catch (e) { toast(e.message || "Clipboard blocked"); } } },
       { icon: "❝", label: "Next quote", run: () => { nextQuote(); if (view === "today") render(false); } },
       { icon: "▣", label: "Weekly card (share your week as an image)", run: openWeeklyCard },
+      { icon: "✉", label: "Coach letter (Stats)", run: () => go("stats") },
       { icon: "⤓", label: "Export backup", run: () => download(`diligent-web-${S.today()}.json`, S.exportJson(), "application/json") },
       { icon: "?", label: "Keyboard shortcuts", key: "?", run: () => $("#keys").showModal() },
     ];

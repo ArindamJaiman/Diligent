@@ -33,7 +33,8 @@ async function device(name) {
   await ctx.grantPermissions(["clipboard-read", "clipboard-write"], { origin: `http://localhost:${WEB}` });
   const page = await ctx.newPage();
   page.on("pageerror", (e) => errors.push(`[${name}] ${e.message}`));
-  page.on("console", (m) => { if (m.type() === "error") errors.push(`[${name}] console: ${m.text()}`); });
+  // The coach test fakes a 401 on purpose; the browser logs that response as an error.
+  page.on("console", (m) => { if (m.type() === "error" && !/status of 401/.test(m.text())) errors.push(`[${name}] console: ${m.text()}`); });
   await page.goto(`http://localhost:${WEB}/#today`);
   await page.waitForSelector(".act");
   return page;
@@ -91,6 +92,33 @@ try {
   check((await a.locator(".bestweek .big").first().innerText()) === "100%" && await a.evaluate((m) => Diligent.store.bestWeek().monday === m, bestMonday), "best week finds the strongest finished week");
   await a.click("#replay-week");
   await a.waitForTimeout(3500);
+  // Coach letter: the API call is intercepted, never sent
+  let sent = null, reply = { status: 200, json: { model: "claude-opus-5-5", stop_reason: "end_turn", content: [{ type: "thinking", thinking: "" }, { type: "text", text: "Strong week.\n→ Start at 9\n→ Walk at 3\n→ Shut down at 10" }] } };
+  await a.route("https://api.anthropic.com/v1/messages", async (route) => {
+    sent = { headers: route.request().headers(), body: JSON.parse(route.request().postData()) };
+    await route.fulfill({ status: reply.status, contentType: "application/json", body: JSON.stringify(reply.json) });
+  });
+  await a.fill("#coach-key", "sk-ant-test-key");
+  await a.click("#coach-key-save");
+  await a.click("#coach-write");
+  await a.waitForSelector("#coach-letter");
+  check(sent && sent.headers["x-api-key"] === "sk-ant-test-key" && sent.headers["anthropic-version"] === "2026-10-21"
+    && sent.headers["anthropic-beta"] === "server-side-fallback-2026-07-01" && sent.headers["anthropic-dangerous-direct-browser-access"] === "true"
+    && sent.body.model === "claude-opus-5-5" && sent.body.fallbacks === "default" && Array.isArray(sent.body.messages)
+    && !JSON.stringify(sent.body).includes("What went well"), "coach letter: request shape, and no notes in what's sent");
+  check((await a.locator("#coach-letter").innerText()).includes("Shut down at 10") && await a.locator("#coach-letter .arrow").count() === 3, "coach letter renders the text blocks and the three experiments");
+  reply = { status: 200, json: { model: "claude-opus-5-5", stop_reason: "refusal", content: [] } };
+  await a.click("#coach-write");
+  await a.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("declined")), null, { timeout: 5000 }).catch(() => {});
+  check(await a.locator(".toast", { hasText: "declined" }).count() > 0 && (await a.locator("#coach-letter").innerText()).includes("Strong week"), "a refusal keeps the last letter and says so");
+  reply = { status: 401, json: { type: "error", error: { type: "authentication_error", message: "invalid x-api-key" } } };
+  await a.click("#coach-write");
+  await a.waitForFunction(() => [...document.querySelectorAll(".toast")].some((t) => t.textContent.includes("rejected")), null, { timeout: 5000 }).catch(() => {});
+  check(await a.locator(".toast", { hasText: "rejected" }).count() > 0, "a bad key gets a clear message");
+  check(!(await a.evaluate(() => localStorage.getItem("diligent.web.v1"))).includes("sk-ant-test-key") && !(await a.evaluate(() => Diligent.store.exportJson())).includes("sk-ant-test-key"), "the API key stays out of the synced and exported data");
+  await a.unroute("https://api.anthropic.com/v1/messages");
+  await a.click("#coach-key-clear").catch(() => {});
+
   await a.click("#weekly-card");
   await a.waitForSelector("#card-dialog[open] img");
   const card = await a.evaluate(async () => { const img = document.querySelector("#card-dialog img"); await img.decode(); return [img.naturalWidth, img.naturalHeight]; });
