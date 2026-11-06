@@ -18,8 +18,8 @@ Supabase project, alongside the app.
 | Tab | What it does |
 |---|---|
 | Today | Liquid orb with today's share of goals, a quote from the app's packs, quick log ("2h quantum", "+3 lc", "gym done yesterday", "skip reading", "=4 lc", "focus coding 50"), activity cards with +/−, done, skip, focus and exact values, past days with `[` / `]`, Top 3 and a day log (mood, energy, note) |
-| Focus | Timer with an optional target (25 / 50 / 90 min) or Pomodoro 25/5; the liquid rises as time passes; logs to the activity when you stop (under 30 s logs nothing); intention, session list and best hours |
-| Stats | Today, hours this week, perfect-day streak, level, a year heatmap, the last 14 days by activity, streak / best / habit strength / 30-day totals / trend per activity, and how mood lines up with output |
+| Focus | Timer with an optional target (25 / 50 / 90 min) or Pomodoro 25/5; the liquid rises as time passes; logs to the activity when you stop (under 30 s logs nothing); intention, session list and best hours; focus sounds (rain, brown noise, waves, generated in the browser); **Float** keeps the timer in a small always-on-top window (Chrome / Edge) |
+| Stats | Today, hours this week, perfect-day streak, level, a year heatmap (click a day to edit it), the last 14 days by activity, streak / best / habit strength / 30-day totals / trend per activity, and how mood lines up with output |
 | Clipboard | A clipboard shared with your phone (Hub → Clipboard), other browsers and room mates: type, paste (Ctrl V anywhere on the tab), drop text, files or images, copy with one click |
 | Room | The app's study rooms: who's focusing on what, live; your web timer shows up too |
 | Settings | Activities (add, edit, reorder, archive, restore), goal types, colours, day start, quote pack, themes (Mono, Paper, Red night), liquid background / cursor / sounds / notifications, Supabase, backup |
@@ -53,6 +53,16 @@ web/
 ├── js/quotes.js          generated from the app's quote packs
 ├── sw.js                 offline cache
 └── manifest.webmanifest  install as an app
+```
+
+## Tests
+
+`tools/web-test` serves `web/`, fakes Supabase and drives two browsers with Playwright
+(logging, quick log, palette, focus, day sync, the shared clipboard, rooms, phone width). CI
+runs it on every push that touches the web app (`Web check`). Locally:
+
+```bash
+cd tools/web-test && npm install && npx playwright install chromium && npm test
 ```
 
 `js/quotes.js` is generated from `app/src/main/java/dev/diligent/app/widget/quotes`; regenerate

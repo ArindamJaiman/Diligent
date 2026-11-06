@@ -27,7 +27,7 @@
       top3: {}, // date → [{ text, done }]
       sessions: [], // { activityId, start, end, minutes, intention, mode }
       focus: null, // { activityId, startedAt, mode: "timer"|"pomo", target, intention, phase, phaseStart }
-      settings: { theme: "mono", dayStartHour: 0, sound: true, fluid: true, cursor: true, quotePack: "mix", name: "", notify: false },
+      settings: { theme: "mono", dayStartHour: 0, sound: true, fluid: true, cursor: true, quotePack: "mix", name: "", notify: false, ambient: "off" },
       cloud: { url: "", key: "", owner: "", device: "", room: "", lastPull: 0, lastPush: 0, auto: true },
       clips: [], // this-browser clipboard: { id, text, kind, device, createdAt }
       xp: 0,

@@ -84,6 +84,7 @@
       const now = Date.now();
       state.focus = { activityId, startedAt: now, mode: opts.mode || "timer", target: +opts.target || 0, intention: opts.intention || "", phase: "work", phaseStart: now, logged: 0, notified: false };
       S.emit({ type: "focus" });
+      syncAmbient();
       bloop("soft");
       toast(`Focusing on ${a.name}`);
       C.pushPresence().catch(() => {});
@@ -99,6 +100,8 @@
       state.sessions = state.sessions.slice(0, 500);
       state.focus = null;
       S.emit({ type: "focus" });
+      syncAmbient();
+      updatePip();
       const a = S.byId(f.activityId);
       if (!silent) toast(total >= 0.5 ? `Logged ${Math.round(total)} min to ${a ? a.name : "?"}` : "Under 30 s: nothing logged");
       C.pushPresence().catch(() => {});
@@ -146,6 +149,102 @@
       return { ms: el, label: "Timer", level: (el % 3600000) / 3600000 };
     },
   });
+  // ─── Focus sounds: generated noise, so nothing to download ─
+  const Ambient = {
+    kind: "off", src: null, gain: null, lfo: null, previewTimer: 0,
+    play(kind) {
+      if (kind === this.kind) return;
+      this.stop();
+      this.kind = kind;
+      if (kind === "off") return;
+      try {
+        audio = audio || new (window.AudioContext || window.webkitAudioContext)();
+        const ctx = audio, len = ctx.sampleRate * 8, buf = ctx.createBuffer(1, len, ctx.sampleRate), data = buf.getChannelData(0);
+        let last = 0;
+        for (let i = 0; i < len; i++) {
+          const white = Math.random() * 2 - 1;
+          if (kind === "rain") data[i] = white;
+          else { last = (last + 0.02 * white) / 1.02; data[i] = last * 3.5; }
+        }
+        // cross-fade the loop seam
+        const fade = Math.floor(ctx.sampleRate * 0.25);
+        for (let i = 0; i < fade; i++) { const k = i / fade; data[i] = data[i] * k + data[len - fade + i] * (1 - k); }
+        const src = ctx.createBufferSource(); src.buffer = buf; src.loop = true; src.loopEnd = (len - fade) / ctx.sampleRate;
+        const filter = ctx.createBiquadFilter();
+        filter.type = kind === "rain" ? "bandpass" : "lowpass";
+        filter.frequency.value = kind === "rain" ? 2400 : 900;
+        filter.Q.value = kind === "rain" ? 0.4 : 0.7;
+        const gain = ctx.createGain();
+        const level = kind === "rain" ? 0.05 : 0.22;
+        gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(level, ctx.currentTime + 1.5);
+        src.connect(filter).connect(gain).connect(ctx.destination);
+        if (kind === "waves") { // swell every ~9 s
+          const lfo = ctx.createOscillator(), depth = ctx.createGain();
+          lfo.frequency.value = 0.11; depth.gain.value = level * 0.8;
+          lfo.connect(depth).connect(gain.gain); lfo.start(); this.lfo = lfo;
+        }
+        src.start();
+        this.src = src; this.gain = gain;
+      } catch { this.kind = "off"; }
+    },
+    stop() {
+      if (this.src && audio) {
+        const src = this.src, lfo = this.lfo, g = this.gain;
+        g.gain.cancelScheduledValues(audio.currentTime);
+        g.gain.setValueAtTime(Math.max(0.0001, g.gain.value), audio.currentTime);
+        g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + 0.8);
+        setTimeout(() => { try { src.stop(); if (lfo) lfo.stop(); } catch {} }, 900);
+      }
+      this.src = this.gain = this.lfo = null;
+      this.kind = "off";
+    },
+    /** Plays the sound you picked for a few seconds, unless a session is already playing one. */
+    preview(kind) {
+      clearTimeout(this.previewTimer);
+      if (state.focus) return syncAmbient();
+      this.play(kind);
+      this.previewTimer = setTimeout(() => { if (!state.focus) this.stop(); }, 4000);
+    },
+  };
+  function syncAmbient() {
+    const f = state.focus;
+    const want = f && !(f.mode === "pomo" && f.phase === "break") ? state.settings.ambient || "off" : "off";
+    if (want !== Ambient.kind) Ambient.play(want);
+  }
+
+  // ─── Floating timer (Document Picture-in-Picture) ─────
+  let pip = null;
+  async function openPip() {
+    if (pip || !("documentPictureInPicture" in window)) return;
+    try { pip = await documentPictureInPicture.requestWindow({ width: 280, height: 200 }); } catch { return toast("The browser didn't open the floating timer"); }
+    const theme = getComputedStyle(document.documentElement);
+    const v = (n) => theme.getPropertyValue(n).trim();
+    pip.document.head.innerHTML = `<title>Diligent</title><style>
+      html,body{margin:0;height:100%;background:${v("--bg")};color:${v("--text")};font-family:"Doto","Space Mono",monospace;overflow:hidden}
+      .tank{position:fixed;left:0;right:0;bottom:0;background:var(--c);opacity:.22;transition:height 1s cubic-bezier(.34,1.56,.64,1)}
+      .wrap{position:relative;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px}
+      b{font-size:44px;font-weight:900}span{font-size:10px;letter-spacing:.24em;text-transform:uppercase;opacity:.7}
+      button{margin-top:8px;border:0;border-radius:99px;padding:8px 14px;background:${v("--ink")};color:${v("--on-ink")};font:700 11px/1 "Space Mono",monospace;letter-spacing:.14em;cursor:pointer}
+    </style>`;
+    for (const link of document.querySelectorAll('link[rel="stylesheet"][href*="fonts.googleapis"]')) pip.document.head.appendChild(link.cloneNode());
+    pip.document.body.innerHTML = `<div class="tank" id="t"></div><div class="wrap"><b id="c">--:--</b><span id="l"></span><button id="s">STOP &amp; LOG</button></div>`;
+    pip.document.getElementById("s").onclick = () => F.stop();
+    pip.addEventListener("pagehide", () => { pip = null; });
+    updatePip();
+  }
+  function updatePip() {
+    if (!pip) return;
+    const r = F.readout();
+    if (!r) { pip.close(); pip = null; return; }
+    const a = S.byId(state.focus.activityId), d = pip.document;
+    d.getElementById("c").textContent = clock(r.ms);
+    d.getElementById("l").textContent = `${a ? a.name : ""} · ${r.label}`;
+    const t = d.getElementById("t");
+    t.style.height = Math.round(r.level * 100) + "%";
+    t.style.setProperty("--c", a ? a.color : "#fff");
+  }
+
   const clock = (ms) => { const s = Math.floor(ms / 1000), h = Math.floor(s / 3600), m = Math.floor(s / 60) % 60; return (h ? h + ":" + String(m).padStart(2, "0") : String(m).padStart(2, "0")) + ":" + String(s % 60).padStart(2, "0"); };
 
   // ─── Router ──────────────────────────────────────────
@@ -385,7 +484,7 @@
             <div class="readout"><b id="timer-clock">${r ? clock(r.ms) : focusPick.mode === "pomo" ? "25:00" : "00:00"}</b><span id="timer-label">${r ? esc(r.label) + " · " + esc(a ? a.name : "") : "Ready"}</span></div>
           </div>
           ${f ? `<p class="muted small" style="margin:18px 0 0">${f.intention ? "“" + esc(f.intention) + "”" : "Logged to " + esc(a ? a.name : "") + " when you stop."}</p>
-            <div class="row" style="margin-top:16px"><button class="btn" id="stop" data-cursor="stop">Stop &amp; log</button><button class="btn ghost" id="cancel">Discard</button></div>`
+            <div class="row" style="margin-top:16px"><button class="btn" id="stop" data-cursor="stop">Stop &amp; log</button><button class="btn ghost" id="cancel">Discard</button>${"documentPictureInPicture" in window ? `<button class="btn ghost" id="pip" data-cursor="float" title="Keep the timer on top of other windows">Float</button>` : ""}</div>`
           : `<div style="width:100%;max-width:440px;margin-top:22px">
             <label class="field" for="f-act">Activity</label>
             <select id="f-act">${timed.map((x) => `<option value="${x.id}" ${x.id === focusPick.activityId ? "selected" : ""}>${esc(x.name)}</option>`).join("")}</select>
@@ -395,6 +494,8 @@
             </div>
             <label class="field" for="f-int">Intention (optional)</label>
             <input id="f-int" placeholder="Finish the Grover's search chapter" maxlength="120">
+            <label class="field">Focus sound</label>
+            <div class="seg" id="f-sound">${[["off", "Off"], ["rain", "Rain"], ["brown", "Brown noise"], ["waves", "Waves"]].map(([v, l]) => `<button data-v="${v}" class="${(state.settings.ambient || "off") === v ? "on" : ""}">${l}</button>`).join("")}</div>
             <button class="btn" id="start" style="margin-top:16px;width:100%" ${timed.length ? "" : "disabled"} data-cursor="go">Start focus</button>
             ${timed.length ? "" : `<p class="tiny">Add an activity measured in hrs or mins first.</p>`}
           </div>`}
@@ -417,6 +518,8 @@
     const fa = $("#f-act"); if (fa) fa.onchange = () => { focusPick.activityId = fa.value; render(false); };
     const fm = $("#f-mode"); if (fm) fm.onclick = (e) => { const b = e.target.closest("button"); if (b) { focusPick.mode = b.dataset.v; render(false); } };
     const ft = $("#f-target"); if (ft) ft.onclick = (e) => { const b = e.target.closest("button"); if (b) { focusPick.target = +b.dataset.v; render(false); } };
+    const fs = $("#f-sound"); if (fs) fs.onclick = (e) => { const b = e.target.closest("button"); if (b) { state.settings.ambient = b.dataset.v; S.save(); $$("button", fs).forEach((x) => x.classList.toggle("on", x === b)); Ambient.preview(b.dataset.v); } };
+    const pp = $("#pip"); if (pp) pp.onclick = openPip;
     const sp = $("#stop"); if (sp) sp.onclick = () => { inkAt($("#timer"), (S.byId(state.focus.activityId) || {}).color, true); F.stop(); };
     const cn = $("#cancel"); if (cn) cn.onclick = () => { if (confirm("Discard this session without logging it?")) { const f = state.focus; f.mode = "timer"; f.startedAt = Date.now(); F.stop(true); toast("Discarded"); } };
   }
@@ -445,7 +548,7 @@
     for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
       const k = S.iso(d), s = S.dayShare(k);
       const bg = s == null ? "" : s >= 0.999 ? "background:var(--good);box-shadow:0 0 8px color-mix(in srgb,var(--good) 60%,transparent)" : `background:color-mix(in srgb, var(--text) ${Math.round(12 + 60 * s)}%, transparent)`;
-      cells.push(`<i style="${bg}" title="${k}: ${s == null ? "–" : Math.round(s * 100) + "%"}"></i>`);
+      cells.push(`<i style="${bg}" data-date="${k}" data-cursor="edit" title="${k}: ${s == null ? "–" : Math.round(s * 100) + "%"} · click to edit"></i>`);
     }
     const days14 = S.range(S.addDays(t, -13), t);
     const n = Math.max(1, acts.length);
@@ -468,7 +571,7 @@
     const rs = restShare.length ? restShare.reduce((s, d) => s + S.dayShare(d), 0) / restShare.length : null;
     return `
       <div class="grid tiles">${tiles.map(([v, l]) => `<div class="card tile spot"><b>${v}</b><span>${esc(l)}</span></div>`).join("")}</div>
-      <div class="card spot" style="margin-top:16px"><p class="label">Last 12 months · share of goals hit</p><div class="heat" id="heat">${cells.join("")}</div></div>
+      <div class="card spot" style="margin-top:16px"><p class="label">Last 12 months · share of goals hit <span class="grow"></span><span class="tiny">click a day to edit it</span></p><div class="heat" id="heat">${cells.join("")}</div></div>
       <div class="grid two" style="margin-top:16px">
         <div class="card spot"><p class="label">Last 14 days · goals hit by activity</p><div class="bars">${bars}</div><div class="bars-axis">${axis}</div></div>
         <div class="card spot"><p class="label">Mood & output · 30 days</p>
@@ -480,7 +583,11 @@
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
   }
-  function statsAfter() { const h = $("#heat"); if (h) h.scrollLeft = h.scrollWidth; }
+  function statsAfter() {
+    const h = $("#heat"); if (!h) return;
+    h.scrollLeft = h.scrollWidth;
+    h.onclick = (e) => { const c = e.target.closest("[data-date]"); if (c) { viewDate = c.dataset.date; go("today"); } };
+  }
 
   // ─── Clipboard ───────────────────────────────────────
   let clipScope = state.settings.clipScope || (C.ready() ? "mine" : "local");
@@ -952,6 +1059,8 @@ create policy clips on diligent_clips for all
   // ─── Tick ────────────────────────────────────────────
   setInterval(() => {
     F.tick();
+    syncAmbient();
+    updatePip();
     const r = F.readout();
     const f = state.focus;
     if (r) {

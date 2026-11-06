@@ -286,7 +286,8 @@ label.field { display: block; font: 700 10px/1 var(--font-dot); letter-spacing: 
 .tile span { display: block; margin-top: 6px; font: 700 10px/1.3 var(--font-dot); letter-spacing: 0.18em; color: var(--dim); text-transform: uppercase; }
 .heat { display: grid; grid-auto-flow: column; grid-template-rows: repeat(7, 12px); gap: 3px; overflow-x: auto; padding-bottom: 8px; }
 .heat i { width: 12px; height: 12px; border-radius: 50%; background: var(--raise); box-shadow: inset 0 0 0 1px var(--border); transition: transform 0.3s var(--spring); }
-.heat i:hover { transform: scale(1.5); }
+.heat i { cursor: pointer; }
+.heat i:hover { transform: scale(1.5); box-shadow: inset 0 0 0 1px var(--text); }
 .bars { display: grid; grid-template-columns: repeat(14, 1fr); gap: 8px; align-items: end; height: 150px; }
 .bars .bar { display: flex; flex-direction: column-reverse; border-radius: 8px 8px 3px 3px; overflow: hidden; background: var(--raise); height: 100%; position: relative; }
 .bars .bar i { display: block; transition: height 1s var(--spring); }

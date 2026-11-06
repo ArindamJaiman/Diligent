@@ -29,16 +29,16 @@ has shipped since the list was started.
 
 ## Web app
 
-- [ ] **Edit past days in the heatmap** (click a dot → that day's view), like the app's year heatmap
+- ✅ **Edit past days in the heatmap** (click a dot → that day's view), like the app's year heatmap
 - [ ] **Schedules** (weekdays, N per week, every N days) and long-term targets on the web, to
   match the app's activity model
 - [ ] **Supabase Realtime** for rooms and the clipboard (instant instead of 4–15 s polling)
 - [ ] **Plan view:** drag activity blocks onto a day timeline; import an .ics calendar
 - [ ] **Weekly review card** as a shareable PNG (canvas), like the app's Weekly Review
-- [ ] **Ambient sound** for focus (rain, brown noise) generated with WebAudio
-- [ ] **Picture-in-picture timer** (Document PiP API) so the countdown floats over other windows
+- ✅ **Ambient sound** for focus (rain, brown noise, waves) generated with WebAudio
+- ✅ **Picture-in-picture timer** (Document PiP API) so the countdown floats over other windows
 - [ ] **Liquid avatars** in rooms: each member is a blob that grows while they focus
-- [ ] Tests: a Playwright smoke test in CI against a mock PostgREST server
+- ✅ Tests: a Playwright smoke test in CI against a mock PostgREST server (`tools/web-test`, `Web check` workflow)
 
 ## Tracking (app)
 

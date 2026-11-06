@@ -1,0 +1,32 @@
+name: Web check
+
+# Drives the web app in Chromium against a fake Supabase (tools/web-test): logging, quick
+# log, palette, focus, day sync between two devices, the shared clipboard and rooms.
+on:
+  push:
+    paths: ["web/**", "tools/web-test/**", ".github/workflows/web.yml"]
+  pull_request:
+    paths: ["web/**", "tools/web-test/**", ".github/workflows/web.yml"]
+  workflow_dispatch:
+
+concurrency:
+  group: web-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Web smoke test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Scripts parse
+        run: for f in web/js/*.js web/sw.js; do node --check "$f"; done
+      - name: Install Playwright
+        working-directory: tools/web-test
+        run: npm install --no-audit --no-fund && npx playwright install --with-deps chromium
+      - name: Smoke test
+        working-directory: tools/web-test
+        run: npm test
