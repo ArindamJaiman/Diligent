@@ -63,7 +63,8 @@ has shipped since the list was started.
 
 ## Focus
 
-- [ ] **Focus music**: play a chosen playlist / app when a session starts, stop it on stop
+- ✅ **Focus music** (app, Hub → Focus): press play on what played last, or open a playlist
+  link, when a session starts; pause on stop (only music it started) and during Pomodoro breaks
 - ✅ **Break suggestions** (stretch, water, eyes 20-20-20) during Pomodoro breaks (web)
 - ✅ **Session goals with notes:** "what did you finish?" and a 1–5 rating on stop, kept with the session (web)
 - ✅ **Distraction log:** Distracted (or D) during a session; a 7-day card of when it happens most (web)

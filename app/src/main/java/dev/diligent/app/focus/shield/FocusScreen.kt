@@ -32,6 +32,8 @@ import dev.diligent.app.data.local.entity.Activity
 import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.focus.FocusTimer
+import dev.diligent.app.tools.ToolField
+import dev.diligent.app.focus.FocusMusic
 import dev.diligent.app.focus.domain.FocusMath
 import dev.diligent.app.focus.domain.FocusStats
 import dev.diligent.app.screentime.ScreenTimeService
@@ -207,6 +209,42 @@ fun FocusScreen(onBack: () -> Unit, viewModel: FocusViewModel = hiltViewModel())
                 onChecked = { on ->
                     if (on && !access.dnd) context.startActivity(FocusShield.dndSettings())
                     viewModel.update { it.copy(dnd = on) }
+                }
+            )
+        }
+
+        // ─── Focus music ───────────────────────────────────────
+        ToolSection("FOCUS MUSIC")
+        ToolCard {
+            var music by remember { mutableStateOf(FocusMusic.config(context)) }
+            fun change(next: FocusMusic.Config) { music = next; FocusMusic.save(context, next) }
+            Text("Music starts with a session and stops with it", style = toolLabel(12.sp, bold = true), color = DiligentColors.White)
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                ToolChip("OFF", music.mode == FocusMusic.Mode.OFF) { change(music.copy(mode = FocusMusic.Mode.OFF)) }
+                ToolChip("RESUME", music.mode == FocusMusic.Mode.RESUME) { change(music.copy(mode = FocusMusic.Mode.RESUME)) }
+                ToolChip("PLAYLIST LINK", music.mode == FocusMusic.Mode.LINK) { change(music.copy(mode = FocusMusic.Mode.LINK)) }
+            }
+            if (music.mode == FocusMusic.Mode.LINK) {
+                Spacer(Modifier.height(8.dp))
+                ToolField(music.link, { change(music.copy(link = it)) }, "https://open.spotify.com/playlist/…", Modifier.fillMaxWidth())
+                if (music.link.isNotBlank() && !FocusMusic.isLink(music.link)) ToolNote("Paste a link that starts with https:// or spotify:")
+            }
+            if (music.mode != FocusMusic.Mode.OFF) {
+                Spacer(Modifier.height(6.dp))
+                ToolToggle(
+                    title = "Pause during Pomodoro breaks",
+                    subtitle = "Plays again when the next block starts",
+                    checked = music.pauseOnBreaks,
+                    onChecked = { on -> change(music.copy(pauseOnBreaks = on)) }
+                )
+            }
+            Spacer(Modifier.height(4.dp))
+            ToolNote(
+                when (music.mode) {
+                    FocusMusic.Mode.OFF -> "Resume presses play on whatever played last (Spotify, YouTube Music, a podcast), like a headset button. A playlist link opens it instead."
+                    FocusMusic.Mode.RESUME -> "Presses play on whatever played last when a session starts, and pauses it on stop if this started it."
+                    FocusMusic.Mode.LINK -> "Opens the link when you start in the app; from the widget or tile (where Android won't open another app) it presses play instead. Paused on stop."
                 }
             )
         }

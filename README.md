@@ -107,6 +107,7 @@ What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
 ### Focus Timer
 - Time any activity measured in hrs or mins instead of tapping +/−. Start and stop it from the ⏱ button on the activity card, the **Focus Timer** widget (2×1 or 2×2) or the **Focus timer** Quick Settings tile
 - On stop, the time is added to that day's progress, rounded to the nearest minute (under 30 s logs nothing). A session that runs past midnight is split between the two days
+- **Focus music** (Hub → Focus): a session presses play on whatever played last (or opens a playlist link when started in the app) and pauses it on stop and during Pomodoro breaks
 - Optional Pomodoro 25/5. Each 25-minute block is logged when it ends, and breaks aren't counted. The widget and tile start the last-timed activity in the last-used mode; on the widget, tap the name to change the activity or tap the mode to switch to 25/5
 - Battery: nothing in the app ticks. The widget clock is a launcher-side `Chronometer`, and the ongoing notification (with STOP) uses the system chronometer. Pomodoro sets one non-wakeup alarm per block. The running session is just a start time in SharedPreferences, so it survives the app being killed and is picked up again on the next start
 

@@ -14,6 +14,7 @@ import dev.diligent.app.focus.data.FocusPrefs
 import dev.diligent.app.focus.data.FocusSession
 import dev.diligent.app.focus.data.FocusState
 import dev.diligent.app.focus.domain.FocusMath
+import dev.diligent.app.focus.domain.Phase
 import dev.diligent.app.focus.domain.Span
 import dev.diligent.app.focus.notify.FocusAlarms
 import dev.diligent.app.focus.notify.FocusNotifier
@@ -213,8 +214,9 @@ class FocusTimer @Inject constructor(
         if (running != null) {
             log(running, unlogged(running, now))
             record(running, now)
-        } else if (config.dnd) {
-            FocusShield.dndOn(context)
+        } else {
+            if (config.dnd) FocusShield.dndOn(context)
+            runCatching { FocusMusic.on(context, FocusMusic.Event.START) }
         }
         FocusNotifier.cancelPhaseAlert(context)
         publish(now)
@@ -237,6 +239,7 @@ class FocusTimer @Inject constructor(
         val logged = log(session, unlogged(session, now))
         record(session, now)
         FocusShield.dndOff(context)
+        runCatching { FocusMusic.on(context, FocusMusic.Event.STOP) }
         publish(now)
         if (announce) {
             val sessionMinutes = minutes(FocusMath.unloggedFocus(session.startedAt, session.startedAt, session.pomodoro, now))
@@ -275,6 +278,7 @@ class FocusTimer @Inject constructor(
         prefs.save(state.copy(session = session.copy(loggedUntil = position.phaseStart)))
         log(session, FocusMath.pomodoroFocusSpans(session.startedAt, session.loggedUntil, position.phaseStart))
         FocusNotifier.phaseAlert(context, session.activityName, position, now)
+        runCatching { FocusMusic.on(context, if (position.phase == Phase.BREAK) FocusMusic.Event.BREAK else FocusMusic.Event.FOCUS) }
     }
 
     /** Adds [spans] to the activity, one call per tracking day. Null when the activity was deleted. */
