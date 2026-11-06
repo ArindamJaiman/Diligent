@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- No periodic updates: redrawn with the other tracker widgets when progress changes and at
+     the day's start. -->
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="110dp"
+    android:minHeight="110dp"
+    android:minResizeWidth="80dp"
+    android:minResizeHeight="80dp"
+    android:maxResizeWidth="420dp"
+    android:maxResizeHeight="420dp"
+    android:resizeMode="horizontal|vertical"
+    android:targetCellWidth="2"
+    android:targetCellHeight="2"
+    android:widgetCategory="home_screen|keyguard"
+    android:updatePeriodMillis="0"
+    android:initialLayout="@layout/widget_loading"
+    android:previewLayout="@layout/widget_loading"
+    android:configure="dev.diligent.app.widget.ActivityWidgetConfigActivity"
+    android:widgetFeatures="reconfigurable"
+    android:description="@string/widget_activity_description" />

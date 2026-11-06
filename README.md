@@ -53,6 +53,7 @@ What's planned next: [docs/ROADMAP.md](docs/ROADMAP.md)
 ### Widget
 - Resizable Jetpack Glance widget
 - Inline +/− controls (no app launch required); the tapped widget redraws in-process at once
+- **Activity widget:** one activity as a tank of its own colour that fills as you log (red past a limit), with its streak, schedule line and +/−; pick the activity when you place it, long-press → reconfigure to change it
 - Tap or double-tap the quote panel for the next quote without waiting for the flip
 - Real-time progress display
 - Auto-refresh every 30 minutes

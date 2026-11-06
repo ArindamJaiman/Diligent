@@ -58,7 +58,8 @@ has shipped since the list was started.
   weekly activity up on its days, first when it can't move
 - ~~**Undo snackbar** for every widget tap~~ dropped: the widget's − already undoes a +, and an
   extra control would crowd the small widget layouts
-- [ ] **Home-screen widget for one activity** with its own liquid fill, in Glance
+- ✅ **Home-screen widget for one activity** with its own liquid fill, in Glance (Activity
+  widget: the tank is drawn as a bitmap, so it sloshes a little on each tap)
 
 ## Focus
 

@@ -302,6 +302,30 @@
                 android:resource="@xml/papers_widget_info" />
         </receiver>
 
+        <!-- One activity as a liquid tank; the picker opens when it's placed -->
+        <receiver
+            android:name=".widget.ActivityWidgetReceiver"
+            android:exported="true"
+            android:label="@string/widget_activity_name">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <meta-data
+                android:name="android.appwidget.provider"
+                android:resource="@xml/activity_widget_info" />
+        </receiver>
+
+        <activity
+            android:name=".widget.ActivityWidgetConfigActivity"
+            android:exported="true"
+            android:excludeFromRecents="true"
+            android:taskAffinity="dev.diligent.app.activitywidget"
+            android:theme="@style/Theme.Diligent">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_CONFIGURE" />
+            </intent-filter>
+        </activity>
+
         <receiver
             android:name=".cloud.ClipboardWidgetReceiver"
             android:exported="true"

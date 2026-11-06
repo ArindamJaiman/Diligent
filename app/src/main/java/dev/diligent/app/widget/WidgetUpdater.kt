@@ -41,6 +41,7 @@ object WidgetUpdater {
     /** @param except a widget a tap already redrew */
     suspend fun refreshTracker(context: Context, except: GlanceId? = null) = safely {
         DiligentWidget().updateAllExcept(context, except)
+        ActivityWidget().updateAllExcept(context, except)
         // Top 3, Focus-vs-Scroll and Now show tracker progress too, and so does the watch tile
         ToolWidgets.refreshLocal(context, except)
         NowWidgetUpdater.refresh(context, except)
@@ -101,6 +102,7 @@ object DayChangeRefresh {
 
     private val receivers = listOf(
         DiligentWidgetReceiver::class.java,
+        ActivityWidgetReceiver::class.java,
         GithubWidgetReceiver::class.java,
         GithubVsWidgetReceiver::class.java,
         Top3WidgetReceiver::class.java,

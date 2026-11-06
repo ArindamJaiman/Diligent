@@ -30,6 +30,8 @@
     <string name="share_clipboard_label">Diligent clipboard</string>
     <string name="tile_clipboard_label">Send clipboard</string>
     <string name="widget_clipboard_name">Clipboard</string>
+    <string name="widget_activity_name">Activity</string>
+    <string name="widget_activity_description">One activity as a tank of its colour that fills as you log, with + and −.</string>
     <string name="widget_clipboard_description">Your newest shared clip with COPY, and SEND MINE to share what you copied. Only goes online when you tap ↻.</string>
     <string name="desk_dream_label">Diligent desk clock</string>
     <string name="shield_service_label">Diligent Focus Shield</string>
