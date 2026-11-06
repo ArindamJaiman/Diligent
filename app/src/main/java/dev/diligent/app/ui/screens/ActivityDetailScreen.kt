@@ -3,6 +3,7 @@ package dev.diligent.app.ui.screens
 import androidx.compose.animation.core.*
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
@@ -30,6 +31,8 @@ import dev.diligent.app.data.local.entity.DailyProgress
 import dev.diligent.app.data.repository.DiligentRepository
 import dev.diligent.app.planning.Pace
 import dev.diligent.app.planning.TargetPace
+import dev.diligent.app.tracking.ChecklistDay
+import dev.diligent.app.tracking.Checklists
 import dev.diligent.app.tracking.DayClock
 import dev.diligent.app.tracking.Goals
 import dev.diligent.app.tracking.HabitStrength
@@ -138,6 +141,28 @@ class ActivityDetailViewModel @Inject constructor(
     }
 
     fun today(): LocalDate = DayClock.today()
+
+    // ─── Checklist ──────────────────────────────────────────────
+
+    private val _checklist = MutableStateFlow(repository.checklistDay(activityId))
+    val checklist: StateFlow<ChecklistDay> = _checklist.asStateFlow()
+
+    /** Re-read after the day may have changed (the screen comes back to the front). */
+    fun reloadChecklist() {
+        _checklist.value = repository.checklistDay(activityId)
+    }
+
+    fun toggleChecklist(index: Int) {
+        viewModelScope.launch {
+            val act = activity.value ?: repository.getActivityById(activityId) ?: return@launch
+            _checklist.value = repository.toggleChecklistItem(act, index)
+        }
+    }
+
+    fun saveChecklist(text: String) {
+        repository.setChecklistItems(activityId, Checklists.parse(text))
+        reloadChecklist()
+    }
 
     fun increment() {
         viewModelScope.launch { repository.incrementProgress(activityId) }
@@ -476,6 +501,19 @@ fun ActivityDetailScreen(
                     }
                 }
 
+                if (!isLimit) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    val checklist by viewModel.checklist.collectAsStateWithLifecycle()
+                    LaunchedEffect(Unit) { viewModel.reloadChecklist() }
+                    ChecklistCard(
+                        day = checklist,
+                        step = Checklists.step(act, checklist.items.size),
+                        unit = act.unit,
+                        onToggle = viewModel::toggleChecklist,
+                        onSave = viewModel::saveChecklist
+                    )
+                }
+
                 Spacer(modifier = Modifier.height(24.dp))
 
                 // ─── Stats Cards Row ────────────────────────
@@ -612,6 +650,87 @@ fun ActivityDetailScreen(
                 }
 
                 Spacer(modifier = Modifier.height(40.dp))
+            }
+        }
+    }
+}
+
+/** Sub-tasks: tick them off to log their share of the goal; EDIT changes the list. */
+@Composable
+private fun ChecklistCard(
+    day: ChecklistDay,
+    step: Float,
+    unit: String,
+    onToggle: (Int) -> Unit,
+    onSave: (String) -> Unit
+) {
+    var editing by remember { mutableStateOf(false) }
+    var draft by remember { mutableStateOf("") }
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(16.dp))
+            .border(1.dp, DiligentColors.Border, RoundedCornerShape(16.dp))
+            .background(DiligentColors.Surface)
+            .padding(horizontal = 20.dp, vertical = 14.dp)
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = if (day.items.isEmpty()) "CHECKLIST" else "CHECKLIST · ${day.count}/${day.items.size}",
+                style = MaterialTheme.typography.labelSmall.copy(fontFamily = DotMatrix, letterSpacing = 3.sp),
+                color = if (day.items.isNotEmpty() && day.count == day.items.size) DiligentColors.CompletedGreen else DiligentColors.Gray500,
+                modifier = Modifier.weight(1f)
+            )
+            TextButton(onClick = {
+                if (editing) onSave(draft) else draft = day.items.joinToString("\n")
+                editing = !editing
+            }) {
+                Text(if (editing) "SAVE" else if (day.items.isEmpty()) "+ ADD" else "EDIT", fontFamily = DotMatrix, fontSize = 11.sp, color = DiligentColors.White)
+            }
+        }
+        when {
+            editing -> {
+                OutlinedTextField(
+                    value = draft,
+                    onValueChange = { draft = it },
+                    modifier = Modifier.fillMaxWidth(),
+                    minLines = 3,
+                    placeholder = { Text("One per line: 1 easy, 1 medium, 1 hard", fontFamily = DotMatrix, fontSize = 11.sp, color = DiligentColors.Gray500) },
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontFamily = DotMatrix, color = DiligentColors.White)
+                )
+                Text(
+                    "Each item is worth an equal share of the daily goal; ticking the last one fills it. Up to ${Checklists.MAX_ITEMS}.",
+                    fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray600,
+                    modifier = Modifier.padding(top = 6.dp)
+                )
+            }
+            day.items.isEmpty() -> Text(
+                "Split the goal into sub-tasks, like 1 easy · 1 medium · 1 hard.",
+                fontFamily = DotMatrix, fontSize = 11.sp, color = DiligentColors.Gray600
+            )
+            else -> day.items.forEachIndexed { index, item ->
+                val ticked = index in day.done
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth().clip(RoundedCornerShape(8.dp)).clickable { onToggle(index) }.padding(vertical = 2.dp)
+                ) {
+                    Checkbox(
+                        checked = ticked,
+                        onCheckedChange = { onToggle(index) },
+                        colors = CheckboxDefaults.colors(
+                            checkedColor = DiligentColors.CompletedGreen,
+                            uncheckedColor = DiligentColors.Gray500,
+                            checkmarkColor = DiligentColors.Black
+                        )
+                    )
+                    Text(
+                        item,
+                        fontFamily = DotMatrix, fontSize = 13.sp,
+                        color = if (ticked) DiligentColors.Gray600 else DiligentColors.White,
+                        modifier = Modifier.weight(1f)
+                    )
+                    if (step > 0f) Text("+${formatFloat(step)} $unit", fontFamily = DotMatrix, fontSize = 10.sp, color = DiligentColors.Gray500)
+                }
             }
         }
     }

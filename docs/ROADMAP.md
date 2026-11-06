@@ -49,7 +49,9 @@ has shipped since the list was started.
 
 ## Tracking (app)
 
-- [ ] **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard")
+- ✅ **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard"; app,
+  the activity's screen): each item logs an equal share of the goal, the last tick fills it,
+  and they go into backups
 - ✅ **Numeric journal fields** on the web (Settings → Journal fields): your own daily numbers in
   the day log, charted in Stats and included in What goes with your good days
 - ✅ **Smart reschedule:** "N× a week" spreads what's left of the target evenly over the days

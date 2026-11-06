@@ -1,5 +1,8 @@
 package dev.diligent.app.data.repository
 
+import dev.diligent.app.tracking.Checklists
+import dev.diligent.app.tracking.ChecklistDay
+import dev.diligent.app.tracking.ChecklistBackup
 import android.content.Context
 import dagger.hilt.android.qualifiers.ApplicationContext
 import dev.diligent.app.data.local.dao.ActivityDao
@@ -183,6 +186,39 @@ class DiligentRepository @Inject constructor(
         val activity = activityDao.getById(activityId) ?: return
         writeDay(activity, date, refreshWidgets) { it.copy(progress = (it.progress - amount).coerceAtLeast(0f)) }
     }
+
+    // ─── Checklists ─────────────────────────────────────────────
+
+    fun checklistDay(activityId: Long, date: String = today()): ChecklistDay = Checklists.day(context, activityId, date)
+
+    fun setChecklistItems(activityId: Long, items: List<String>) = Checklists.setItems(context, activityId, items)
+
+    /**
+     * Ticks or unticks item [index] on [date] and logs its share of the goal (see [Checklists]).
+     * The last tick fills the goal exactly.
+     */
+    suspend fun toggleChecklistItem(activity: Activity, index: Int, date: String = today()): ChecklistDay {
+        val day = Checklists.day(context, activity.id, date)
+        if (index !in day.items.indices) return day
+        val done = day.done.filter { it in day.items.indices }.toMutableSet()
+        val step = Checklists.step(activity, day.items.size)
+        if (done.remove(index)) {
+            Checklists.setDone(context, activity.id, date, done)
+            if (step > 0f) decrementProgress(activity.id, step, date = date)
+        } else {
+            done += index
+            Checklists.setDone(context, activity.id, date, done)
+            if (step > 0f) {
+                if (done.size == day.items.size) raiseProgressTo(activity, activity.dailyGoal, date)
+                else addProgress(activity.id, step, date)
+            }
+        }
+        return ChecklistDay(day.items, done)
+    }
+
+    fun checklistSnapshot(): ChecklistBackup = Checklists.export(context)
+
+    fun restoreChecklists(backup: ChecklistBackup) = Checklists.restore(context, backup)
 
     /** Sets [date]'s progress outright (editing a past day). */
     suspend fun setProgress(activityId: Long, date: String, value: Float) {

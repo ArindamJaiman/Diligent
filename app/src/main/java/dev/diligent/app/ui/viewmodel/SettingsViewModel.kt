@@ -298,6 +298,7 @@ class SettingsViewModel @Inject constructor(
                 repository.insertAllReminders(reminders)
                 repository.insertAllFocusRecords(backup.focusRecords.filter { it.activityId in knownIds })
                 repository.insertAllDayLogs(backup.dayLogs)
+                repository.restoreChecklists(backup.checklists)
                 val legacySettings = backupJson.parseToJsonElement(json).jsonObject["settings"] as? JsonObject
                 (backup.githubUsers ?: GithubUsers.fromLegacySettings(legacySettings))
                     ?.let { repository.replaceGithubUsers(it) }

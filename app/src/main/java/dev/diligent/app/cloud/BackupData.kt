@@ -8,6 +8,7 @@ import dev.diligent.app.data.local.entity.FocusRecord
 import dev.diligent.app.data.local.entity.GithubUser
 import dev.diligent.app.data.local.entity.Settings
 import dev.diligent.app.data.repository.DiligentRepository
+import dev.diligent.app.tracking.ChecklistBackup
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.time.LocalDateTime
@@ -29,6 +30,7 @@ data class BackupData(
     val githubUsers: List<GithubUser>? = null,
     val focusRecords: List<FocusRecord> = emptyList(),
     val dayLogs: List<DayLog> = emptyList(),
+    val checklists: ChecklistBackup = ChecklistBackup(),
     val backupTime: String = ""
 ) {
     companion object {
@@ -48,6 +50,7 @@ data class BackupData(
             githubUsers = repository.getGithubUsersSnapshot(),
             focusRecords = repository.getAllFocusRecords(),
             dayLogs = repository.getAllDayLogs(),
+            checklists = repository.checklistSnapshot(),
             backupTime = LocalDateTime.now().format(DateTimeFormatter.ISO_LOCAL_DATE_TIME)
         )
     }
