@@ -374,6 +374,7 @@
             <p class="label">Day log</p>
             <div class="row"><span class="tiny" style="width:60px">MOOD</span><div class="scale" data-scale="mood">${[1, 2, 3, 4, 5].map((n) => `<button class="${log.mood === n ? "on" : ""}" data-n="${n}">${n}</button>`).join("")}</div></div>
             <div class="row" style="margin-top:8px"><span class="tiny" style="width:60px">ENERGY</span><div class="scale" data-scale="energy">${[1, 2, 3, 4, 5].map((n) => `<button class="${log.energy === n ? "on" : ""}" data-n="${n}">${n}</button>`).join("")}</div></div>
+            ${journalInputs(date)}
             <textarea id="day-note" placeholder="What went well? What got in the way?" style="margin-top:12px">${esc(log.note)}</textarea>
           </div>
         </div>
@@ -437,6 +438,11 @@
       state.dayLogs[date] = Object.assign(S.dayLog(date), { [field]: S.dayLog(date)[field] === n ? 0 : n, t: Date.now() });
       S.save();
       $$("button", g).forEach((x) => x.classList.toggle("on", +x.dataset.n === state.dayLogs[date][field]));
+    });
+    $$("[data-jf]").forEach((inp) => inp.oninput = () => {
+      const cur = S.dayLog(date), fields = Object.assign({}, cur.fields, { [inp.dataset.jf]: inp.value === "" ? null : +inp.value });
+      state.dayLogs[date] = Object.assign(cur, { fields, t: Date.now() });
+      S.save();
     });
     $("#day-note").oninput = (e) => { state.dayLogs[date] = Object.assign(S.dayLog(date), { note: e.target.value, t: Date.now() }); S.save(); };
     const ms = $("#mini-stop"); if (ms) ms.onclick = () => F.stop();
@@ -607,6 +613,35 @@
   }
 
 
+
+  // ─── Journal fields: your own daily numbers (weight, sleep score, resting HR…) ─
+  const jfields = () => state.settings.journalFields || [];
+  const jvalue = (d, id) => { const v = ((state.dayLogs[d] || {}).fields || {})[id]; return v === "" || v == null ? null : +v; };
+  function journalInputs(date) {
+    const fs = jfields(); if (!fs.length) return "";
+    return `<div class="jgrid">${fs.map((f) => `<label class="jf"><span>${esc(f.name)}${f.unit ? ` <i>${esc(f.unit)}</i>` : ""}</span>
+      <input type="number" step="any" inputmode="decimal" data-jf="${f.id}" value="${jvalue(date, f.id) ?? ""}" placeholder="–"></label>`).join("")}</div>`;
+  }
+  function journalCard() {
+    const fs = jfields(); if (!fs.length) return "";
+    const t = S.today(), days = S.range(S.addDays(t, -59), t);
+    const charts = fs.map((f) => {
+      const pts = days.map((d, i) => ({ i, v: jvalue(d, f.id) })).filter((p) => p.v != null);
+      if (!pts.length) return `<div class="jchart"><b>${esc(f.name)}</b><p class="tiny">No values yet. Add them in Today → Day log.</p></div>`;
+      const vs = pts.map((p) => p.v), lo = Math.min(...vs), hi = Math.max(...vs), span = hi - lo || 1;
+      const xy = pts.map((p) => `${(p.i / 59) * 300},${54 - ((p.v - lo) / span) * 48}`).join(" ");
+      const avg = (from, to) => { const l = pts.filter((p) => p.i >= from && p.i <= to).map((p) => p.v); return l.length ? l.reduce((a, b) => a + b, 0) / l.length : null; };
+      const now7 = avg(53, 59), prev7 = avg(46, 52), last = pts[pts.length - 1].v;
+      const trend = now7 != null && prev7 != null ? now7 - prev7 : null;
+      const fmtv = (v) => (Math.abs(v) >= 100 ? Math.round(v) : +v.toFixed(1));
+      return `<div class="jchart"><div class="row"><b style="flex:1">${esc(f.name)}</b><span class="mono">${fmtv(last)}${f.unit ? " " + esc(f.unit) : ""}</span></div>
+        <svg viewBox="0 -4 300 64" preserveAspectRatio="none" class="jline"><polyline points="${xy}" fill="none" stroke="var(--text)" stroke-width="1.6" stroke-linejoin="round" vector-effect="non-scaling-stroke"/>
+          ${pts.map((p) => `<circle cx="${(p.i / 59) * 300}" cy="${54 - ((p.v - lo) / span) * 48}" r="2.2" fill="var(--text)"/>`).join("")}</svg>
+        <div class="tiny">60 days · ${fmtv(lo)}–${fmtv(hi)}${trend != null ? ` · 7-day avg ${trend >= 0 ? "▲" : "▼"} ${fmtv(Math.abs(trend))} vs the week before` : ""}</div></div>`;
+    }).join("");
+    return `<div class="card spot" style="margin-top:16px"><p class="label">Journal</p><div class="jcharts">${charts}</div></div>`;
+  }
+
   // ─── Focus extras: distractions, break tips, what got done ─
   const BREAK_TIPS = [
     "Stand up and stretch your back", "Drink a glass of water", "20-20-20: look 20 feet away for 20 seconds",
@@ -773,6 +808,7 @@
       </div>
       ${bestWeekCard()}
       ${coachCard()}
+      ${journalCard()}
       ${targetsCard()}
       <div class="card spot scroll-x" style="margin-top:16px"><p class="label">Activities</p>
         <table class="list"><thead><tr><th>Activity</th><th style="text-align:right">Streak</th><th style="text-align:right">Best</th><th>Strength</th><th style="text-align:right">30 days</th><th>Trend</th></tr></thead><tbody>${rows}</tbody></table></div>`;
@@ -939,6 +975,7 @@
       { name: "focus minutes", of: (d) => (state.sessions.length ? focusMin(d) : null), up: "more timed focus", down: "less timed focus" },
       { name: "distractions", of: (d) => ((state.distractions || []).length ? distractNull(d) : null), up: "more distractions", down: "fewer distractions" },
       { name: "the day before", of: (d) => shareOf(S.addDays(d, -1)), up: "a strong day before", down: "a weak day before" },
+      ...(state.settings.journalFields || []).map((jf) => ({ name: jf.name, of: (d) => jvalue(d, jf.id), up: `higher ${jf.name}`, down: `lower ${jf.name}` })),
     ];
     function distractNull(d) { return focusMin(d) ? distractN(d) : null; }
     const out = [];
@@ -1469,6 +1506,11 @@ create policy clips on diligent_clips for all
             <label class="btn ghost sm" style="cursor:pointer">Import<input type="file" id="d-import" accept="application/json,.json" hidden></label>
             <span class="spacer"></span><button class="btn danger sm" id="d-reset">Reset</button></div>
         </div>
+        <div class="card spot"><p class="label">Journal fields</p>
+          <p class="tiny">Your own daily numbers, filled in Today → Day log, charted in Stats and checked against your output in What goes with your good days.</p>
+          ${jfields().map((f) => `<div class="row" style="padding:5px 0;border-bottom:1px solid var(--border)"><span style="flex:1">${esc(f.name)}${f.unit ? ` <span class="tiny">${esc(f.unit)}</span>` : ""}</span><button class="btn ghost sm" data-jf-del="${f.id}">Remove</button></div>`).join("")}
+          <div class="row" style="margin-top:10px"><input id="jf-name" placeholder="Weight · Sleep score · Resting HR" style="flex:2" maxlength="24"><input id="jf-unit" placeholder="kg" style="flex:1" maxlength="8"><button class="btn sm" id="jf-add">Add</button></div>
+        </div>
         <div class="card spot"><p class="label">Public page</p>
           <p class="tiny">One self-contained HTML file of your year: heatmap, streaks and totals for the activities you tick. Nothing is uploaded; host it anywhere (GitHub Pages: name it index.html in a repo). Never includes notes, mood, Top 3 or clips.</p>
           <label class="field" for="pp-title">Title</label><input id="pp-title" value="${esc(D.profile.options().title)}" maxlength="40">
@@ -1520,6 +1562,12 @@ create policy clips on diligent_clips for all
     $("#d-import").onchange = async (e) => { const f = e.target.files[0]; if (!f) return; try { toast(S.importJson(await f.text()), 4000); } catch (err) { toast("Import failed: " + err.message, 4000); } };
     $("#d-reset").onclick = () => { if (confirm("Delete everything Diligent keeps in this browser?") && confirm("Really? This can't be undone.")) { localStorage.removeItem("diligent.web.v1"); location.reload(); } };
     $("#s-keys").onclick = (e) => { e.preventDefault(); $("#keys").showModal(); };
+    $("#jf-add").onclick = () => {
+      const name = $("#jf-name").value.trim(); if (!name) return;
+      state.settings.journalFields = jfields().concat({ id: S.uid(), name, unit: $("#jf-unit").value.trim() });
+      S.emit({ type: "settings" }); toast(`Added ${name}`);
+    };
+    $$("[data-jf-del]").forEach((b) => b.onclick = () => { if (confirm("Remove this field? Values already logged stay in your data.")) { state.settings.journalFields = jfields().filter((f) => f.id !== b.dataset.jfDel); S.emit({ type: "settings" }); } });
     const ppSave = () => D.profile.setOptions({ title: $("#pp-title").value.trim(), hours: $("#pp-hours").checked, activities: $$("[data-pp]").filter((x) => x.checked).map((x) => x.dataset.pp) });
     $("#pp-title").oninput = ppSave; $("#pp-hours").onchange = ppSave; $$("[data-pp]").forEach((x) => x.onchange = ppSave);
     $("#pp-preview").onclick = () => {

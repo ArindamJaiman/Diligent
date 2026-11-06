@@ -49,7 +49,8 @@ has shipped since the list was started.
 ## Tracking (app)
 
 - [ ] **Sub-tasks / checklists** inside an activity ("LeetCode: 1 easy, 1 medium, 1 hard")
-- [ ] **Numeric journal fields** (weight, resting heart rate, sleep score) charted next to activities
+- ✅ **Numeric journal fields** on the web (Settings → Journal fields): your own daily numbers in
+  the day log, charted in Stats and included in What goes with your good days
 - [ ] **Smart reschedule:** a missed weekly target moves its remaining sessions into the days left
 - ~~**Undo snackbar** for every widget tap~~ dropped: the widget's − already undoes a +, and an
   extra control would crowd the small widget layouts

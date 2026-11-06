@@ -93,6 +93,24 @@ try {
 
   await blur(a);
   await a.keyboard.press("4");
+  // Journal fields: add one in Settings, log it in Today, see it charted in Stats
+  await blur(a);
+  await a.keyboard.press("7");
+  await a.fill("#jf-name", "Sleep score");
+  await a.fill("#jf-unit", "pts");
+  await a.click("#jf-add");
+  await a.evaluate(() => { location.hash = "#today"; });
+  await a.fill('[data-jf]', "82");
+  await a.evaluate(() => {
+    const S = Diligent.store, st = S.state, id = st.settings.journalFields[0].id;
+    for (let k = 1; k < 30; k++) { const d = S.addDays(S.today(), -k); st.dayLogs[d] = Object.assign(st.dayLogs[d] || {}, { fields: { [id]: 60 + (k % 5) * 6 } }); }
+    S.save();
+  });
+  check(await a.evaluate(() => { const st = Diligent.store.state, id = st.settings.journalFields[0].id; return st.dayLogs[Diligent.store.today()].fields[id] === 82; }), "a journal field is logged from the day log");
+  await a.evaluate(() => { location.hash = "#stats"; });
+  await a.waitForSelector(".jchart");
+  check((await a.locator(".jchart").first().innerText()).includes("82") && await a.locator(".jline circle").count() >= 25, "the journal field is charted in Stats");
+
   // Correlations: 30 days where mood tracks output should read as strong; noise shouldn't
   await a.evaluate(() => {
     const S = Diligent.store, st = S.state;
